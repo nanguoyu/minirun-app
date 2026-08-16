@@ -15,6 +15,17 @@ concurrency:
 permissions:
   contents: read
 
+# `shell: bash` gives every step `-o pipefail`, so a failing xcodebuild behind
+# `| tail` fails the step instead of hiding under the last twenty lines.
+defaults:
+  run:
+    shell: bash
+
+# Non-interactive Xcode must be told to trust build plugins and macros
+# (EmbedGitRevision, and mlx-swift's), or the build stops at validation.
+env:
+  XCODEBUILD_FLAGS: -skipPackagePluginValidation -skipMacroValidation
+
 jobs:
   build-and-test:
     name: macOS build · app tests · package tests · iOS build
@@ -31,27 +42,27 @@ jobs:
           xcodebuild -version
 
       - name: Resolve Swift packages
-        run: xcodebuild -resolvePackageDependencies -project Apps/Minirun/Minirun.xcodeproj -scheme Minirun-macOS
+        run: xcodebuild -resolvePackageDependencies -project Apps/Minirun/Minirun.xcodeproj -scheme Minirun-macOS $XCODEBUILD_FLAGS
 
       - name: Build the Mac app (Release)
         run: |
-          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj \
+          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj $XCODEBUILD_FLAGS \
             -scheme Minirun-macOS -configuration Release -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -20
 
       - name: App tests (macOS)
         run: |
-          xcodebuild test -project Apps/Minirun/Minirun.xcodeproj \
+          xcodebuild test -project Apps/Minirun/Minirun.xcodeproj $XCODEBUILD_FLAGS \
             -scheme Minirun-macOS -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
 
       - name: Package tests (MinirunKit)
         run: |
-          xcodebuild test -scheme minirun-Package -destination 'platform=macOS' \
+          xcodebuild test -scheme minirun-Package $XCODEBUILD_FLAGS -destination 'platform=macOS' \
             -only-testing:MinirunKitTests 2>&1 | tail -40
 
       - name: Build the iOS app (Simulator)
         run: |
-          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj \
+          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj $XCODEBUILD_FLAGS \
             -scheme Minirun-iOS -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO 2>&1 | tail -20
