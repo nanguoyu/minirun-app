@@ -1,0 +1,17 @@
+# Weekly, minor-and-patch only: MLX and Sparkle move quickly, and a major bump
+# is a decision, not a chore.
+version: 2
+updates:
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

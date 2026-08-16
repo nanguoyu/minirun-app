@@ -1,0 +1,57 @@
+# The gates a maintainer runs locally before a release, on GitHub's hosted
+# Apple-silicon runner. Model-dependent tests are environment-gated and skip
+# themselves here; there is no external drive on a hosted runner.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: macOS build · app tests · package tests · iOS build
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select the newest Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project Apps/Minirun/Minirun.xcodeproj -scheme Minirun-macOS
+
+      - name: Build the Mac app (Release)
+        run: |
+          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj \
+            -scheme Minirun-macOS -configuration Release -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -20
+
+      - name: App tests (macOS)
+        run: |
+          xcodebuild test -project Apps/Minirun/Minirun.xcodeproj \
+            -scheme Minirun-macOS -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+
+      - name: Package tests (MinirunKit)
+        run: |
+          xcodebuild test -scheme minirun-Package -destination 'platform=macOS' \
+            -only-testing:MinirunKitTests 2>&1 | tail -40
+
+      - name: Build the iOS app (Simulator)
+        run: |
+          xcodebuild build -project Apps/Minirun/Minirun.xcodeproj \
+            -scheme Minirun-iOS -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -20

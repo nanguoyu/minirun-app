@@ -9,6 +9,18 @@
     {
       "kind": "file",
       "mode": "0644",
+      "path": ".github/dependabot.yml",
+      "sha256": "9e0c526fcfb5cce05255edb4c006dceb97592090428ad7341e6d877bd7294d30"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": ".github/workflows/ci.yml",
+      "sha256": "8b1b235d319aa24e38f00786e4145661fa818ad1c6872a5487789a55abe9792d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
       "path": ".gitignore",
       "sha256": "c3722e8f46d9d17ef0045ff6ba5264d6b6d72c6ccb90ebd12eb6a312d9012b39"
     },
@@ -658,7 +670,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "42e7c9e8006e0f84d2bb0d194f5d356f7b9bfc04c55cf993dd0b847fe53a6cc3"
+      "sha256": "a85f31d43a413ff50612639ac207386b10e99a4ee7696bf12f79ad77ff642761"
     },
     {
       "kind": "file",
