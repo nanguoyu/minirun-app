@@ -670,7 +670,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "a85f31d43a413ff50612639ac207386b10e99a4ee7696bf12f79ad77ff642761"
+      "sha256": "ee825a249740ac5bb756d7d8bc017f56c349101382c83af631b9c51035293518"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "README.zh-CN.md",
+      "sha256": "e795e06fb30daaac5a1fa0d6abb9b62902c9d5a764390213f27219c2ddea3200"
     },
     {
       "kind": "file",

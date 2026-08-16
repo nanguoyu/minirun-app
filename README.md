@@ -7,6 +7,8 @@
 <p align="center"><strong>Run models larger than memory.</strong><br>
 Weights stream from your SSD through a memory budget you set. Free, local, on Mac and iPhone.</p>
 
+<p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
+
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
