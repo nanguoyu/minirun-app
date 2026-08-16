@@ -9,6 +9,7 @@ Weights stream from your SSD through a memory budget you set. Free, local, on Ma
 
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
+  <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
   <a href="CHANGELOG.md"><img alt="Version 0.2" src="https://img.shields.io/badge/version-0.2-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
