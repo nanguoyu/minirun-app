@@ -10,13 +10,13 @@
       "kind": "file",
       "mode": "0644",
       "path": ".github/dependabot.yml",
-      "sha256": "9e0c526fcfb5cce05255edb4c006dceb97592090428ad7341e6d877bd7294d30"
+      "sha256": "8cb1204b3facc8fdb39f70460f207fc288c5b857dff8a2c146daa8735415714a"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": ".github/workflows/ci.yml",
-      "sha256": "63fc1affdb5a7fcf64ff6cd1f790c45b8838122471f7d0fdb7a7daef80497d1b"
+      "sha256": "22315d489ffd47db29ca316123628e98d1d78f30a60c94c07450b0f7c33432e1"
     },
     {
       "kind": "file",

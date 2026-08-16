@@ -11,6 +11,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Pinned on purpose in Package.swift: 0.31.5+ needs swift-tools-version
+      # 6.3, which the release Mac's toolchain cannot parse, and every bump has
+      # to pass the K3 and V4 decode gates on real hardware first.
+      - dependency-name: "github.com/ml-explore/mlx-swift"
   - package-ecosystem: github-actions
     directory: /
     schedule:
