@@ -909,6 +909,11 @@ final class AppModel {
         /// added. Every claim about what is here has to come from a scan, and
         /// a fixture that survives into the shipping path is a claim that came
         /// from nowhere. Previews and tests still ask for it, by name.
+        /// The device the plans are computed against. Nil means the machine the
+        /// process runs on; hosted tests get a fixed reference Mac instead (see
+        /// `testHostDeviceProfile`), so a plan asserted at 32 GB is not refused
+        /// on a 7 GB CI runner.
+        device injectedDevice: DeviceProfile? = nil,
         seedRecordedRuns: Bool = false,
         /// Tests and previews can inject an already-scanned report and keep it
         /// stable. The product always watches and scans its registered folders.
@@ -938,7 +943,7 @@ final class AppModel {
         }
         self.runtimes = injectedRuntimes
         self.launchRefusal = launchRefusal
-        self.device = DeviceProfile.current()
+        self.device = injectedDevice ?? AppModel.testHostDeviceProfile ?? DeviceProfile.current()
         let storage: any StorageManaging = injectedStorage ?? StorageManager()
         self.storage = storage
         self.installed = injectedInstalled
@@ -1088,6 +1093,26 @@ final class AppModel {
     }
 
     /// The app's own instance, over the real Application Support directory.
+    /// Under XCTest on macOS, every hosted test sees the same reference Mac
+    /// (32 GB, MLX GPU) rather than whichever machine happens to run the suite.
+    /// The product never sets `XCTestConfigurationFilePath`, so a shipping
+    /// launch always falls through to `DeviceProfile.current()`.
+    static var testHostDeviceProfile: DeviceProfile? {
+        #if os(macOS)
+            let environment = ProcessInfo.processInfo.environment
+            guard environment["XCTestConfigurationFilePath"] != nil
+                || environment["XCTestBundlePath"] != nil
+            else { return nil }
+            return DeviceProfile(
+                platform: .macOS,
+                processMemoryBudgetBytes: 34_359_738_368,
+                hasMLXGPU: true,
+                hasIncreasedMemoryLimitEntitlement: false)
+        #else
+            return nil
+        #endif
+    }
+
     static func live(
         userDefaults: UserDefaults = .standard,
         catalogService: ModelCatalog? = nil,
