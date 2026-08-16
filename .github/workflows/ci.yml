@@ -7,6 +7,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -52,14 +53,32 @@ jobs:
 
       - name: App tests (macOS)
         run: |
+          set -o pipefail
           xcodebuild test -project Apps/Minirun/Minirun.xcodeproj $XCODEBUILD_FLAGS \
             -scheme Minirun-macOS -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tail -40
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee app-tests.log | tail -40
 
       - name: Package tests (MinirunKit)
         run: |
+          set -o pipefail
           xcodebuild test -scheme minirun-Package $XCODEBUILD_FLAGS -destination 'platform=macOS' \
-            -only-testing:MinirunKitTests 2>&1 | tail -40
+            -only-testing:MinirunKitTests 2>&1 | tee package-tests.log | tail -40
+
+      - name: Failing tests, if any
+        if: failure()
+        run: |
+          grep -hE "error: -\[|' failed \(|Executed [0-9]+ tests" app-tests.log package-tests.log 2>/dev/null | sed 's/^.*Test Case/Test Case/' | sort -u | head -80 || true
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: |
+            app-tests.log
+            package-tests.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build the iOS app (Simulator)
         run: |
