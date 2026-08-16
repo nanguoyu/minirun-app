@@ -1,0 +1,99 @@
+{
+  "firstSixteenBytesHex": "00004e3e00001f3e0000fd3b0000a4be",
+  "path": "adaln-cache/adaln-cache-base.bin",
+  "responses": [
+    {
+      "headers": {
+        "accept-ranges": "bytes",
+        "access-control-allow-origin": "https://huggingface.co",
+        "access-control-expose-headers": "X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash",
+        "access-control-max-age": "86400",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cache-control": "no-store",
+        "content-length": "1167",
+        "content-type": "text/plain; charset=utf-8",
+        "cross-origin-opener-policy": "same-origin",
+        "date": "Tue, 11 Aug 2026 10:12:41 GMT",
+        "link": "<https://huggingface.co/api/models/nanguoyu/MiniMax-H3-minirun/xet-read-token/230643b613250a57eb06454d2725eda060d2c64b>; rel=\"xet-auth\", <https://cas-server.xethub.hf.co/v1/reconstructions/25d3c1615747418f2ba1ff2e5cbeef309665f6f4aceffaa83617e1e348a33ab9>; rel=\"xet-reconstruction-info\"",
+        "location": "https://us.aws.cdn.hf.co/xet-bridge-us/6a7990f5b09903c7c1f31e5d/25d3c1615747418f2ba1ff2e5cbeef309665f6f4aceffaa83617e1e348a33ab9?response-content-disposition=inline%3B+filename*%3DUTF-8%27%27adaln-cache-base.bin%3B+filename%3D%22adaln-cache-base.bin%22%3B&X-Xet-Cas-Uid=public&response-content-type=application%2Foctet-stream&user_id=public&Expires=1786446761&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly91cy5hd3MuY2RuLmhmLmNvL3hldC1icmlkZ2UtdXMvNmE3OTkwZjViMDk5MDNjN2MxZjMxZTVkLzI1ZDNjMTYxNTc0NzQxOGYyYmExZmYyZTVjYmVlZjMwOTY2NWY2ZjRhY2VmZmFhODM2MTdlMWUzNDhhMzNhYjlcXD9yZXNwb25zZS1jb250ZW50LWRpc3Bvc2l0aW9uPWlubGluZSUzQitmaWxlbmFtZSUyQSUzRFVURi04JTI3JTI3YWRhbG4tY2FjaGUtYmFzZS5iaW4lM0IrZmlsZW5hbWUlM0QlMjJhZGFsbi1jYWNoZS1iYXNlLmJpbiUyMiUzQiZYLVhldC1DYXMtVWlkPXB1YmxpYyZyZXNwb25zZS1jb250ZW50LXR5cGU9YXBwbGljYXRpb24lMkZvY3RldC1zdHJlYW0mdXNlcl9pZD1wdWJsaWMiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkVwb2NoVGltZSI6MTc4NjQ0Njc2MX0sIkJ5dGVSYW5nZSI6eyJFeHBlY3RlZEhlYWRlciI6ImJ5dGVzPTAtMTUifX19XX0_&Signature=MEUCIBXo-8lckOpt56PD6QyZvg8c7RllJPAYtqEoiWEgBo6VAiEAssVIiGSZVMRP8ONZcKMszvfRqenaXaVxoADIP8-4qT0_&Key-Pair-Id=01KXEF4KZ1B6FV465MAWR4M21F",
+        "ratelimit": "\"resolvers\";r=2985;t=106",
+        "ratelimit-policy": "\"fixed window\";\"resolvers\";q=3000;w=300",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "vary": "Origin, Accept",
+        "via": "1.1 f37834b71dcaa17cc08f5c67189869e2.cloudfront.net (CloudFront)",
+        "x-amz-cf-id": "vEb0e5B3wMgCzpqecYH0275_JA4aec9jQOnAjVUJN38-Q7RQXdpJxg==",
+        "x-amz-cf-pop": "BUD50-P1",
+        "x-cache": "Miss from cloudfront",
+        "x-linked-etag": "\"f9cc2462d352f121ffc04df22d3a8f0ec97522eafb5782efd05d0ba588445772\"",
+        "x-linked-size": "1877299200",
+        "x-powered-by": "huggingface-moon",
+        "x-repo-commit": "230643b613250a57eb06454d2725eda060d2c64b",
+        "x-request-id": "Root=1-6a7af599-507e812c5717a0bc264b7f0c",
+        "x-xet-hash": "25d3c1615747418f2ba1ff2e5cbeef309665f6f4aceffaa83617e1e348a33ab9"
+      },
+      "status": 302
+    },
+    {
+      "headers": {
+        "accept-ranges": "bytes",
+        "access-control-allow-headers": "Content-Range, Content-Type, Content-Disposition, ETag",
+        "access-control-allow-origin": "*",
+        "access-control-expose-headers": "*",
+        "alt-svc": "h3=\":443\";ma=60;",
+        "content-disposition": "inline; filename*=UTF-8''adaln-cache-base.bin; filename=\"adaln-cache-base.bin\";",
+        "content-length": "16",
+        "content-range": "bytes 0-15/1877299200",
+        "content-type": "application/octet-stream",
+        "date": "Tue, 11 Aug 2026 10:12:41 GMT",
+        "etag": "\"25d3c1615747418f2ba1ff2e5cbeef309665f6f4aceffaa83617e1e348a33ab9\"",
+        "vary": "origin, access-control-request-method, access-control-request-headers",
+        "x-hf-cdn-pop": "aws-eu-west-3",
+        "x-request-id": "01KZR4YQXF5VBYC17QE8V8GKKT"
+      },
+      "status": 206
+    }
+  ],
+  "treeEntry": {
+    "lastCommit": {
+      "date": "2026-08-10T09:06:32.000Z",
+      "id": "04fa862f3af55ce106362d0fd41fe71faf7c0ec8",
+      "title": "Add files using upload-large-folder tool"
+    },
+    "lfs": {
+      "oid": "f9cc2462d352f121ffc04df22d3a8f0ec97522eafb5782efd05d0ba588445772",
+      "pointerSize": 135,
+      "size": 1877299200
+    },
+    "oid": "3d90f1d95fb7cdbe045b59e5d6ca58f3f11fb9be",
+    "path": "adaln-cache/adaln-cache-base.bin",
+    "securityFileStatus": {
+      "avScan": {
+        "message": "",
+        "status": "safe",
+        "version": "1.5.4/28088"
+      },
+      "jFrogScan": {
+        "message": "",
+        "status": "queued"
+      },
+      "pickleImportScan": {
+        "pickleImports": [],
+        "status": "unscanned",
+        "version": "0.0.0"
+      },
+      "protectAiScan": {
+        "reportLink": "https://insights-db.paloaltonetworks.com/models/nanguoyu/MiniMax-H3-minirun/230643b613250a57eb06454d2725eda060d2c64b/files?blob-id=3d90f1d95fb7cdbe045b59e5d6ca58f3f11fb9be&utm_source=huggingface",
+        "status": "unscanned"
+      },
+      "status": "queued",
+      "virusTotalScan": {
+        "message": "File not scanned in VirusTotal",
+        "reportLink": "https://www.virustotal.com/gui/file/f9cc2462d352f121ffc04df22d3a8f0ec97522eafb5782efd05d0ba588445772?utm_source=huggingface",
+        "status": "unscanned"
+      }
+    },
+    "size": 1877299200,
+    "type": "file",
+    "xetHash": "25d3c1615747418f2ba1ff2e5cbeef309665f6f4aceffaa83617e1e348a33ab9"
+  }
+}

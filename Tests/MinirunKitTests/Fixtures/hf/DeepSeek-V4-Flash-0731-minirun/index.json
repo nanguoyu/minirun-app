@@ -1,0 +1,243 @@
+{
+  "source_repo": "deepseek-ai/DeepSeek-V4-Flash-0731",
+  "source_revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062",
+  "relationship": "byte-preserving repack",
+  "units": [
+    {
+      "unit": "layers00",
+      "files": 12,
+      "bytes": 3566452184
+    },
+    {
+      "unit": "layers01",
+      "files": 12,
+      "bytes": 3566452184
+    },
+    {
+      "unit": "layers02",
+      "files": 13,
+      "bytes": 3596391128
+    },
+    {
+      "unit": "layers03",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers04",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers05",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers06",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers07",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers08",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers09",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers10",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers11",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers12",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers13",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers14",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers15",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers16",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers17",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers18",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers19",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers20",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers21",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers22",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers23",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers24",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers25",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers26",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers27",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers28",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers29",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers30",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers31",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers32",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers33",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers34",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers35",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers36",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers37",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers38",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers39",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers40",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "layers41",
+      "files": 12,
+      "bytes": 3568899544
+    },
+    {
+      "unit": "layers42",
+      "files": 13,
+      "bytes": 3590186712
+    },
+    {
+      "unit": "mtp00",
+      "files": 13,
+      "bytes": 3610620376
+    },
+    {
+      "unit": "mtp01",
+      "files": 12,
+      "bytes": 3560247768
+    },
+    {
+      "unit": "mtp02",
+      "files": 12,
+      "bytes": 3692909548
+    },
+    {
+      "unit": "global00",
+      "files": 3,
+      "bytes": 2118393876
+    }
+  ],
+  "total_bytes": 166893192184
+}

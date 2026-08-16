@@ -1,0 +1,1 @@
+../ModelAdaptersTests/SyntheticArtifact.swift

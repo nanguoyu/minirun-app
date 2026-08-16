@@ -1,0 +1,1046 @@
+{
+  "sources": {
+    "dit": {
+      "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+      "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361",
+      "role": "diffusion transformer, affine 8-bit, group 64",
+      "license": "MiniMax H3 Community License Agreement"
+    },
+    "text_encoder": {
+      "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+      "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6",
+      "role": "text encoder, affine 8-bit, group 64, 50 layers",
+      "license": "Apache License 2.0 (Qwen3-VL-32B)"
+    },
+    "official": {
+      "repo": "MiniMaxAI/MiniMax-H3",
+      "revision": "6818f6c32d12b210915e44ad56a4228c2608f160",
+      "role": "video VAE (fp32), audio VAE, configs, tokenizer, and the bf16 AdaLN and time-embedder tensors the modulation caches were computed from",
+      "license": "MiniMax H3 Community License Agreement"
+    },
+    "lora": {
+      "repo": "lightx2v/Minimax-h3-Turbo",
+      "revision": "b65e359c0d128b3c5e08e0f5bf2791b794378588",
+      "role": "4-step Turbo LoRA",
+      "license": "Apache License 2.0"
+    },
+    "tae": {
+      "repo": "Kijai/MiniMax-H3-TAE",
+      "revision": "a213ac8bf2f148b4f32372279a7f207846978900",
+      "role": "tiny approximate video decoder",
+      "license": "Apache License 2.0"
+    }
+  },
+  "relationship": "byte-preserving repack with AdaLN pruning and precomputed modulation",
+  "units": [
+    {
+      "unit": "adaln-cache",
+      "source": {
+        "repo": "MiniMaxAI/MiniMax-H3",
+        "revision": "6818f6c32d12b210915e44ad56a4228c2608f160"
+      },
+      "files": 6,
+      "bytes": 1959064288
+    },
+    {
+      "unit": "configs",
+      "source": {
+        "repo": "MiniMaxAI/MiniMax-H3",
+        "revision": "6818f6c32d12b210915e44ad56a4228c2608f160"
+      },
+      "files": 5,
+      "bytes": 5149
+    },
+    {
+      "unit": "dit-block-00",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-01",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-02",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-03",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-04",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-05",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-06",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-07",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-08",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-09",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-10",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-11",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-12",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-13",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-14",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-15",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-16",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-17",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-18",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-19",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-20",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-21",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-22",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-23",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-24",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-25",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-26",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-27",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-28",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-29",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-30",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-31",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-32",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-33",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-34",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-35",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-36",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-37",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-38",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-39",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-40",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-41",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-42",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-43",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-44",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-45",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-46",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-47",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-48",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-block-49",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-global",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 1,
+      "bytes": 60631040
+    },
+    {
+      "unit": "dit-refiner-00",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "dit-refiner-01",
+      "source": {
+        "repo": "pipenetwork/MiniMax-H3-MLX-8bit",
+        "revision": "3ac52081470b0488921c3ec3ba84a39097bf2361"
+      },
+      "files": 5,
+      "bytes": 409507328
+    },
+    {
+      "unit": "lora-turbo",
+      "source": {
+        "repo": "lightx2v/Minimax-h3-Turbo",
+        "revision": "b65e359c0d128b3c5e08e0f5bf2791b794378588"
+      },
+      "files": 1,
+      "bytes": 1383677888
+    },
+    {
+      "unit": "tae",
+      "source": {
+        "repo": "Kijai/MiniMax-H3-TAE",
+        "revision": "a213ac8bf2f148b4f32372279a7f207846978900"
+      },
+      "files": 1,
+      "bytes": 9791388
+    },
+    {
+      "unit": "te-embed",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 1,
+      "bytes": 1555824640
+    },
+    {
+      "unit": "te-layer-00",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-01",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-02",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-03",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-04",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-05",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-06",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-07",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-08",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-09",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-10",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-11",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-12",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-13",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-14",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-15",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-16",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-17",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-18",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-19",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-20",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-21",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-22",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-23",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-24",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-25",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-26",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-27",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-28",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-29",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-30",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-31",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-32",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-33",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-34",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-35",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-36",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-37",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-38",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-39",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-40",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-41",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-42",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-43",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-44",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-45",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-46",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-47",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-48",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-layer-49",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 8,
+      "bytes": 518197760
+    },
+    {
+      "unit": "te-visual",
+      "source": {
+        "repo": "ddalcu/MiniMax-H3-FL2VA-MLX-Serve-8bit",
+        "revision": "64314cde0ac6d90f132bc94ae58e0c82f77396c6"
+      },
+      "files": 90,
+      "bytes": 763451296
+    },
+    {
+      "unit": "tokenizer",
+      "source": {
+        "repo": "MiniMaxAI/MiniMax-H3",
+        "revision": "6818f6c32d12b210915e44ad56a4228c2608f160"
+      },
+      "files": 6,
+      "bytes": 11497967
+    },
+    {
+      "unit": "vae-audio",
+      "source": {
+        "repo": "MiniMaxAI/MiniMax-H3",
+        "revision": "6818f6c32d12b210915e44ad56a4228c2608f160"
+      },
+      "files": 2,
+      "bytes": 605431611
+    },
+    {
+      "unit": "vae-video",
+      "source": {
+        "repo": "MiniMaxAI/MiniMax-H3",
+        "revision": "6818f6c32d12b210915e44ad56a4228c2608f160"
+      },
+      "files": 5,
+      "bytes": 10415635127
+    }
+  ],
+  "total_bytes": 63969279450
+}
