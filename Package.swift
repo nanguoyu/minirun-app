@@ -17,7 +17,7 @@ let package = Package(
         .library(name: "MinirunRunners", targets: ["MinirunRunners"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.4"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),
     ],
     targets: [
         .target(name: "StorageCore", plugins: ["EmbedGitRevision"]),
