@@ -1,0 +1,233 @@
+# Public XcodeGen input for the Minirun product app.
+#
+# The generated project is committed in the public repository so XcodeGen is
+# not required merely to build the app.  This source file remains authoritative
+# for regeneration.  No Apple Developer team is selected here: contributors
+# choose their own team locally, or build with signing disabled.
+
+name: Minirun
+
+packages:
+  minirun:
+    path: ../..
+  # Sparkle 2, macOS target only.  The Mac app is distributed outside the App
+  # Store; the iOS app is not, and must not link an updater it cannot use.
+  # Pinned exactly because this framework installs executable code — the
+  # revision that does that is reviewed, and it is what THIRD_PARTY_NOTICES.md
+  # records.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.9.5
+
+options:
+  bundleIdPrefix: wang.wangdongdong
+  createIntermediateGroups: true
+  generateEmptyDirectories: false
+  deploymentTarget:
+    iOS: "18.0"
+    macOS: "15.0"
+
+targets:
+
+  Minirun-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      - path: Resources
+        buildPhase: resources
+    info:
+      path: Info-macOS.plist
+      properties:
+        CFBundleName: Minirun
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSHumanReadableCopyright: "Copyright © 2026 Dong Wang"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSSupportsAutomaticTermination: true
+        NSSupportsSuddenTermination: true
+        # Sparkle.  The published feed and the EdDSA public key that has to
+        # verify every archive it points at.  A contributor's build carries the
+        # placeholder and therefore refuses to run the updater at all — see
+        # `SoftwareUpdatePolicy` — so nothing here reaches the network until the
+        # release owner pastes a real key in.
+        SUFeedURL: https://downloads.minirun.dev/appcast.xml
+        SUPublicEDKey: m4VqOWh+EnkcPXXo7vnY66/X4ltF4hls4RJKTX9feM8=
+        # Required for a sandboxed app: Sparkle installs through the Installer
+        # XPC service inside its own framework.
+        SUEnableInstallerLauncherService: true
+        # `SUEnableDownloaderService` is deliberately absent — the app already
+        # holds `com.apple.security.network.client`, and Sparkle's guidance is
+        # that the downloader service is for apps that do not.
+        #
+        # `SUEnableAutomaticChecks` is deliberately absent so Sparkle asks
+        # before it ever contacts the feed.
+    entitlements:
+      path: Minirun-macOS.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+        com.apple.security.network.client: true
+        # The two Mach services Sparkle's installer tools advertise, named after
+        # the app's bundle identifier.  A sandboxed app cannot look up a global
+        # Mach name it has not declared.  These are the supported path Sparkle
+        # documents; the alternative requires building Sparkle from source.
+        com.apple.security.temporary-exception.mach-lookup.global-name:
+          - $(PRODUCT_BUNDLE_IDENTIFIER)-spks
+          - $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+    dependencies:
+      - package: minirun
+        product: MinirunKit
+      - package: minirun
+        product: ModelAdapters
+      - package: minirun
+        product: MinirunRunners
+      - package: minirun
+        product: StorageCore
+      - package: Sparkle
+        product: Sparkle
+    settings:
+      base:
+        ARCHS: arm64
+        PRODUCT_BUNDLE_IDENTIFIER: wang.wangdongdong.minirun
+        PRODUCT_NAME: Minirun
+        PRODUCT_MODULE_NAME: MinirunApp
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Minirun-macOS.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        ENABLE_HARDENED_RUNTIME: "YES"
+        CURRENT_PROJECT_VERSION: "2026081601"
+        MARKETING_VERSION: "0.2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: "NO"
+
+  MinirunTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Minirun-macOS
+    settings:
+      base:
+        ARCHS: arm64
+        PRODUCT_BUNDLE_IDENTIFIER: wang.wangdongdong.minirun.tests
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: "YES"
+        SWIFT_VERSION: "5.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Minirun.app/Contents/MacOS/Minirun
+        BUNDLE_LOADER: $(TEST_HOST)
+
+  Minirun-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Resources
+        buildPhase: resources
+    info:
+      path: Info-iOS.plist
+      properties:
+        CFBundleName: Minirun
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: Minirun-iOS.entitlements
+      properties:
+        com.apple.developer.kernel.increased-memory-limit: true
+        com.apple.developer.kernel.extended-virtual-addressing: true
+    dependencies:
+      - package: minirun
+        product: MinirunKit
+      - package: minirun
+        product: ModelAdapters
+      - package: minirun
+        product: MinirunRunners
+      - package: minirun
+        product: StorageCore
+    settings:
+      base:
+        ARCHS: arm64
+        PRODUCT_BUNDLE_IDENTIFIER: wang.wangdongdong.minirun
+        PRODUCT_NAME: Minirun
+        PRODUCT_MODULE_NAME: MinirunApp
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: Minirun-iOS.entitlements
+        GENERATE_INFOPLIST_FILE: "NO"
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CURRENT_PROJECT_VERSION: "2026081601"
+        MARKETING_VERSION: "0.2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: "NO"
+
+  MinirunIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Minirun-iOS
+      - package: minirun
+        product: MinirunKit
+      - package: minirun
+        product: ModelAdapters
+      - package: minirun
+        product: MinirunRunners
+      - package: minirun
+        product: StorageCore
+      - package: minirun
+        product: iOSBench
+    settings:
+      base:
+        ARCHS: arm64
+        PRODUCT_BUNDLE_IDENTIFIER: wang.wangdongdong.minirun.ios-tests
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: "YES"
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Minirun.app/Minirun
+        BUNDLE_LOADER: $(TEST_HOST)
+
+schemes:
+  Minirun-macOS:
+    build:
+      targets:
+        Minirun-macOS: all
+    test:
+      config: Debug
+      targets:
+        - MinirunTests
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release
+  Minirun-iOS:
+    build:
+      targets:
+        Minirun-iOS: all
+    test:
+      config: Debug
+      targets:
+        - MinirunIOSTests
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

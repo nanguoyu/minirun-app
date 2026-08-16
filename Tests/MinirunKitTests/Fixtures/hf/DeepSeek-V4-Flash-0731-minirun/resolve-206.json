@@ -1,0 +1,73 @@
+{
+  "firstSixteenBytesHex": "dcbda4bcc83d263e80bb67becbba383e",
+  "path": "global00/global00-embed_weight.bin",
+  "responses": [
+    {
+      "headers": {
+        "accept-ranges": "bytes",
+        "access-control-allow-origin": "https://huggingface.co",
+        "access-control-expose-headers": "X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash",
+        "access-control-max-age": "86400",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cache-control": "no-store",
+        "content-length": "1197",
+        "content-type": "text/plain; charset=utf-8",
+        "cross-origin-opener-policy": "same-origin",
+        "date": "Tue, 11 Aug 2026 10:12:29 GMT",
+        "link": "<https://huggingface.co/api/models/nanguoyu/DeepSeek-V4-Flash-0731-minirun/xet-read-token/37bfd0311d681018c5bb74a24625c0522c1f0883>; rel=\"xet-auth\", <https://cas-server.xethub.hf.co/v1/reconstructions/13173cbd6eae19a4037754ba54887401f99ac0bae4cc0abc0d727b8730917fbb>; rel=\"xet-reconstruction-info\"",
+        "location": "https://us.aws.cdn.hf.co/xet-bridge-us/6a78aef12f16fd3ce3adc175/13173cbd6eae19a4037754ba54887401f99ac0bae4cc0abc0d727b8730917fbb?X-Xet-Cas-Uid=public&response-content-type=application%2Foctet-stream&user_id=public&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27global00-embed_weight.bin%3B+filename%3D%22global00-embed_weight.bin%22%3B&Expires=1786446749&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly91cy5hd3MuY2RuLmhmLmNvL3hldC1icmlkZ2UtdXMvNmE3OGFlZjEyZjE2ZmQzY2UzYWRjMTc1LzEzMTczY2JkNmVhZTE5YTQwMzc3NTRiYTU0ODg3NDAxZjk5YWMwYmFlNGNjMGFiYzBkNzI3Yjg3MzA5MTdmYmJcXD9YLVhldC1DYXMtVWlkPXB1YmxpYyZyZXNwb25zZS1jb250ZW50LXR5cGU9YXBwbGljYXRpb24lMkZvY3RldC1zdHJlYW0mdXNlcl9pZD1wdWJsaWMmcmVzcG9uc2UtY29udGVudC1kaXNwb3NpdGlvbj1pbmxpbmUlM0IrZmlsZW5hbWUlMkElM0RVVEYtOCUyNyUyN2dsb2JhbDAwLWVtYmVkX3dlaWdodC5iaW4lM0IrZmlsZW5hbWUlM0QlMjJnbG9iYWwwMC1lbWJlZF93ZWlnaHQuYmluJTIyJTNCIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJFcG9jaFRpbWUiOjE3ODY0NDY3NDl9LCJCeXRlUmFuZ2UiOnsiRXhwZWN0ZWRIZWFkZXIiOiJieXRlcz0wLTE1In19fV19&Signature=MEYCIQDlyDTkNY58vQcXdoplLEazYtXb8Yo25dGoO8%7ESk1L-tAIhANVc3K7lE8g8QXfoANo4%7E3w38uuEQdRcd%7Ex5KuPr%7EHgy&Key-Pair-Id=01KXEF4KZ1B6FV465MAWR4M21F",
+        "ratelimit": "\"resolvers\";r=2987;t=118",
+        "ratelimit-policy": "\"fixed window\";\"resolvers\";q=3000;w=300",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "vary": "Origin, Accept",
+        "via": "1.1 fecc77eaba1e7a8b50be464534284684.cloudfront.net (CloudFront)",
+        "x-amz-cf-id": "AU7fVQvYFgz4QKQKtGjddMOKq3Km6eL7qQDQUJq3bAuCgeFx_O5Mpg==",
+        "x-amz-cf-pop": "BUD50-P1",
+        "x-cache": "Miss from cloudfront",
+        "x-linked-etag": "\"c05019ecf9435fa47cdcbb35df74c8ade6c4ceedd6ebe75db9ea7a607f6ad2ef\"",
+        "x-linked-size": "1059061760",
+        "x-powered-by": "huggingface-moon",
+        "x-repo-commit": "37bfd0311d681018c5bb74a24625c0522c1f0883",
+        "x-request-id": "Root=1-6a7af58d-73caeba1016fc0684fc590fe",
+        "x-xet-hash": "13173cbd6eae19a4037754ba54887401f99ac0bae4cc0abc0d727b8730917fbb"
+      },
+      "status": 302
+    },
+    {
+      "headers": {
+        "accept-ranges": "bytes",
+        "access-control-allow-headers": "Content-Range, Content-Type, Content-Disposition, ETag",
+        "access-control-allow-origin": "*",
+        "access-control-expose-headers": "*",
+        "alt-svc": "h3=\":443\";ma=60;",
+        "content-disposition": "inline; filename*=UTF-8''global00-embed_weight.bin; filename=\"global00-embed_weight.bin\";",
+        "content-length": "16",
+        "content-range": "bytes 0-15/1059061760",
+        "content-type": "application/octet-stream",
+        "date": "Tue, 11 Aug 2026 10:12:29 GMT",
+        "etag": "\"13173cbd6eae19a4037754ba54887401f99ac0bae4cc0abc0d727b8730917fbb\"",
+        "vary": "origin, access-control-request-method, access-control-request-headers",
+        "x-hf-cdn-pop": "aws-eu-west-3",
+        "x-request-id": "01KZR4YC722ADX1GE4PY64G13P"
+      },
+      "status": 206
+    }
+  ],
+  "treeEntry": {
+    "lastCommit": {
+      "date": "2026-08-09T16:49:10.000Z",
+      "id": "53b44ba5976ced11bb6cb7ab0564fee5dc2449cf",
+      "title": "Add files using upload-large-folder tool"
+    },
+    "lfs": {
+      "oid": "c05019ecf9435fa47cdcbb35df74c8ade6c4ceedd6ebe75db9ea7a607f6ad2ef",
+      "pointerSize": 135,
+      "size": 1059061760
+    },
+    "oid": "3293cec8617d557de87a3abdafff4fd26f54d614",
+    "path": "global00/global00-embed_weight.bin",
+    "size": 1059061760,
+    "type": "file",
+    "xetHash": "13173cbd6eae19a4037754ba54887401f99ac0bae4cc0abc0d727b8730917fbb"
+  }
+}

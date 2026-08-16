@@ -1,0 +1,2309 @@
+{
+  "files": [
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": ".github/PULL_REQUEST_TEMPLATE.md",
+      "sha256": "1324c0cd7f6ecb5741e60d8283542b4b5e6c6312ca1dbf85db97c41126c9d78e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": ".gitignore",
+      "sha256": "c3722e8f46d9d17ef0045ff6ba5264d6b6d72c6ccb90ebd12eb6a312d9012b39"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "AGENTS.md",
+      "sha256": "f166f34da0522ee088240a13cc9996bfd8deb797a23678ae51be179670b0a0bc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Info-iOS.plist",
+      "sha256": "d3587ef1ccd1327c0b4c6935ed9628d9c50cddcc91029e80b40cb503b00948c0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Info-macOS.plist",
+      "sha256": "7d091f1c759b17cf90023bc2d07cc956add415a82c4140d7a3529314e629becf"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun-iOS.entitlements",
+      "sha256": "ba7636b13e6079611137dbba089875b81cc709b806e637856481e34b2405c3a4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun-macOS.entitlements",
+      "sha256": "800bc26862a5b2a7d7b1fa2557a614c7dfbe31c3f6eab51d4b425e8da9d1ee77"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun.xcodeproj/project.pbxproj",
+      "sha256": "110fba18fa1dac7d3a1214174f99e1bfea0b0f55d1c36189af29fc0ba0183648"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun.xcodeproj/project.xcworkspace/contents.xcworkspacedata",
+      "sha256": "7f3b00b5c3fdb45242d7b87e1e5c4e25d1fa8129a16c94295ecc4e8ea2235c5f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun.xcodeproj/xcshareddata/xcschemes/Minirun-iOS.xcscheme",
+      "sha256": "eb7f2a29f3ec4a25f62a740d79ead418d893768501940cb100ef3b7db6192fd0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Minirun.xcodeproj/xcshareddata/xcschemes/Minirun-macOS.xcscheme",
+      "sha256": "316da8359f009cdf50846424f3cf84ee4542af52d2afa462c47b192fe47d5243"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-iOS-1024.png",
+      "sha256": "df890eb9635ec2f4a08396dc5c58369d0dbc0ffd972a6a71d3adae305250dbd5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-1024.png",
+      "sha256": "8de0afbcbed48afa2ea3dafac7ed4efb666bbb5349d968219e0becda5e65fc08"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-128.png",
+      "sha256": "63541f3ed17b3bbbab101034081f720a5f80a170386749ad2a2ff1a4fd6c132c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-16.png",
+      "sha256": "f42e6e897a379f30b1dfb688f0b48f10c93844e89e02743fa2aab9a146096ef6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-256.png",
+      "sha256": "eb404610158f246ac7879886d0ccb939543f1d62f769035244b264680de5f836"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-32.png",
+      "sha256": "1085eef1a23b60ad6c37aa8055367c263d0ea10ae6552e47f100c71086fd39ce"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-512.png",
+      "sha256": "6a787ba838ba7ad951279745e91cb59b8de902eece277f67c9b490043e401df8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-macOS-64.png",
+      "sha256": "596f6c6da47f75efa7910d84040f317ce257efa4a7e6109493d7ec71cd05d8ab"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "sha256": "c3e34590f383c1414eb61f0f66ca004c3bc4ad9bdf2d1120121fc8324bdd3f36"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/Contents.json",
+      "sha256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/LobeIconsNotice.dataset/Contents.json",
+      "sha256": "2956581df9998457bebcf1d9b4dac844f5976c5de77b9f5bea00db9351edda34"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/LobeIconsNotice.dataset/LobeIcons-NOTICE.txt",
+      "sha256": "eb219f3c942dc4189c4bfe38eb0e0b4c13b3569b9d6f01f97559e5f1d700a0f2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/MinirunLogo.imageset/Contents.json",
+      "sha256": "a898aee998af8f540de30790a95644597227b6350f1818b2bb848bb241e527f1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/MinirunLogo.imageset/MinirunLogo-1x.png",
+      "sha256": "c18b9327fbab40d63ad301cd75bea4696dc84b1c1b38f54f49c5df30a91dbc83"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/MinirunLogo.imageset/MinirunLogo-2x.png",
+      "sha256": "99ee03fed77fc99780f91e05258d51a3986bab205de1d5eebd664ae07b931163"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/MinirunLogo.imageset/MinirunLogo-3x.png",
+      "sha256": "35e0d5a4e2ce1eada720c35d0b5f9cc043710d2851548df4b75416eff58483e9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherDeepSeek.imageset/Contents.json",
+      "sha256": "f2eb4dcd2c34a141846fb5895f0b9db9abb9f53fb3cb5402e24fc8d975d03bcb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherDeepSeek.imageset/PublisherDeepSeek.svg",
+      "sha256": "29a833829fb1038356bb1f5ff0733c688d056963073bbf28e1e4df6a1e85e61e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherKimi.imageset/Contents.json",
+      "sha256": "0517182990479fa4d8aff962492878260e4b6f63df280dbefe3a3ea583f7819b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherKimi.imageset/PublisherKimi.svg",
+      "sha256": "1bf0edef972fb73ed41859189ec91f76f9ed782ed50be8016d10786655341dcd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherKimi.imageset/PublisherKimiDark.svg",
+      "sha256": "062b6e72213a3e2f1f6d5ff924d182142bce7421c595d4fb32d41c768b53a5a5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherMiniMax.imageset/Contents.json",
+      "sha256": "db5e61a0112836341386412da2b12fdb004589c614372ca95bd1292e2264b5fb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherMiniMax.imageset/PublisherMiniMax.svg",
+      "sha256": "9be5569cd97e3d0c32baab116dbbb4ffc9abaebd6cb910edf227e6c07923f36e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherQwen.imageset/Contents.json",
+      "sha256": "de192f775128416fd0249a6f5fc286a6948b4fe75bee09c41116ea523cc81d1e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Resources/Assets.xcassets/PublisherQwen.imageset/PublisherQwen.svg",
+      "sha256": "162d7e95ee3fd885e63e85ba5148e42efd79ed041e8ce0b391e358edda5e2e31"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/AssessmentCard.swift",
+      "sha256": "a0db6abc93de2f83270b7fed301fd336c21928af9e5ecb67d19bbb5e2632739a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/Instruments.swift",
+      "sha256": "eb23e98a75fc72d41eac8f7a73c2ac6a7bc39d67df18124589a471dad24f6759"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/Primitives.swift",
+      "sha256": "78e19e4abdaccca15820678f94eb18bff9b86eac59825c3ddb7a6086e36354bc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/ProjectionStrip.swift",
+      "sha256": "b5e79cf8288537c4ca92ede9ac31c2472562d98df63b8d18d46b99f12f2d416b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/RefusalCard.swift",
+      "sha256": "022ba92a545850954300793e22a652c52e4ce56e8970f9000d81c64fddd93ea3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/Rows.swift",
+      "sha256": "419714714fed75cab27f7f6a4ba89f5ed927363a534c87aa52f0d88256bd4ead"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/Components/TierBar.swift",
+      "sha256": "4d223cfba5882e45cc3780caed599eb7561ccea522a4fca8e50a2ff4f4d0eafa"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/MRFormat.swift",
+      "sha256": "bed1f017830e5ae1426a5528da2aac8721584f64eca8b6168237dfbdda828bc9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/DesignSystem/MRTokens.swift",
+      "sha256": "9b895038912b4b5067470efbaba29f549cdc11298e8bd2f005b5c6c944ec58bc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/MinirunApp.swift",
+      "sha256": "e513927eb82983e0b40e85c6fb5581f6f1aa1a353d2a7df1f3417dc89f690ea9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Mocks/CatalogFixtures.swift",
+      "sha256": "87cea51828f6b4239e3b3413a7f3649da71d7a1f5348b673686a82f3b9194c37"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Mocks/MockCatalogSource.swift",
+      "sha256": "9a390013747f76f26270561807fc33a6268b35029d179cb6a6073a3f21f4c5ed"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Mocks/MockDecodeRunner.swift",
+      "sha256": "7f0b151669ba48a7edb986bcc569851ead8406e76896d65db8fc676392a6ba70"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Mocks/MockDownloadManager.swift",
+      "sha256": "da3593fca9530aa601150f030c04687c7215d22c78a13a0aabf3667d4d07ad1d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Mocks/PreviewTokenizer.swift",
+      "sha256": "d9caea8c4efd6d7360cd6c10b622297440cef3800ca3a60bb786389bd160bb16"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/AppModel.swift",
+      "sha256": "d07cd19074882476935eb020fd531a63141de5edb7a64e4a267305f2a4a1f1e7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/BudgetPlan.swift",
+      "sha256": "5fdc8ef3a29007f772f176fc7e7fa7dbb6daa3b67cde701f028073b88dbeb5cd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/Conversation.swift",
+      "sha256": "2ee9d932957c70a774f1048edeab89a2bf6a196f906693aad569b1b5df5f2e35"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/ConversationStore.swift",
+      "sha256": "879c28aba43131f83b19bf28dddfda450ecbcfa7a1bb96290a47f16fb5d3ae6f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/DeepSeekV4ProductRuntime.swift",
+      "sha256": "002b787d1881a5b184d10c17b0cace3c7fe49b193c9cf6e71d192762a823fd30"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/DownloadController.swift",
+      "sha256": "05ef48672e9e791b687e50cea122eea86405c227514b49aec83e03316e1198c4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/DownloadState.swift",
+      "sha256": "56375dd063b6008bf733b99352151bdd92d37627f8d3a43d6c249f6c3b28d6cd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/InstalledModels.swift",
+      "sha256": "5e2f89527ac590ae78c521cb48dca0b0d03c0b0c7fd2aed5966c571b808fdbf8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/InstrumentSample.swift",
+      "sha256": "c31bbf662476ea0e87e633f8418fa6c960f164e3a28ccfff5535a304f1bb9b29"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/K3ProductRuntime.swift",
+      "sha256": "4f7e62f8490d10b8471235c07c2acafa8ae5004d1a20441fd508b96086fbdb49"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/ModelRuntime.swift",
+      "sha256": "ea36572f0bef7dbd65b0dbb49553d120a8902fbdaf663a2d7fc5ae8522ba5973"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/PromptAssembler.swift",
+      "sha256": "4ee5ea9da68952048c21c85e8d9c061e183efff69ea4756ec1420e8171fe16f4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/RunController.swift",
+      "sha256": "08077218d7c5cf87c66953bb7f400bed571c44b875ce122c577b9cfbc488a7d3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/RunSnapshot.swift",
+      "sha256": "d0d12f718b3575d89a0ace14255e378fef466c0355b162ee34adc2fee68e5ffe"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/SoftwareUpdater.swift",
+      "sha256": "7ddb909a2a33e62f90f5eeeeb3149675b0302b217756853794058ced668c7d13"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/SpeedProjection.swift",
+      "sha256": "aa354bfa23b54cd49206b67b9949259bf7618be6d29cb9d0396f05beeded0831"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/VerificationAnnouncements.swift",
+      "sha256": "3e82133bb659ccea59fe0afa88fcda500c838d536ae5a34a2f916f7b1534d263"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/VerificationBackgroundWork.swift",
+      "sha256": "dc78b5e3c82ea47cd2512d4c6def6f37cbabce3316d1b956846b646a55ac4ec7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/VolumeAssessments.swift",
+      "sha256": "cf10dfe775d00312bb747d08ef62b4936a1bbda98cb8c7508d6ca340b12e2016"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/AboutView.swift",
+      "sha256": "22839070f3260553c9995a183e28aa4888b00e601c9d55736fc7e549aa256e04"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/AddStorageLocation.swift",
+      "sha256": "dfcc44bf46ccaeed03c18f9586116b6c31e9928675228918bf1dd912638f6a17"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/ConversationListView.swift",
+      "sha256": "e8150b0f1ff2c3de720ed6ccb4147bf58e9c55edec3641f94279783022bbf56a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/ConversationSettingsView.swift",
+      "sha256": "0798ed6f27cdaa8c3a554df8dbdd31519991ee3cb89ecb1cc7e4c0066182c260"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/ConversationView.swift",
+      "sha256": "fc133719af9afc771e70a80da4a2b8dca8be99ec1bf272dae83d0927154a514e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/DestinationPicker.swift",
+      "sha256": "3233a292bc652041c1528697710e8e75e69b13ddadb4ce53d99f93f163fd05ea"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/DownloadDetailView.swift",
+      "sha256": "8472b856679736fb8fbd00acd196173b28c19e6602fcf3fa396b707b85ebacea"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/DownloadsView.swift",
+      "sha256": "c7e095cae6d7856e1974bab78f5a96d801c44bf3f822cca3f6b2e23f3ffca619"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/InstrumentPanelView.swift",
+      "sha256": "521544275149bc361b2df1a6c8d9008bbb695627a51b42f007d09c16518804fa"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/MemoryDialView.swift",
+      "sha256": "86131b9748e296fecd28a5e3bcc6ff2cbcfb3f1ec30d211c7705f029430feb84"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/ModelCatalogView.swift",
+      "sha256": "212f81275fb089240ebce9f4b3a3beed5c75fa8f224c22fd486a385343b10f02"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/ModelDetailView.swift",
+      "sha256": "ba7f2f188088417ab95ac1c1255831db727483ead6145132b5f5d8adbadbaad4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/RootView.swift",
+      "sha256": "29a62dec3dac0cd27f5c4bfcd12d9cea8eccce347455d52c8298f6d2c3b12b78"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/SettingsView.swift",
+      "sha256": "2d292acefb8750681dc42026202fbd06e2a347d14102803f1636127d9165385d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Screens/StorageSettingsView.swift",
+      "sha256": "bc71ba0adda78aba7f2a730cfce004ff49d92dc328f18bd3ec43019fc32d8d7c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/AssessmentCardTests.swift",
+      "sha256": "e9904af31e7b9987dc089722a45f8f70f03a22d14dfabf17c225140f10758cf5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/BudgetPlanTests.swift",
+      "sha256": "5f3607da6d91ff67f96092bf79d57d7cbbef8c8ad686af524f54b996e99cf8f6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/CatalogNamingTests.swift",
+      "sha256": "bed5e7508621e30ea86b39d069e75f961baf5a810ecf2fdddec5b9d5a1a9e9b7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/ContractTests.swift",
+      "sha256": "86b818de4f8b69db3c8dc754dbfbb42ec43f9e1ca4a800f20a6684ed65355ad7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/ConversationTests.swift",
+      "sha256": "707f8839074f2d312f7f1160d2b81f786c336a852a6d0d31e87ac70124dc6d13"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/DeepSeekV4ProductRuntimeTests.swift",
+      "sha256": "13fda70989d61383d9d41f2687dec6502bfe063d2f6b516c93a31b53ba17cc96"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/IOSAccessibilitySemanticsTests.swift",
+      "sha256": "a55b1dc94369ae6052c571f212e40339f513e9d480abcff5b2d4331f34431ec4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/IOSProductPresentationTests.swift",
+      "sha256": "e21d6ee36b4875dc1fedb6c9bf03b849abf15b0802504da8f452c0d9763d1ac1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/InstalledModelsTests.swift",
+      "sha256": "31eda265c6232588e38080f5fc4a6036f7c121462bffe70555743a12e3c70163"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/InstrumentPanelRenderTests.swift",
+      "sha256": "a0710afe44a2cd4167f983f7be9e520c1a254c4540014fd21a62d556cb8b3b40"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/PanelWindowSizerTests.swift",
+      "sha256": "d40749284ba053d08e76f9995bb37069e0c82b6484dae3a574fb5ec365f9f3f0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/RunPipelineTests.swift",
+      "sha256": "92df50d7d0d0edbe83aaffff86b3000c7bfb45522aeff94f103a7ba0c23770ba"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/SoftwareUpdateTests.swift",
+      "sha256": "b21282dd8c4f83c853721a6f391e49052fab8707a548f4634db1fd352229b202"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/StorageLocationTests.swift",
+      "sha256": "e61e688ef4e887317b390601125dda56816786245a2dce205dd94fc0aac6bc94"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/VerificationBackgroundTests.swift",
+      "sha256": "18facd07c8d0c22811f229dfc4dafd452fcc33c1aacb91bc34bb9eb423f44f3f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/project.yml",
+      "sha256": "bae78240f94eba9936109cab6b288f0fbb1eceb7ec707d02cdb06e0361d1026c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "CHANGELOG.md",
+      "sha256": "b06c8b178cbd400f72a33b23cbcb45f048360b2de10d6726c588422cfe753d5c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "CONTRIBUTING.md",
+      "sha256": "78d7a52ecc9e2372d20ee43a006820d62083684775948cde96f4e3bd73b8adea"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "DCO",
+      "sha256": "f7ac75b443f4ca16b503241344b41aeff9503b0c30bedc2b119551d83cb0fa90"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "NOTICE",
+      "sha256": "0dab942bbb81dc827e57ac3652ba81dc45073ae242e5d92c979f48389367ae1d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Package.resolved",
+      "sha256": "ae0cc5a242863b3e180c772d467e72b4a62aacc3e1633589fb980c6b45a41bb5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Package.swift",
+      "sha256": "5ccffa7f0b4d6f7d2f9899084b0c08a117d90e5168beb203ff73bfea452d7fd5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Plugins/EmbedGitRevision/plugin.swift",
+      "sha256": "e9fba6d8f1fe1743cd3415205b4e7626093a38a978ee0961c11367ddd3a58b15"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "README.md",
+      "sha256": "42e7c9e8006e0f84d2bb0d194f5d356f7b9bfc04c55cf993dd0b847fe53a6cc3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "SECURITY.md",
+      "sha256": "ae4a4d89be9106633aa8c8bacc6c65dae72ae96b5553ae8c32a2bed873481883"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/EnvironmentScenario.swift",
+      "sha256": "165f14d45655a4a74976ff0c930ee360e6fae2405ed0391d976d4d49436409eb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/HarnessController.swift",
+      "sha256": "bd6f4065dadce012842227060fb0569e236532e5a0505a36c9eceb44cc251638"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/HarnessScenario.swift",
+      "sha256": "dc537220e1cd0337548945bf6b283fb13d514813a4e28927bdc5787652020647"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/K3DecodeScenario.swift",
+      "sha256": "14e6830d92a909f5fa7c04757b69eaa1b52e6a4c5d564b95c243f375840e666f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/K3ProbeScenario.swift",
+      "sha256": "8cd0b4bea6816318a1775e03e313755b4b5a78b7f8ce63eebba2c908b4ee48a2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/MacReferenceLogits.swift",
+      "sha256": "b5fc899b83d5d88e4a440e90dcd99a8cfdb4d3fd69a3befa1f6686369623b4a7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/QwenDecodeScenario.swift",
+      "sha256": "79fcb9b51e9e28ab6fb82f4e75f9f697e14cc19ef7758a22eb88d279aa76e314"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/ReadBenchmarkScenario.swift",
+      "sha256": "4691a60beeeecac8482f1365bbe2fea43c95b7e1bd6f676607eadba2c156b2cf"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/BenchScenarios/Resources/k3-flagship-config.json",
+      "sha256": "9710e121a58d03ac92c8d6da287a19541994319afbbe6d6202af001ffd379213"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MLXBridge/AffineWeights.swift",
+      "sha256": "bd4e61dbe09dfe48a83f518fdae9d52b68ebc0873e433d900b82f7e2d781ffcd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MLXBridge/BlockFP8Weights.swift",
+      "sha256": "d3171f28ef846f32f0e8c11928aa64ea242f6a8616d900b647695be98f84b7fc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MLXBridge/MXFP4Matmul.swift",
+      "sha256": "dc41043244aa2e3fb118dcc56b4cdd978b1b91eb90cf496277bbc669de58b425"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MLXBridge/MXFP4Weights.swift",
+      "sha256": "630c29851582ba199abceff4ea4665dd2dd840c3083c652111f998e6f2ca852d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MLXBridge/PagedMXFP4Linear.swift",
+      "sha256": "0b967390bf13d011320de27449816dac3755d42745db4e3e08f91363ffb8117f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/FitCheck.swift",
+      "sha256": "f550b964294c9b2a5ab1f4904ecb3fef8afd5a974f3f34bdefc7234f963516cd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/LinkClassification.swift",
+      "sha256": "fcaf63878a2d0dce52f7b4167a2595aa92ef0927c715b273bc46dd7fa5267154"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/ReadSpotTest.swift",
+      "sha256": "27cf20f14973df345a9a9ab12bc512832afe06f858bb607420e085815ea3e1cb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/TokenTimeProjection.swift",
+      "sha256": "17447faba2b51017c34c40aa54f81c907509917d507c6db87f0229de753ecf46"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/VolumeAssessmentReport.swift",
+      "sha256": "7e89b8ad76cc29b3a90f7eed9b1acd5569b4ebfc63bd18eb1a5c2f8ef484362a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Assessment/VolumeAssessor.swift",
+      "sha256": "2928692dce98d329e82fad876e1d39a8d5f94444d9307adc77caeeab26d98abf"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Catalog/HuggingFaceCatalogSource.swift",
+      "sha256": "217a496d03ac2f8770b434efd3526f69782d7afbe900948c7b4f944f1a2763db"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Catalog/ModelCatalog.swift",
+      "sha256": "5bf5f30f9598e3c2b34c13d53cb9c945bddd978762ec53567446e0c59556690e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Catalog/ModelCatalogSnapshot.swift",
+      "sha256": "aa3a16183cc852945a992e72417208d1012a4ada48cfc613b35fcc7768c38613"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Catalog/ModelDescriptor.swift",
+      "sha256": "6f388de2e3725ff8bd5f11fcb1e9e7b12c2384a67b636400f832b94d2625f496"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/ArtifactIndexIdentity.swift",
+      "sha256": "bed0f2943a2054e1f034782feac9f4419afad1f9cc11701021edece3676396ce"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/ArtifactLocator.swift",
+      "sha256": "4877078c625340583c3eba363331d92417640e6e7f8dfa08b93310713fc133ac"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/ArtifactVerificationCheckpoint.swift",
+      "sha256": "6639bc106c071a406f5b809bf82d05d2b474a18bb4e10807f35ea5bae0ce81b7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/ArtifactVerificationEvidence.swift",
+      "sha256": "168c96ddf9ee32d03d91cc31be161e5cb5271a60bbf30687423d3d4f4c8141a8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/ArtifactVerifier.swift",
+      "sha256": "82a2dcc28e82894a6e4f7cec1a870fe82db56b80c6ab5e55036d19e46b0b66c5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/DiscoveredArtifact.swift",
+      "sha256": "42bcfc1a5e5530fd457f7394bcc1f1612aedfb45a14502918ad122be14baa2dc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Discovery/VolumeChangeMonitor.swift",
+      "sha256": "7da35091e3c98b75b9c6b0b9c66e1841f545ae9c5c79d34a5118321dc73f1e5f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadError.swift",
+      "sha256": "ac47f62821a49dff4d0e4dd5f191f313816169dfb0e4cc1cf2a12376ddfcffbc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadEventHub.swift",
+      "sha256": "6111bf1240eb2fe84bd8a127b576e091fbdcdd691149dc5d8bb51c56e4366ea6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadManager.swift",
+      "sha256": "eb70e0da8075859015342d7753bfc059cd49735af035690a9a3248b0cc381290"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadOptions.swift",
+      "sha256": "794351a1b57808eb3bec9b22f9af5eb37f7952921d75e3f5f1f866e3d1b16202"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadPlan.swift",
+      "sha256": "beec1f983623fb8c2c68d81127b57c2c1e2c01c7e1a9ef1ecc6b037fb5a92fbf"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadProgress.swift",
+      "sha256": "e6b8055102b443a45ee99cfd41385ae7edac5de8e6d733503b22f16ffe3e0829"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/DownloadStateStore.swift",
+      "sha256": "4003d9c66ee66723b08e24a1eaf7a4b6afc74705d91a0a5e10e03411ffc42004"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Download/Verification.swift",
+      "sha256": "63a462b94fbf24a6552041e6e4fbe8d7effc45f2463e5857eb2ad1ce5156eca8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Planning/DeepSeekV4MemoryDial.swift",
+      "sha256": "85b4e6c240ee0a886faf04824ea1811ecdc064dba0dd3c887150521941c3987a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Planning/MemoryDialPlanner.swift",
+      "sha256": "001182ebda1021e37972cf026f736e8b3c9ea0fb7e26a3d1de8c5529b6944ae4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Planning/ReadAheadPairSchedule.swift",
+      "sha256": "3315372a2abd67adbd18d50263f0f6a316ba72ec09dbfa60059332a2cc31d0a1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Resources/model-catalog.json",
+      "sha256": "ec56f876e1653a2971f3d4bddbb2131e94be62aa39b25679841ee0dd2c682f3d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Runner/MockRunner.swift",
+      "sha256": "cbbcfb9a7b494642d329dad111fb7c45a4b163071d4e5f2cb037e8892ea66924"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Runner/RunPhaseSummary.swift",
+      "sha256": "1470d4839a5661d7cbde63ec796cebea93198a1dff04b2ca680fd92e68e1f3d1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Runner/RunnerFacade.swift",
+      "sha256": "27a3929939a6e8c35b0da84584a8458442650d9b4cf7c8dfe5f8debb0f224055"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Storage/StorageManager.swift",
+      "sha256": "dd0c8dbbfa11e92742e78787b124730136f64c3e79af28bcc1cdba6bd571a6fd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Storage/StorageScope.swift",
+      "sha256": "a3ba5b1df0adb92c9fd87599149470632630844eec14b5977ae1fe2e4c639e55"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Support/FileDigest.swift",
+      "sha256": "0b342fc5f8ac5eb546f1322d2c52f6ddcf9a91112a1f2e3409ea510b1ccea335"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Support/HTTPTransport.swift",
+      "sha256": "e7cb4662a44114dccf6bb5e5185a6313a06cd6b598d4227bb9cfd091555aa9b7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Support/HuggingFaceTree.swift",
+      "sha256": "40cecb65bccbb29c96f70737e34c847e5078016bf0aaaa67896b532994f801ea"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunKit/Support/MinirunKitJSON.swift",
+      "sha256": "8ca26c8bab31bfc41ab43dc78ac801b430225c75dd92a437d49a5ea4711537b1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV4DecodeRunner.swift",
+      "sha256": "f7ebffbddf49df76d4e16ee0b82d57420160637348b1a3f62aa8928e292dd588"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV4MemoryDialInputs.swift",
+      "sha256": "15e0cfb8b7768a683f1bf6167a6fcfa832348846ba8bb1d910cf325e2f1faf6c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV4ProductMemoryBudget.swift",
+      "sha256": "4b3769360515abfaa65cde290086fa674f4ac8fa622263d10a63d77eef33088b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV4RunEngine.swift",
+      "sha256": "a8c1957f8e2bc066e43ec1ab0244dfdd04f31eca41bc211e871410360930a031"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/K3ArtifactResolution.swift",
+      "sha256": "a513f968a40079d239f302a3accf74c3147afb16b3112a4fc4fec31dc8e0501e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/K3DecodeRunner.swift",
+      "sha256": "46ac864ec29c4a299f5167fe741c4225225540f3ef23a1e9204ad362828455a1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/K3ProductMemoryBudget.swift",
+      "sha256": "dcc72a727bbe865f94343986853eac4ee8299232769972d36badbccba5bf154f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/K3RootedArtifactMirror.swift",
+      "sha256": "a4f11aee9826dfeba0e46ef9c7da25ea8254b4cb658a2b22a7413aac3376c2d9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/K3RunEngine.swift",
+      "sha256": "83cfcdf20f6e0b839fbf53b6af2b18afc80d9608dbc54c1a333afa2c95cdea4b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/MinirunRunnerRegistry.swift",
+      "sha256": "3c4e8e27980bf0299b6f665cf399c4bb1e108a9c56db0f61ee1f8a30728174dd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/RunPayloadFlowMeter.swift",
+      "sha256": "9d91404504632f780d7bfd4ecf8355af11d7ee60db064f56c04adf9af563c0e3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Config/DeepSeekV4Config.swift",
+      "sha256": "e4e5019f0e81887c6edea135b899533839022b38d456adfc730fff9fd6ac61d2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Config/DeepSeekV4GenerationMemoryBudget.swift",
+      "sha256": "db19273bdc580b3a00980847120827fbeeb3d8de4341be06768acf0847aeca26"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Config/QwenMoEConfig.swift",
+      "sha256": "e4b5cd386b3d5ad3b6ede663507a025299dbd3754c2e0fb1b20e4be096e23324"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Config/TinyK3Config.swift",
+      "sha256": "c4e308be7e04ae9a8bcf278d41c73aa667da1c5248d3fe2c856d2cb7be5eece1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/DeepSeekV4ExpertBackend.swift",
+      "sha256": "5f3443a3423e7ea4083a1c4b1961e294117040cf5145c37933f43750d28abdf8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/DeepSeekV4GlobalArtifact.swift",
+      "sha256": "d0b11922d24030926d2d5329cd659e49ba6c872c0b533ec758a9a95c46cac8a0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/DeepSeekV4LayerArtifact.swift",
+      "sha256": "7bc6bbf4ff7917b1eeb630844c373815f1ef21ca0de36847093786656d3fa065"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/QwenCheckpoint.swift",
+      "sha256": "5b916f304ce38325bf9aa7f7e6b2e8bcb6a81d1b689125d0a7a31af30ed52e17"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/QwenExpertBackends.swift",
+      "sha256": "10c13a3564c0b0db4f76bc1b6ef8205a33048f46dea97f9eb40674a1d84dc59f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/RoutedExpertBackends.swift",
+      "sha256": "32a12103cf83c723840eaf0f45d6c6fefd68ab69be8fc8084b8d315399cda42f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/RoutedExpertContainers.swift",
+      "sha256": "e3d9b1c5bb7293afc321d7e5a156060f42e4539dbacfda9374a02d787165e5ee"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/SafetensorsFile.swift",
+      "sha256": "2c54a4a2dae43eb967ba71ba127253de00fea9b1cfc0b9efb113e46c7110dfce"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/TileDigestPolicy.swift",
+      "sha256": "07f7a8f8e73a349fb0376ce5b386d91a5952ed33ce1cf26086fa7c14e61e6c3d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Loading/TinyK3Weights.swift",
+      "sha256": "ce262daacfd273fa822a32434c4cc51686175447ab67a87675a1d7e1092817d4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/ArtifactWeightSource.swift",
+      "sha256": "91a8e1c6e392505bb80ce99d42eec7200a35ef92a0a876c02963465555362542"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4CompressedHashBlock.swift",
+      "sha256": "45d30b2056bdff0a899e49bec54994c31348ebe8aeb10f5c286b8f8a311b0d45"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4CompressedLearnedBlock.swift",
+      "sha256": "f126ac2e3016ac74783d4bfb11314bc499eee9d378e54becee5d88315f89ac78"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4Diagnostics.swift",
+      "sha256": "f3a90f08e068b542b60bd7afb4d5db20bc53e65ae7a8ca1b331899a22a207f2b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4HashFFN.swift",
+      "sha256": "3fe4d32b44c800910ac04d570407d1bbae905bf22e07fe71f367f6ced58901f2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4HashWindowBlock.swift",
+      "sha256": "a844f63e53309dba0c1f3a426cbeb61032c49d06e85825b8df151b6f8624083f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4Model.swift",
+      "sha256": "8a5916619d8350b41ec3906a7e90d7f924640884daf2b5e8a0cfe3e38d53deda"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4ModelExecution.swift",
+      "sha256": "f93792df0df388717d30a04f11fb8cbc6b523becd3ebfaf5818d480d661b33c1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4PhaseMetrics.swift",
+      "sha256": "cc175bc00f651c54c2d65df8b8858c9664c330655adb376667264a4defa27db9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV4ReadAccounting.swift",
+      "sha256": "e0ea5b392ff54596b251e70afaf145f5b9280bb2fa43cb7604f71574a666a5ba"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/K3ActivationCapture.swift",
+      "sha256": "cde923a1ca311663d04bb19e50f895037a0c59b73fd57292a33c2bddee4fad86"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/K3GenerationStateMemory.swift",
+      "sha256": "9358c0c28da17543b9da5c1facbdbfdd02152e0f99e168914cd929b1025d6125"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/K3Model.swift",
+      "sha256": "a88b760c8fe5ad522721d3fa68d58ef6c86e641b31464b05ab069d17c5d359bc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/K3TransientMemory.swift",
+      "sha256": "346d13f5c85d4fbdda5c340ddc3693239f336cd83d3530db1b45bf75b16b9a3a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/K3WeightSource.swift",
+      "sha256": "3b8d6ab5599d14382c3ebdf57c9a5dbe0391878c875493e68ac5f766e7ea0ef3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/QwenMoEModel.swift",
+      "sha256": "4f6aa1167df7337d91f59c8aab7463a94a33d0818f4c9e021b32e204eb64d507"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/TinyK3Model.swift",
+      "sha256": "d06472b24b2b3cfdd7a3e231b1571548e989f9e670abb4ce74ab80d1529828a9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/Activations.swift",
+      "sha256": "ac47db7c8786d5f0551589a4da346c5953bb807525386d183ee3070e3daf31d7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/AttnRes.swift",
+      "sha256": "d49f4edb4e172791699a9eeba6a951c76483fb66c56efd0fcbb6acf5bd3d42ac"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4Attention.swift",
+      "sha256": "09d265f65d740933af48fd8034c7168b9ce71e6e69824c59366a7307a2f13da5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4BlockFP8LinearReference.swift",
+      "sha256": "9ccad789335370a09397ec46a3160a236f57fab5e5e7e31646c28f811332e6cc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4CompressedAttention.swift",
+      "sha256": "d286db7e95db61bb5e4b53e88ccec2f9ec30483422c5e4b158f200317490a119"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4FP4ActivationReference.swift",
+      "sha256": "1d84e110682135a5afed83ed9e6cb6796f326ae547506187457139ed813cd460"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4FP8ActivationReference.swift",
+      "sha256": "1673c9f2c904f8a62c34622fd62454e4740cc72c9e44e427419bb5247b73a169"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4HyperConnections.swift",
+      "sha256": "178f4dceaff3919f0d7afb8c0739f1058351661c6945eac1a0bef0135bb342eb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4PowerOfTwoScale.swift",
+      "sha256": "080fe41bd40920ce3a8a548eaed22d39f6de2ee801b5e92d784521d6b47c57b8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/DeepSeekV4Routing.swift",
+      "sha256": "ad4ee0079b7236140fe119fd7e9590465301a9f9ab80bfe05b6e7394fa770814"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/KDA.swift",
+      "sha256": "cb2712408021bb33e849715970f2dff99a57743a88c562d58f85d736e7ede793"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/Linear.swift",
+      "sha256": "013b2121d8f8845217b7034c851ddddc3f3aad85c7713fd7756ff67ca6c6bc7e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/MLA.swift",
+      "sha256": "ad81656b6b904f21a88778c486b9578a96c7f93be706bc67e952dac8d65cec3b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/MoE.swift",
+      "sha256": "513bda41a74872de386aa7fd69acae19492f150901e3f53e0bac91bfff782aa5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Operators/Normalization.swift",
+      "sha256": "a8e5bbff6f5b8563a3e3d9b07ae23e12f2f2ceb14e6688eef1189f78dfbe93a2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Planning/KitPlanningReExport.swift",
+      "sha256": "7855e3dadf7eef72e72ff5c8d3fb03b68ad98ff06bc4b38fc012ef969e92cc21"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/BoundedReaderCache.swift",
+      "sha256": "f4d543b549d8e75bce737abc128ad84ba11729db41671e20970137a0aa1678b3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/DeepSeekV4PinnedWeightCache.swift",
+      "sha256": "e3cd8f790a599190d9e2b0aabe4bb404608d33a09d2736517f28468634c37087"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/DeterministicReadAhead.swift",
+      "sha256": "aa39385e8915e69d5ea8bf96dbe1f6646a1ecc63eedf360ecafda756c64dd8da"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/ExpertPhaseMetrics.swift",
+      "sha256": "935cb87e7632af418fec11147eec175916a224ca468db67113a92133fac14b08"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/ExpertStreamEngine.swift",
+      "sha256": "e7deff89c9c1116de0aee9d824e874bbfbe7b17431335994d5b356b8162f8c05"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/ExpertStreamMetrics.swift",
+      "sha256": "d895327e44eafdb2509a5c2d531d6e453dd02cf9c5cab6f15ee396ed6265b654"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/FlagshipLayerStreams.swift",
+      "sha256": "04d50017dd345aa56067e0956d080376263c70b41bdb69aee024a4dc37121bc3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/FlagshipRoutedExpertBackend.swift",
+      "sha256": "842c6a7ddfea6da7450370d70d022b2bedc5061fa23bed92329dcb9a9da76707"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/ModelFileAccess.swift",
+      "sha256": "5f9cd77eb0dc07006afe03f37db74bbc82850de33c183f8d10c8609d03450e44"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/PinnedLayerCache.swift",
+      "sha256": "bb8bd64a148ab8b12b089cd87a3fef34360a6faf29225c8707871a90e7a9439e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/PublishedArtifactLayout.swift",
+      "sha256": "89ad51705aad5b9ec86f8e9246a6fadcf168efd0c486550743dcec7f053684cb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Streaming/RoutingTrace.swift",
+      "sha256": "45c9e7c5163bc51d764173e43683f654bf2f2959e8a6fe4d407d04fe45c9b285"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/TinyK3Error.swift",
+      "sha256": "141a9637df0f055b2b57554c50d39f4b1cfee633391a3660a9ad09a17d059514"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Tokenizer/DeepSeekV4Tokenizer.swift",
+      "sha256": "fe48ea1cecd7901c0cf861b12ec1d78d033d350e527fa473d9de0f4676c798a6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Tokenizer/K3NoThinkingChat.swift",
+      "sha256": "56e517545ae8b4e966930ae819bd33637c0691e54e93e811516cf510945d4930"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Tokenizer/TikTokenVocabulary.swift",
+      "sha256": "3ca1c67c0e2b07318f24312d1d7342554b190b2209ed36b958e7dcf573e6a924"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/BenchmarkConfiguration.swift",
+      "sha256": "2c3e8239beea2c9358de40e6d69d8f365a116bda58d1b82abd1884a1c579cd93"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/BenchmarkResult.swift",
+      "sha256": "76d06d3ef294f4541c240c0a31ec7a0f900dd26c4cf4beb2c8d625b7cc8a8962"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/CacheConfounding.swift",
+      "sha256": "2a9cd84fd8b45f3df89536f304bcb660612ccc5bd239779dbfb5d54d02df525d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/DispatchIOEngine.swift",
+      "sha256": "329d66e06e0595ccdd0599bb54700a23fb42b120f88f0bb7631e5c159acf3eac"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/LatencyStatistics.swift",
+      "sha256": "2d9756ae753d20924da56b88fdf3865e74ffb1bfae69224dd7ba935c40edfd5c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/OffsetScheduler.swift",
+      "sha256": "6d2c546957a7c4af603b70b4573b922769b23ea460339e41af7ce011c92a362b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/PreadEngine.swift",
+      "sha256": "6efe7c276ea528af41244d5a3ccb3b33b6b3308d2a289e4c8affd81e194a9d4f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/ReadAccounting.swift",
+      "sha256": "e9930fbd43186d28f775e8b8ddc82216ac4d6b9a6890f35a3218fc95c588106f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Benchmark/StorageBenchmark.swift",
+      "sha256": "5740e51b9beb2e9631f434bec848ac1835e9836adf41a105a59ae360f2a7e514"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Container/QuantizedTileContainer.swift",
+      "sha256": "a71580da630266c100851eeab717e0c8ae6e35f4a436661c4331faed81b772c8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Container/SHA256.swift",
+      "sha256": "d75729ab6fe0e7eeca3a8fc92f002d0eac4be9cc3be5f53fb7ddfbf68fd97792"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Environment/DeviceInfo.swift",
+      "sha256": "e8788045dfa5152672557b27041e243d923d105ee9b750fcbb775c2e1f64a667"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Environment/EnvironmentReport.swift",
+      "sha256": "7b8ebb70b8a426e129ffa3e07739aae21ce040a27f7830dfa7c8e8d37c366e55"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Environment/StorageInfo.swift",
+      "sha256": "045ff2384f4e8454002f4caba71e22de0e0f860f87f4e31b1a47297d1149f2a5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Environment/Sysctl.swift",
+      "sha256": "9b7e594452d862511e375ec5cecb4f58a15366e89b8cabb8f5ccf2c9342e4681"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Generator/DeterministicContent.swift",
+      "sha256": "9e82a6513c3a6958469e02dc85968bf4c895537a5a84d5d5879ff11ea0da5691"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Generator/FileGenerator.swift",
+      "sha256": "4745544fbdc93221bfdb2f94abac07b9523be90f621a1268f2008e402ea8af65"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Generator/SplitMix64.swift",
+      "sha256": "a0c847e8ca1d2375be1badb21684f94c9b899299f0ec102993d8b58e78ef1ab0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Pager/BufferPool.swift",
+      "sha256": "fa934685240106f5ec72fcac9fd1b7ddf7069c34cbf37a23305acb8c65422a70"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Pager/PagedReadPlan.swift",
+      "sha256": "bb09766fb00062d00fc90bc5a756057474584658db79e1057e30db9cc6a7952f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Pager/RegionDescriptor.swift",
+      "sha256": "94b182766ed337b4adbdaec28287e17aa2fe0e5ebf79eaf0c6e02d6a2dd40814"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Pager/SlotState.swift",
+      "sha256": "78a15e607d3c084f10a9d9a837812ad1dd17acf62b20db3f91fe8923835e8c48"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Pager/TileReader.swift",
+      "sha256": "dabbe7264ea9fd65752eb810fdd2e2b998b16a71abaa9905db36be7846e1463b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/AlignedBuffer.swift",
+      "sha256": "ee22424fb947005e07a40b53df6266b94bf13194f40e4655cb9a897728c3d640"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/BuildInfo.swift",
+      "sha256": "41d4552b27475935ac0b5e8faf9fc61beff6d85116022a2e4a20ead0c692964a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/ByteSize.swift",
+      "sha256": "e64a0ab83b710fbf609f738cd6604bee972b4db274183cc3f1c05a4eddd3d07b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/JSONOutput.swift",
+      "sha256": "3cbf7d16c8f33e8c093173a7ec727f98cb728c13123991e290802e890b9432ce"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/MemoryUsage.swift",
+      "sha256": "6e62cfcc98513236b2eb8b93d57a056e191fe083a448bd430a46c259de861437"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/MonotonicClock.swift",
+      "sha256": "d46ef1b70ba1ed1405428f6e8f3449fbc272ff988ec10a8740b26313d91b620f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/ProcessFootprint.swift",
+      "sha256": "88decef19689f97da311aa82d465bc67d0a11fd15a8b31d6b6224f94a4f70d0d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/StorageCoreError.swift",
+      "sha256": "51640c2c77f262101b8fe81ae2cceaa7e491dbb511d3e314e0c57be87c4cb778"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/StorageCore/Support/UInt64Accounting.swift",
+      "sha256": "ce54d4ed4370cc97c50bf64b83f1ef9ec82066f9d1cda0c008c01fccac4bc82a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/iOSBench/LocationPicker.swift",
+      "sha256": "268a2f71301764b4b1a2636e3e3aa73eaeeb3c37b256bfe707c85caecaf23e73"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/iOSBench/ModelLocation.swift",
+      "sha256": "1ef178e23d2e4320d009b26b106df80a8d6c850d554e5eedc2fbd498f26d930b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/iOSBench/ModelLocationSummary.swift",
+      "sha256": "fc361ccc01d84682fa1a3ed4dc8449bfb211366a36c6d7ccb973e4c086fd9f84"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/iOSBench/SecurityScopedBookmark.swift",
+      "sha256": "8617edd21ef01d72329c6e7ebc374bced7f2005cb13a527ed034063f379157b6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "bf028bbbce9c345a42aa9bdd4a1caf5f283b1fa11bb30c3ab0f24eaefc233768"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "TRADEMARKS.md",
+      "sha256": "a18b19771f2c970774112ecd5b5f4818c24587d6e35620394a58d48868001efc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/Fixtures/deepseek-v4/current-official-config.json",
+      "sha256": "e8837dfb86dfe9757e99b3178eeadf0363b6d77b6d756355172ba0c481e16b16"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/Fixtures/k3-flagship/flagship-config/config.json",
+      "sha256": "9710e121a58d03ac92c8d6da287a19541994319afbbe6d6202af001ffd379213"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/ArtifactDiscoveryTests.swift",
+      "sha256": "6f7daa3967138c5ea18dc25f0e9eded549458121b38cec95df5c5a96fa8c78be"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/ArtifactVerificationEvidenceTests.swift",
+      "sha256": "7efdaefd28c5c8f960bb277a349f8d2ad89cd15d5a842685bb23ac4d606a8037"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/ArtifactVerificationResumeTests.swift",
+      "sha256": "5d75daa06db5450e3137558cb3b5ee68a1488ae838da08ea4f07f5a430ad7893"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/DeepSeekV4MemoryDialTests.swift",
+      "sha256": "3684f3c3aa960fe6be6dddf9c8e36fa3d2cb46f075879d2b391f1d8a5e7f86a2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/DownloadAccountingTests.swift",
+      "sha256": "a7659aa2137f6d9693795105cc95db3623c3487170de3c77c3996bf7e33d5add"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/DownloadManagerTests.swift",
+      "sha256": "32007e909dc63c7265dd85d38e9ece1f10002f35bbdbf837cde5afffdd1b4f97"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/DownloadOptionsTests.swift",
+      "sha256": "a6f77893ee8f22c2ace98a3bba26cadaea9a0bdeefe35e5afdb917d4ef8ffe55"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/DownloadStateStoreTests.swift",
+      "sha256": "10f8045b00e91c5318c379152017a759452833ed41780da33e002cdeda54dbba"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/FileDigestTests.swift",
+      "sha256": "c15691051625cd456deb6585079fbc4dba2aafc24c67c61fe20b939c7e6cfec7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/index.json",
+      "sha256": "9d7a7d9d58d968f799b34e1424f939555ece45afbfce17a947e55eae2ed870ba"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/resolve-206.json",
+      "sha256": "640f48c1351557fa9c83033101ea0400b82209980945ffbfbde647a2719b72a3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-01.json",
+      "sha256": "c77b2bc2c4c09e1dc6636724bdc79dd18886c9294fe06278022fb990ea9786e7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-02.json",
+      "sha256": "5b41600e9af2407464bf3386c62cc4ccf8931cb45c03b3719ee041f19edaa924"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-03.json",
+      "sha256": "0e1a74e83a89001f5b150f34972da65077085196bf4f1fcb337f6cc7fa6f6216"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-04.json",
+      "sha256": "f307e031ecac2785e9b4b0fda1947cd9e16ec20a3f4e95177dd7c49f8ae8fd93"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-05.json",
+      "sha256": "eb94138f16679c793d89b6204d2dd9b66f10fdaa307153caaf265652ec0360b2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-06.json",
+      "sha256": "5a7fd2e96f23e219eb1a09a5d586eeb9b4a3321a89ab539a0272ba15a02affa9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-07.json",
+      "sha256": "3323385ee512d70f7e3133777b5d49e5c0c117d2ae7968c5e982db6eb51e29fa"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-08.json",
+      "sha256": "ccd8daffd3f16960bc64e3c1b624ad9dff13dacd4d3138e92f7c4d4473511241"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-09.json",
+      "sha256": "8e1d131d85c0a3369eecef51808994fccec4373cd4164eb44754664e29c2b3d2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-10.json",
+      "sha256": "b3007f41a337f38ba3849bb00724b966a21907f35b9a93459ce2aee5b7edd194"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-11.json",
+      "sha256": "bd67832157504e8035a94a4b878d9ee6c930583a18e1b285103137ab37b8d5b5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-12.json",
+      "sha256": "a0750e3a52bd399a9fa268bbfb34336379ae28be2cfa7beae8c8a227e29cf63d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-13.json",
+      "sha256": "351c35a0879bf69e53c394b061a5fa4de0246a12190433d1ee5a0cd26734096a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-14.json",
+      "sha256": "0136d03082bd2db13af590779c07da5412f747e55d319db1df29fc362e8c5530"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/index.json",
+      "sha256": "c0040ccb30e4831112d5a3add69dabc20b4effefdb838c7356dc300d04de1fb4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/resolve-206.json",
+      "sha256": "7608403499a5fc42ce98dadd6c8a220fc763c944af346fae5e6debfa923568b7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-01.json",
+      "sha256": "560b25533c5ec0244ccd8ad58be102d99b633b4377afcc763c624f12e175f263"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-02.json",
+      "sha256": "2dc4e0cce91f3b5af9c424431745efc8a786dc1c797da2d07a084d5d06000fa4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-03.json",
+      "sha256": "6b8d41e5a48710c929fdf694e58089c317a8c9091e43f52d8d5f98ebecb0efef"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-04.json",
+      "sha256": "2d3669459a37d2b230d827b9bdca09fece2be8e5d0a38c9abc94705cc1d57f3f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-05.json",
+      "sha256": "4f27b0ee58c48dbc5ce6a475d17a9ddeef204d47eb9c931ac20bb3e1e9be0627"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-06.json",
+      "sha256": "e1d3dd3e51d6b21fbd87706a1717389dc339bd459f5d8de1194efe4b3de0016a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-07.json",
+      "sha256": "9007b39a3b81c4ab255dbaeba418297c68ed973d3c87acd6f77b4fad356fa4fb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-08.json",
+      "sha256": "7bee4054addbcb88c3530a9d7b17d4ed7aff85abe46d9383862d1f64e2ca3d0f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-09.json",
+      "sha256": "08c2fdb3033c593b2e65442f39b3ecce174881702c27bafe708a63c8bf626bae"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-10.json",
+      "sha256": "d4abdf681fc3ba0817f9c2ba5645cfbb8a960d4771b45dd9c247647182633e76"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-11.json",
+      "sha256": "198157f662f51a19b07eec6ee55a2a841a4d66501700bbfc08855c828904f7e7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/Kimi-K3-minirun/tree-page-12.json",
+      "sha256": "e850589396a65c1a740c8c7942fb111e1ff1eb6e088c41ca5b9965fda5e486b5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/index.json",
+      "sha256": "a3c0bb0924e186544a6b5ed1ed45b8a6c363147fec8a436789ca1d67d8482d0b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/resolve-206.json",
+      "sha256": "d68b9f1a024291ea76833bbb015dadf5887b5f0b59c1787dbd05f14973ed3cae"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-01.json",
+      "sha256": "1eec7b66ef4977a3485d76f347fd9a37d2efcd19b386819cbe2a20a9fc4e3bf1"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-02.json",
+      "sha256": "28c325ae98c836e1c1991796a27d56aec9ed1515f783feb61cf6d29577d4c78d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-03.json",
+      "sha256": "8580a15467d6fd8ac7103fcfcd19b6feac6a1681599557db61cb78d9840f237b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-04.json",
+      "sha256": "0e9950a07d35e89a7b2df3dfcb8ded0e42e8bdedf0e11b7a90dbf13a0855f410"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-05.json",
+      "sha256": "53aeff77261bd02faa692c91033dca02a40dd8bdec4309ac39572e1ace0a4ba2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-06.json",
+      "sha256": "c33a366887e777fb58f3e69fe65d5d8a5bacfe342ede77d531eeee97c4197d08"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-07.json",
+      "sha256": "e10c25daa0f511f319624e0410e84c0c2c32c3baf32be065ccd2f7b3dcf426b5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-08.json",
+      "sha256": "64d7dc6a6f04a652bd5265a596659749913a82513b593832f70b1d48e1718d88"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-09.json",
+      "sha256": "c1283c4022c8b310746bd6f87dba011337dfcffe42d98d8efd8a3b50709d6da0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-10.json",
+      "sha256": "e45c5b07c56080c3f3e4722919608be6e4e05faee246f156cea55bddcdbf0fcd"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-11.json",
+      "sha256": "8716002fda86d4a794f7965612879dfe749e4df941462ead8ae299ab9681bbb8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-12.json",
+      "sha256": "78a1384df10aeec774d5dc91bbbe13fd6c5a031e63191c661fe8c12347a4eaba"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-13.json",
+      "sha256": "f2e81b98aef3427cb2e67116d1f4b003deda1d2f64a39c1af836ba68c3199c08"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-14.json",
+      "sha256": "6f66c46fed0f23fb1f4f6657371e558c403a8e512f8a4b2eeeb8ba258cf8fc81"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-15.json",
+      "sha256": "945e16da63078d76013822e936d0357fbaa9eab3531854af38e3eb2bea2e19c3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-16.json",
+      "sha256": "c8e478a2f58d366f80a1b51a00766ed6bfbd2d7ccc3d640dc8de1a6909a00375"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-17.json",
+      "sha256": "6d2fbf15d7b05a63e35be88e44fb3f8843cd81d5ee29556b7b69d25007c8aea3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-18.json",
+      "sha256": "fa3bf1114d023cf3ea65a75820295a5af3cef856ac3c24d94d5aedfac7312f8e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-19.json",
+      "sha256": "0e1298a7ac247a05d97ca1e4abad3ff3b039bd4ce30fe1095ff4b68806eb65c5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-20.json",
+      "sha256": "53e128a38ab98458aaac2e6285118f642d94e23436a37ca12a9ccca797f62bcb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/MiniMax-H3-minirun/tree-page-21.json",
+      "sha256": "3c2c0a215f261d4a4490ab912d7b9db9e70aadb34bb61ff9f3785f207e0cb58a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/models-full.json",
+      "sha256": "6ddde59ae3aa612117fd3e97d1c73befc0ec587c957f57d1da19d336f5667503"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/HTTPTransportTests.swift",
+      "sha256": "40380747700b89d47e23a9335936397367692c93ded9e3170ac89ebe8e1e6755"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/LiveHuggingFaceTests.swift",
+      "sha256": "1b2d59054f35fc6de10e72a1d49eb0dd7aea0eccdfab397ce2608ff01b1f0e3f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/MemoryDialPlannerTests.swift",
+      "sha256": "aba9b006c2a7063f24145fa73f8a3496c9681bdc134499b4388322d275f9a1b0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/MockRunnerTests.swift",
+      "sha256": "dc21fced114d4a6d2e1a91522736075fa2a1c0974036009c07274a3c9f9bf1ef"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/ModelCatalogTests.swift",
+      "sha256": "7a85094cccb248a46c1e8cc054e85dbff9de22d55584b1ee303b2f3c466a3661"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/ReadSpotIntegrationTests.swift",
+      "sha256": "fb5517711d9762f4e56af4b31a3c947778e923c1798f99aef4bbd3abfa421b1a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/RepoTreeTests.swift",
+      "sha256": "3979b637a2f5912a9aa55ea214429b4e0fff952883074b84e03de333add81f53"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/RunPhaseSummaryTests.swift",
+      "sha256": "7e1b40dce98bbdb6f15f9079276134133ba4083e97b3a054bc1028c9bf85c61f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/StorageManagerTests.swift",
+      "sha256": "4d5902ac4f82e19a883af572efe6aa81be989949fffa89a01a075c08fd2dfe0b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Support/DownloadTestSupport.swift",
+      "sha256": "346acfe2ba273fbcf245de1a5f99f5b857526a826487d92011d828d798ad321b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Support/FixtureOrigin.swift",
+      "sha256": "368d0479a13f2065b92ae020e4f554508c0e03c75045cf68da0f79d7e15a6803"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Support/LocalHTTPServer.swift",
+      "sha256": "c13ff3d0c3b361002200eb5a91ce6acecaefd454936e6a9bad1d3d7b48291127"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Support/RecordedFixtures.swift",
+      "sha256": "d04b1aebd28325e1cf03945bb87a0f3b36233a1d7cfda03f8f5da696b00e35e9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/VolumeAssessmentTests.swift",
+      "sha256": "b1790d8abe5d80ecf7534ca5141469599ff4e5574364aaf3490f99c9035c357e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/DeepSeekV4DecodeRunnerTests.swift",
+      "sha256": "f71aa05b376ffd60a3d44f85ae6060ad83e9999f8ef2c643df16a96a5e72ae7c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/DeepSeekV4ProductGateTests.swift",
+      "sha256": "b435622e7e0abef861b4f93caa27814881ca524d416448e61c4584803d339e51"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/K3DecodeRunnerLifecycleTests.swift",
+      "sha256": "199e64f7d23a2fbe91be1562c8d70f8b28a1fa229c8217e7ee9bced97cac06e5"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/K3DecodeRunnerRefusalTests.swift",
+      "sha256": "9129a1f6524fee1016d9054cd06862ba0bb638f425d72000135fe489b16bf5cc"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/K3RunFixture.swift",
+      "sha256": "162357756ae4a5ebaf91ec5d21cabe2558501db50ccd58d7dccc29894cfe84d6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/RunAccountingTests.swift",
+      "sha256": "cf5cda32b7628c2ee895536254a76e17cf6c4674f1cafab30b7169503045ea1f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/RunPayloadFlowMeterTests.swift",
+      "sha256": "7164ed2a0997bedec1cab4c37245dc0a70a5ac28cfdd54bbbf6d84cce80e91c1"
+    },
+    {
+      "kind": "symlink",
+      "mode": "0755",
+      "path": "Tests/MinirunRunnersTests/SyntheticArtifact.swift",
+      "sha256": "8e5627cdc706bae21665e733db048363af95e6916018b218c5ecab5d56072a50"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/ModelAdaptersTests/SyntheticArtifact.swift",
+      "sha256": "743a09e925ffdce855671dc6b35660149ce4fa10bc5f1061f663de1d257cada0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/BufferPoolTests.swift",
+      "sha256": "8aa739a06cacc80ad5189c28ec04eb3c9f5d6ca76c9e1cbcd9849ddc5650b40a"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/ByteSizeTests.swift",
+      "sha256": "d9ac01fb17551d46b2f4b40138626817d910fed5e1c3242eaebf27513601e7e0"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/CachePolicyTests.swift",
+      "sha256": "67bc18b53266b8b2a48a4bdcbc0da5b50328822bb3f4627c1954db8f850327f8"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/DeterministicContentTests.swift",
+      "sha256": "c70135708daefacfaa7e0809277dd3b99b4368d215c9a76c1c36a17066c35fa9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/EnvironmentReportTests.swift",
+      "sha256": "59d8c9ae8b5d24c24a4d6537d2ddf1ee2bad80cda4ab29f851506bea68f622fb"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/FileGeneratorTests.swift",
+      "sha256": "0da26f1fcc16be22c558af4cb110cf75880804135bba3e1840c00cd49323290e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/MXFP4TileContainerTests.swift",
+      "sha256": "fb65e8827583edc9c1dc991435e36bd25b4499050070a8f29aeb52ca51b228c6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/OffsetSchedulerTests.swift",
+      "sha256": "b81d755d6dd45fc0639cc8cfa06b4a65dba595100a4a29925a3b77bf6b644aa7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/PagedReadPlanTests.swift",
+      "sha256": "078255285fc47fe72fb9dbd368dd88ade52dc44acbce8e68b835dcd95112da2e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/StorageBenchmarkTests.swift",
+      "sha256": "5ae00ca60a65756c88e87e0f6a7eba9980754a8c7113fe4df70f66acc9b83f8d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/TileReaderTests.swift",
+      "sha256": "5ab5ee2eae40a7ef6476932e9ff7133ffd8e7e11ed4bbb5735b10b0fb93ecb16"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/StorageCoreTests/UInt64AccountingTests.swift",
+      "sha256": "89b060b764390b60204c86bbdb225b907dc76394878d18a43acc18ed3cce6c8f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/iOSBenchTests/FakeSecurityScopedURLCoding.swift",
+      "sha256": "8f73bf7e7921b8bb218ff0e09fc27e237acab57e888339e6d4984b397fbf5463"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/iOSBenchTests/ModelLocationTests.swift",
+      "sha256": "22ed2d691cc39cce27697253a8d9a472cac83240a172c75fb0513a578f8ea1b6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/iOSBenchTests/SecurityScopedBookmarkTests.swift",
+      "sha256": "fa26c9f2a9378b1327cf1146964f7d3a85cb2f4c10facd8761b2b332a893d3b2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/ARCHITECTURE.md",
+      "sha256": "2d5652cd3e1c94c47e97eff37d6620f300589330e029cd6152f660cdb21f8d5d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/hero.png",
+      "sha256": "2b6ab84bc6f1b4f84b7149860e1d278ad6a9b46a8b0d4b7102ecf26dcaf03562"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/iphone-k3-instruments.png",
+      "sha256": "8a4cb4b9cf34a07351f9f8dca7f5eeae2f154b20f693d45ed92b6ab9a7db6cd9"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/logo.png",
+      "sha256": "9b239ab4434aa8230f7a561f231e2729c8ea767ea51895e81bc1a74ad02dc374"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/mac-instruments.png",
+      "sha256": "958e9452bbae38b2c1423514c9a1ae39db50ed073a45e455bf8fcc970493e70d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/mac-memory-budget.png",
+      "sha256": "d3729624a29e040d44271e7c084e19a22896548a34be1445258455a2d8f57757"
+    }
+  ],
+  "schemaVersion": 1
+}

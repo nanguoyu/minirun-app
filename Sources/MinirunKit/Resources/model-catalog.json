@@ -1,0 +1,86 @@
+{
+  "schemaVersion" : 1,
+  "generatedAt" : "2026-08-11T00:00:00Z",
+  "origin" : "bundled",
+  "models" : [
+    {
+      "id" : "deepseek-v4-flash",
+      "displayName" : "DeepSeek V4 Flash",
+      "architecture" : "deepseekV4FlashMoE",
+      "layout" : "v4FlashUnitBundle",
+      "source" : {
+        "kind" : "huggingFaceRepo",
+        "repo" : {
+          "repoId" : "nanguoyu/DeepSeek-V4-Flash-0731-minirun",
+          "revision" : "37bfd0311d681018c5bb74a24625c0522c1f0883"
+        }
+      },
+      "payloadBytes" : 166893192184,
+      "metadataBytes" : 527260,
+      "payloadFileCount" : 577,
+      "metadataFileCount" : 51,
+      "largestFileBytes" : 1140867072,
+      "minimumBudgetBytes" : null,
+      "runner" : "none",
+      "licenseName" : "MIT (repository tag license:mit)",
+      "licenseAcknowledgementRequired" : true,
+      "notes" : [
+        "628 files: 577 payload, 51 metadata. The counts and byte totals were walked from the repository tree on 2026-08-11 and match this repo's own index.json exactly.",
+        "This build can fetch and verify the artifact but ships no runner for it."
+      ]
+    },
+    {
+      "id" : "kimi-k3",
+      "displayName" : "Kimi K3",
+      "architecture" : "kimiK3MoE",
+      "layout" : "k3FlagshipLayerStreams",
+      "source" : {
+        "kind" : "huggingFaceRepo",
+        "repo" : {
+          "repoId" : "nanguoyu/Kimi-K3-minirun",
+          "revision" : "4715a509773c958e26a31f5e07dd2897f20e0400"
+        }
+      },
+      "payloadBytes" : 1559976181760,
+      "metadataBytes" : 19614826,
+      "payloadFileCount" : 372,
+      "metadataFileCount" : 99,
+      "largestFileBytes" : 5240799232,
+      "minimumBudgetBytes" : 5800000000,
+      "runner" : "decodeRunner",
+      "licenseName" : "other (repository tag license:other; see the repository LICENSE)",
+      "licenseAcknowledgementRequired" : true,
+      "notes" : [
+        "1.56 TB of payload across 372 files, the largest 5,240,799,232 bytes. No iPhone's internal storage holds this; it needs an external volume.",
+        "5,800,000,000 bytes is the smallest budget this model is on record as having run under. The arithmetic floor is lower -- layer 0's 4,682,514,432 widened bytes plus a 500,000,000 working-set reserve -- but no run has been made there, so the facade will not accept it.",
+        "471 files: 372 payload, 99 metadata (the pinned tokenizer is a root metadata file)."
+      ]
+    },
+    {
+      "id" : "minimax-h3",
+      "displayName" : "MiniMax H3",
+      "architecture" : "minimaxH3Video",
+      "layout" : "h3UnitBundle",
+      "source" : {
+        "kind" : "huggingFaceRepo",
+        "repo" : {
+          "repoId" : "nanguoyu/MiniMax-H3-minirun",
+          "revision" : "230643b613250a57eb06454d2725eda060d2c64b"
+        }
+      },
+      "payloadBytes" : 63969279450,
+      "metadataBytes" : 782716,
+      "payloadFileCount" : 778,
+      "metadataFileCount" : 118,
+      "largestFileBytes" : 5061033024,
+      "minimumBudgetBytes" : null,
+      "runner" : "none",
+      "licenseName" : "other (repository tag license:other; see the repository LICENSE and NOTICE)",
+      "licenseAcknowledgementRequired" : true,
+      "notes" : [
+        "896 files: 778 payload, 118 metadata. Sixteen of the payload files are stored as plain git blobs rather than LFS objects, so they carry a git-blob SHA-1 and no SHA-256 at all.",
+        "This build can fetch and verify the artifact but ships no runner for it."
+      ]
+    }
+  ]
+}
