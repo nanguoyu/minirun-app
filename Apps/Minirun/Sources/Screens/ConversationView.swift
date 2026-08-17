@@ -253,14 +253,14 @@ struct ConversationView: View {
     private func pendingTurn(_ conversation: Conversation) -> some View {
         HStack(alignment: .top, spacing: MRSpace.s4) {
             VStack(alignment: .leading, spacing: MRSpace.s2) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    Text(
-                        snapshot.generatedText
-                            ?? snapshot.tokens.map { $0.text ?? "‹\($0.tokenID)›" }.joined())
-                        .font(MRType.body)
-                        .foregroundStyle(MRColor.primary)
-                    Caret(active: isRunning)
-                }
+                // The caret is part of the text, not a sibling view: a sibling
+                // sits at the trailing edge of the whole text block, which for a
+                // wrapped answer is the end of the first line, not the point
+                // where the next token will land.
+                StreamingText(
+                    text: snapshot.generatedText
+                        ?? snapshot.tokens.map { $0.text ?? "‹\($0.tokenID)›" }.joined(),
+                    caretActive: isRunning)
                 .lineSpacing(5)
                 if snapshot.tokens.isEmpty, let phase = snapshot.phase {
                     Text("\(phase.name) — \(phase.detail)")
@@ -1038,20 +1038,23 @@ struct MessageBlock: View {
     }
 }
 
-/// A thin caret at the insertion point, blinking at 1 Hz only while a token is
-/// in flight. Still under Reduce Motion.
-struct Caret: View {
-    let active: Bool
+/// The answer being produced, with a thin caret at the insertion point —
+/// inline, so it follows the last character across wrapped lines — blinking
+/// at 1 Hz only while a token is in flight. Still under Reduce Motion.
+struct StreamingText: View {
+    let text: String
+    let caretActive: Bool
     @State private var visible = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Rectangle()
-            .fill(MRColor.streamDet)
-            .frame(width: 2, height: 18)
-            .opacity(active ? (visible ? 1 : 0) : 0)
-            .task(id: active) {
-                guard active, !reduceMotion else {
+        (Text(text)
+            + Text("\u{258E}")
+                .foregroundColor(caretActive && visible ? MRColor.streamDet : .clear))
+            .font(MRType.body)
+            .foregroundStyle(MRColor.primary)
+            .task(id: caretActive) {
+                guard caretActive, !reduceMotion else {
                     visible = true
                     return
                 }
@@ -1060,6 +1063,6 @@ struct Caret: View {
                     visible.toggle()
                 }
             }
-            .accessibilityHidden(true)
     }
 }
+

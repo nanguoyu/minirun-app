@@ -57,6 +57,11 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 - **iPhone：** iPhone 15 Pro 或更新（需要 USB 3 接口），iOS 18 或更新。
 - **一块外接 NVMe SSD**，容量放得下模型：Kimi K3 需要 2 TB，DeepSeek V4 Flash 需要 256 GB。硬盘盒和线比 SSD 本身更决定速度：用 USB4 / 雷电规格的线，直插 Mac，不经 hub；iPhone 上要把硬盘盒接在带供电的底座上（手机接口带不动 NVMe 硬盘盒）。
 
+<p align="center">
+  <img src="docs/media/desk-iphone-nvme.jpg" width="720" alt="整套设备：iPhone 16 Pro 和 USB4 NVMe 硬盘盒，都接在供电底座上"><br>
+  <sub>全部装备：手机、一个 USB4 NVMe 硬盘盒、一个供电底座。Kimi K3 就在那块盘上。</sub>
+</p>
+
 ## 获取 Minirun
 
 **Mac。** 下载 [Minirun.dmg](https://downloads.minirun.dev/Minirun.dmg)，把 Minirun 拖进"应用程序"，打开即可。应用已签名并经 Apple 公证，通过 Sparkle 自动检查更新。

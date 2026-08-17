@@ -460,7 +460,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/ConversationView.swift",
-      "sha256": "fc133719af9afc771e70a80da4a2b8dca8be99ec1bf272dae83d0927154a514e"
+      "sha256": "38864d5a4fed679f6907b7cb7932b31f065eb98aea531ca9b8dde9e1571a8025"
     },
     {
       "kind": "file",
@@ -670,13 +670,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "92c2388a2725277c182d82d9211c7f9e6c6a44fe26960da42134ddb2c93e824e"
+      "sha256": "789eda4f83d571cb4c4d5957647f2ab47eb9fc08a0cb4cbeb3f908757c3181c4"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "README.zh-CN.md",
-      "sha256": "440b74e603e8d4d39365e5d61bcda0ba55088c97a1a0fcd347d35907215afdf6"
+      "sha256": "0bdda79da9bdc2b8fe43d36cc8dec2599f9f3380cd0f270ceb9008fc4fb10724"
     },
     {
       "kind": "file",
@@ -2321,6 +2321,12 @@
       "mode": "0644",
       "path": "docs/ARCHITECTURE.md",
       "sha256": "2d5652cd3e1c94c47e97eff37d6620f300589330e029cd6152f660cdb21f8d5d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "docs/media/desk-iphone-nvme.jpg",
+      "sha256": "d4662227e03e148b159f6f2fb0afca5b2c92e316a1418a296b40e353e2324515"
     },
     {
       "kind": "file",

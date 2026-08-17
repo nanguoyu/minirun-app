@@ -81,6 +81,11 @@ powered dock — and change with the drive, cable and budget.
   and on the iPhone hang the enclosure off a powered dock (the phone's port
   cannot power an NVMe enclosure by itself).
 
+<p align="center">
+  <img src="docs/media/desk-iphone-nvme.jpg" width="720" alt="The setup: an iPhone 16 Pro and a USB4 NVMe enclosure, both on a powered dock"><br>
+  <sub>The whole setup: the phone, a USB4 NVMe enclosure and a powered dock. Kimi K3 lives on that drive.</sub>
+</p>
+
 ## Get Minirun
 
 **Mac.** Download [Minirun.dmg](https://downloads.minirun.dev/Minirun.dmg),
