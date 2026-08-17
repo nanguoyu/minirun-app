@@ -336,6 +336,26 @@ func gatherOverTiles(
         // Evaluating here is what releases a paged tile's slot. Without it the
         // loop would hold every tile it has ever expressed, and the budget
         // would describe the graph rather than the working set.
+        //
+        // **And the wait stays, even under `transferMode: .copy` where nothing
+        // depends on it for correctness.** `copyOut` returns each lease before
+        // the dispatch is expressed and the operands are then MLX-owned, so an
+        // `asyncEval` here would keep every guarantee this point exists for —
+        // it runs the same `eval_impl` and detaches the same tape. It was
+        // implemented, armed on the real 166.9 GB artifact, and **refused by
+        // the memory gate**: with the three projections' dispatches left in
+        // flight, `mlxActiveBytes` ran +53.5 MB above the first decode pass on
+        // an ordinary token and +157.6 MB on the worst of forty, against the
+        // 64 MB `DeepSeekV4ProductGateTests` allows before it calls a pass
+        // "another generation of V4 state". +53.5 MB is exactly one gather's
+        // transient — `expertsPerToken` copied tiles plus the concatenated
+        // stack — so the depth that fits the stated envelope is *zero*.
+        //
+        // Deferring it needs `transientExecutionBytes` re-derived first
+        // (ADR 0015), which is a budget change and not a scheduling one.
+        // Measured, not assumed: `docs/experiments/2026-08-17-v4-async-forcing.md`
+        // arm T1 carries the numbers and the digest that says the arithmetic
+        // was never the problem.
         if let evalObserver {
             let evaluate = MonotonicClock.now()
             merged.eval()

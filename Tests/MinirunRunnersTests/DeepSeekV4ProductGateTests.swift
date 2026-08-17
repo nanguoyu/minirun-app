@@ -329,6 +329,7 @@ final class DeepSeekV4ProductGateTests: XCTestCase {
                 prompt: .tokenIDs(promptIDs),
                 memoryBudgetBytes: configuration.memoryBudgetBytes,
                 maximumNewTokens: maximumNewTokens,
+                knobs: configuration.expertKnobs,
                 workingDirectory: configuration.outputDirectory)
         }
 
@@ -506,6 +507,30 @@ private struct DeepSeekV4ProductGateConfiguration {
     let expectedText: String
     let memoryBudgetBytes: UInt64
     let huggingFaceToken: String?
+    /// Pager knobs stated by the arm, or an empty set when it states none.
+    ///
+    /// Unset is the runner's own default in every case, so an arm that states
+    /// nothing runs exactly the configuration every previous record measured.
+    /// A stated value that the runner refuses surfaces as the refusal, because
+    /// these are passed through ``RunKnobs`` untouched — the harness does not
+    /// clamp, and §5.3's reject-don't-clamp rule is the runner's to apply.
+    ///
+    /// | variable | knob |
+    /// | --- | --- |
+    /// | `MINIRUN_V4_EXPERT_READ_AHEAD` | `expertReadAhead`, default 2 |
+    /// | `MINIRUN_V4_EXPERT_QUEUE_DEPTH` | `queueDepth`, default 2 |
+    /// | `MINIRUN_V4_EXPERT_SLOTS` | `expertPoolSlots`, default 2 |
+    /// | `MINIRUN_V4_EXPERT_PROJECTION_PREFETCH` | `expertProjectionPrefetch`, `0` or `1` |
+    /// | `MINIRUN_V4_EXPERT_RUN_SCOPED` | `expertRunScopedBackends`, `0` or `1` |
+    /// | `MINIRUN_V4_EXPERT_CROSS_LAYER` | `expertCrossLayerPrefetch`, tiles a not-yet-current layer may hold |
+    /// | `MINIRUN_V4_EXPERT_ADOPT` | `expertTileAdoption`, `0` or `1` |
+    ///
+    /// Measured in `docs/experiments/2026-08-17-v4-expert-overlap.md`. Note
+    /// that a wider pool is a *reserved* term — `expertPoolBudgetBytes` is
+    /// subtracted before the memory dial plans — so at the 10.6 GB budget the
+    /// earlier records used, which leaves 4,195,256 B unpinned, any arm that
+    /// widens the pool also unpins a layer unless it raises its budget.
+    let expertKnobs: RunKnobs
 
     static func load(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -570,6 +595,37 @@ private struct DeepSeekV4ProductGateConfiguration {
             throw ProductGateConfigurationError.invalid(
                 "MINIRUN_V4_PRODUCT_SOURCE_REVISION", sourceRevision)
         }
+        func optionalPositive(_ name: String) throws -> Int? {
+            guard let raw = environment[name], !raw.isEmpty else { return nil }
+            guard let value = Int(raw) else {
+                throw ProductGateConfigurationError.invalid(name, raw)
+            }
+            return value
+        }
+        var expertKnobs = RunKnobs()
+        expertKnobs.expertReadAhead = try optionalPositive("MINIRUN_V4_EXPERT_READ_AHEAD")
+        expertKnobs.queueDepth = try optionalPositive("MINIRUN_V4_EXPERT_QUEUE_DEPTH")
+        expertKnobs.expertPoolSlots = try optionalPositive("MINIRUN_V4_EXPERT_SLOTS")
+        func optionalFlag(_ name: String) throws -> Bool? {
+            guard let raw = environment[name], !raw.isEmpty else { return nil }
+            guard raw == "0" || raw == "1" else {
+                throw ProductGateConfigurationError.invalid(name, raw)
+            }
+            return raw == "1"
+        }
+        expertKnobs.expertProjectionPrefetch = try optionalFlag(
+            "MINIRUN_V4_EXPERT_PROJECTION_PREFETCH")
+        expertKnobs.expertRunScopedBackends = try optionalFlag(
+            "MINIRUN_V4_EXPERT_RUN_SCOPED")
+        expertKnobs.expertTileAdoption = try optionalFlag("MINIRUN_V4_EXPERT_ADOPT")
+        if let raw = environment["MINIRUN_V4_EXPERT_CROSS_LAYER"], !raw.isEmpty {
+            guard let value = Int(raw), value >= 0 else {
+                throw ProductGateConfigurationError.invalid(
+                    "MINIRUN_V4_EXPERT_CROSS_LAYER", raw)
+            }
+            expertKnobs.expertCrossLayerPrefetch = value
+        }
+
         try FileManager.default.createDirectory(
             at: outputDirectory, withIntermediateDirectories: true)
         return DeepSeekV4ProductGateConfiguration(
@@ -579,7 +635,8 @@ private struct DeepSeekV4ProductGateConfiguration {
             sourceRevision: sourceRevision, prompt: prompt,
             expectedTokenIDs: expectedTokenIDs, expectedText: expectedText,
             memoryBudgetBytes: memoryBudgetBytes,
-            huggingFaceToken: environment["HF_TOKEN"])
+            huggingFaceToken: environment["HF_TOKEN"],
+            expertKnobs: expertKnobs)
     }
 
     /// The runner scale this arm constructs, derived exactly as the App's

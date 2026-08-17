@@ -29,6 +29,25 @@ public protocol RoutedExpertBackend: AnyObject {
     func gather(
         _ x: MLXArray, layer: Int, projection: ExpertProjection, expertIds: [[Int]]
     ) throws -> MLXArray
+
+    /// Begin reading the tiles these projections will need, without waiting for
+    /// any of them.
+    ///
+    /// The three projections of a routed layer read the **same** selected
+    /// experts, so every byte this queues is a byte the layer is certain to
+    /// ask for — it moves a read earlier, it never speculates. The default is
+    /// to do nothing, which is correct for a backend that holds its bytes
+    /// already and for a pager that has not been given a pool wide enough to
+    /// keep the whole set in flight.
+    func prefetch(
+        layer: Int, projections: [ExpertProjection], expertIds: [[Int]]
+    ) throws
+}
+
+extension RoutedExpertBackend {
+    public func prefetch(
+        layer: Int, projections: [ExpertProjection], expertIds: [[Int]]
+    ) throws {}
 }
 
 /// The MoE router.

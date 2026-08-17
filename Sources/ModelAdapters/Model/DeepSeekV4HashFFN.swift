@@ -66,7 +66,9 @@ enum DeepSeekV4MoEFFN {
             multiplicity: geometry.hyperConnectionMultiplicity,
             iterations: geometry.hyperConnectionSinkhornIterations,
             epsilon: geometry.hyperConnectionEpsilon,
-            normEpsilon: geometry.rmsNormEpsilon)
+            normEpsilon: geometry.rmsNormEpsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let input = K3Norm.rms(
             prepared.input, weight: ffnNorm,
             eps: geometry.rmsNormEpsilon)
@@ -99,7 +101,12 @@ enum DeepSeekV4MoEFFN {
             branch: routed + shared,
             residual: afterAttention,
             split: prepared.split)
-        residual.eval()
+        // The MoE tail's own boundary: one per layer per pass, and the point
+        // that submits the routed and shared expert arithmetic together.
+        // Deferred — it bounds the graph, and the next thing the decode thread
+        // does is build the next layer, not read a number out of this one.
+        phaseAccounting?.recordAsyncEval(.ffnResidual)
+        MLX.asyncEval([residual])
         try cancellationCheck()
         return Result(residual: residual, routing: routing)
     }
@@ -168,6 +175,7 @@ enum DeepSeekV4MoEFFN {
                     "learned route correction bias does not match the MoE geometry")
             }
             if diagnostics.validateFiniteness {
+                phaseAccounting?.recordEval(.finitenessSweep)
                 guard measuringPhase(
                     phaseAccounting?.recordFinitenessSweep(nanoseconds:),
                     { isFinite(correctionBias).all().item(Bool.self) })

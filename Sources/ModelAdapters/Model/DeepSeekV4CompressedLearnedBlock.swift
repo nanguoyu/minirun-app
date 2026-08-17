@@ -699,14 +699,19 @@ public enum DeepSeekV4CompressedLearnedBlock {
             { input in
                 try cancellationCheck()
                 let output = try autoreleasepool { () throws -> MLXArray in
-                    let weights = try artifact.loadFloatingTensor(
+                    let loaded = try artifact.loadFloatingTensorReporting(
                         tensor: tensor,
                         expectedDType: .bfloat16,
                         expectedShape: [outFeatures, inFeatures],
                         cancellationCheck: cancellationCheck)
                     let projected = k3Linear(
-                        input.asType(.float32), weights.asType(.float32))
-                    projected.eval()
+                        input.asType(.float32), loaded.array.asType(.float32))
+                    // Forced only when this pass owns the bytes: see
+                    // `DeepSeekV4LayerArtifact.projectBlockFP8Reference`.
+                    if !loaded.residentTierOwns {
+                        artifact.phaseAccounting?.recordEval(.projection)
+                        projected.eval()
+                    }
                     return projected
                 }
                 try cancellationCheck()
@@ -790,7 +795,9 @@ public enum DeepSeekV4CompressedLearnedBlock {
             multiplicity: geometry.hyperConnectionMultiplicity,
             iterations: geometry.hyperConnectionSinkhornIterations,
             epsilon: geometry.hyperConnectionEpsilon,
-            normEpsilon: geometry.rmsNormEpsilon)
+            normEpsilon: geometry.rmsNormEpsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let attentionInput = K3Norm.rms(
             attentionPrepared.input,
             weight: plain.attentionNorm,
@@ -892,7 +899,9 @@ public enum DeepSeekV4CompressedLearnedBlock {
             multiplicity: geometry.hyperConnectionMultiplicity,
             iterations: geometry.hyperConnectionSinkhornIterations,
             epsilon: geometry.hyperConnectionEpsilon,
-            normEpsilon: geometry.rmsNormEpsilon)
+            normEpsilon: geometry.rmsNormEpsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let attentionInput = K3Norm.rms(
             attentionPrepared.input,
             weight: plain.attentionNorm,

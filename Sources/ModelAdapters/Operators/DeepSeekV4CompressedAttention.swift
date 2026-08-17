@@ -364,7 +364,8 @@ public enum DeepSeekV4CompressedAttention {
                 indexKeys,
                 capacity: compressedCapacity,
                 width: geometry.indexHeadDimension)
-            MLX.eval([attention, windowCache, fixedCompressedCache, fixedIndexCache])
+            phaseAccounting?.recordAsyncEval(.blockCache)
+            MLX.asyncEval([attention, windowCache, fixedCompressedCache, fixedIndexCache])
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -455,7 +456,8 @@ public enum DeepSeekV4CompressedAttention {
             score: projected.compressorScores,
             positionalBias: parameters.compressorPositionalBias,
             startPosition: startPosition,
-            state: state.compressorState)
+            state: state.compressorState,
+            phaseAccounting: phaseAccounting)
         var compressedCache = state.compressedKeyValues
         var compressedCount = state.completedCompressedCount
         if var row = compressedStep.compressed {
@@ -488,7 +490,8 @@ public enum DeepSeekV4CompressedAttention {
             score: projected.indexCompressorScores,
             positionalBias: parameters.indexCompressorPositionalBias,
             startPosition: startPosition,
-            state: state.indexCompressorState)
+            state: state.indexCompressorState,
+            phaseAccounting: phaseAccounting)
         var indexCache = state.indexKeys
         var indexCount = state.completedCompressedCount
         if var row = indexStep.compressed {
@@ -558,7 +561,13 @@ public enum DeepSeekV4CompressedAttention {
             indexKeys: indexCache,
             compressorState: compressedStep.state,
             indexCompressorState: indexStep.state)
-        MLX.eval([attention, windowCache, compressedCache, indexCache])
+        // The cache boundary, deferred. These four arrays persist into the next
+        // token and must be realised before this pass's graph is discarded —
+        // which `asyncEval` does, because it runs the same `eval_impl` and
+        // detaches the same tape. What it does not do is stop the decode thread
+        // for the GPU round trip, and nothing here reads a host value.
+        phaseAccounting?.recordAsyncEval(.blockCache)
+        MLX.asyncEval([attention, windowCache, compressedCache, indexCache])
         try cancellationCheck()
         return DecodeResult(attention: attention, indices: indices, state: next)
     }
@@ -630,6 +639,7 @@ public enum DeepSeekV4CompressedAttention {
         // switch too, for the same reason — the fourteen syncs are one
         // diagnostic and are skipped together.
         if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.finitenessSweep)
             try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
                 for array in arrays where !isFinite(array).all().item(Bool.self) {
                     throw DeepSeekV4Error.attention(
@@ -1025,7 +1035,8 @@ public enum DeepSeekV4CausalCompressedAttention {
                 compressedKeyValues,
                 capacity: compressedCapacity,
                 width: geometry.headDimension)
-            MLX.eval([attention, windowCache, fixedCompressedCache])
+            phaseAccounting?.recordAsyncEval(.blockCache)
+            MLX.asyncEval([attention, windowCache, fixedCompressedCache])
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -1106,7 +1117,8 @@ public enum DeepSeekV4CausalCompressedAttention {
             score: projected.compressorScores,
             positionalBias: parameters.compressorPositionalBias,
             startPosition: startPosition,
-            state: state.compressorState)
+            state: state.compressorState,
+            phaseAccounting: phaseAccounting)
         var compressedCache = state.compressedKeyValues
         var compressedCount = state.completedCompressedCount
         if var row = compressedStep.compressed {
@@ -1163,7 +1175,8 @@ public enum DeepSeekV4CausalCompressedAttention {
             windowKeyValues: windowCache,
             compressedKeyValues: compressedCache,
             compressorState: compressedStep.state)
-        MLX.eval([attention, windowCache, compressedCache])
+        phaseAccounting?.recordAsyncEval(.blockCache)
+        MLX.asyncEval([attention, windowCache, compressedCache])
         try cancellationCheck()
         return DecodeResult(attention: attention, indices: indices, state: next)
     }
@@ -1211,6 +1224,7 @@ public enum DeepSeekV4CausalCompressedAttention {
                 "causal compressed attention inputs must be real floating point")
         }
         if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.finitenessSweep)
             try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
                 for array in arrays where !isFinite(array).all().item(Bool.self) {
                     throw DeepSeekV4Error.attention(

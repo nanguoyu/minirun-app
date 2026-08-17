@@ -5,16 +5,50 @@ import MLX
 /// The official sliding-window attention path applies this operation to the
 /// non-rotary key/value channels in blocks of 64. Each row/block chooses a
 /// power-of-two scale, rounds the normalized values to finite E4M3, and then
-/// immediately dequantizes them. This implementation spells the rounding out in
-/// MLX elementwise operations instead of a fused kernel: it is a correctness
-/// oracle for the artifact runner, not the product hot path. Nothing it
-/// computes crosses to the host — the scale table included, since `b7c2092`
-/// measured that round trip at 471 syncs and 0.13 s of a decode pass.
+/// immediately dequantizes them. Nothing it computes crosses to the host — the
+/// scale table included, since `b7c2092` measured that round trip at 471 syncs
+/// and 0.13 s of a decode pass.
+///
+/// ## Why the rounding is written in exponent bits
+///
+/// The first version of this reference spelled every step out as its own
+/// elementwise operation: a fourteen-step `which` ladder to find each value's
+/// binade, then two independent round-to-nearest-even chains (one for the
+/// normal grid, one for the subnormal one) selected between at the end. That
+/// is 90 MLX primitives per call, and
+/// `docs/experiments/2026-08-17-v4-cpu-profile.md` measured 439.5 calls per
+/// decode pass — ~39,600 primitives, essentially the whole graph, against
+/// 551 ms/pass inside `mlx::core::eval_impl` and `mlx::core::detail::compile`
+/// entered exactly zero times.
+///
+/// ``roundToFiniteE4M3(_:)`` replaces the ladder and both chains with the
+/// IEEE-754 arithmetic they were spelling out, in the same spirit as
+/// ``DeepSeekV4PowerOfTwoScale``: rounding a float32 magnitude onto the E4M3
+/// normal grid *is* round-to-nearest-even on its low 20 mantissa bits, and the
+/// subnormal grid is a single exactly-rounded addition. The result is the same
+/// value bit for bit — ``spelledOutQuantizeDequantize(_:blockSize:)`` keeps the
+/// original chain so a test can hold the two against each other over a dense
+/// sweep, exactly as ``hostExactPowerOfTwoScales(_:)`` does for the scale.
 public enum DeepSeekV4FP8ActivationReference {
     private static let fp8Maximum: Float = 448
     private static let minimumAbsoluteMaximum: Float = 1e-4
     private static let minimumNormal: Float = 1.0 / 64.0
     private static let subnormalStep: Float = 1.0 / 512.0
+
+    /// E4M3FN keeps three mantissa bits, so a float32 magnitude on the normal
+    /// grid is one with its low 20 mantissa bits zero.
+    private static let droppedMantissaBits: UInt32 = 20
+    /// Round-to-nearest-even on those 20 bits: add `2^19 - 1` plus the lowest
+    /// *kept* bit, then truncate. A dropped value below the halfway point
+    /// cannot carry, one above it always carries, and one exactly at it carries
+    /// only when the kept bit is already 1 — which is the tie-to-even rule.
+    private static let roundingBias: UInt32 = (1 << (droppedMantissaBits - 1)) - 1
+    private static let keptMantissaMask: UInt32 = ~((1 << droppedMantissaBits) - 1)
+    /// `2^(23 - 9)`: the float32 binade whose ulp is exactly the E4M3 subnormal
+    /// step, so `(m + magic) - magic` rounds `m` onto multiples of `2^-9` with
+    /// the hardware's own round-to-nearest-even and no second rounding. Valid
+    /// for `0 <= m < 2^-6`, which is the only range it is applied to.
+    private static let subnormalRoundingMagic: Float = 16384
 
     /// `phaseAccounting` brackets the two host round trips this reference
     /// makes — the entry finiteness sweep and the scale search — and changes
@@ -47,6 +81,7 @@ public enum DeepSeekV4FP8ActivationReference {
         // activation before a single scale has been chosen. Diagnostic, so it
         // is skipped entirely — sync and check — unless the caller asked for it.
         if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.finitenessSweep)
             guard measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:), {
                 isFinite(blocked).all().item(Bool.self)
             }) else {
@@ -63,6 +98,92 @@ public enum DeepSeekV4FP8ActivationReference {
             exactPowerOfTwoScales(
                 absolute.max(axis: -1), blockedShape: blockedShape)
         }
+        return roundAndDequantize(blocked: blocked, scale: scale)
+            .reshaped(input.shape)
+            .asType(input.dtype)
+    }
+
+    /// Everything after the block scale is chosen: clamp into range, round onto
+    /// the E4M3FN grid, restore the sign, and undo the scale.
+    ///
+    /// Named rather than inlined at the call site because it is the exact
+    /// subgraph an `MLX.compile` fusion would have to reproduce:
+    /// `DeepSeekV4FP8RoundingTests` compiles *this function* and holds the
+    /// resulting fused kernel to the uncompiled chain's bits.
+    static func roundAndDequantize(blocked: MLXArray, scale: MLXArray) -> MLXArray {
+        let normalized = minimum(
+            maximum(blocked / scale, MLXArray(-fp8Maximum)),
+            MLXArray(fp8Maximum))
+        let magnitude = MLX.abs(normalized)
+        let quantizedMagnitude = minimum(
+            roundToFiniteE4M3(magnitude), MLXArray(fp8Maximum))
+        return sign(normalized) * quantizedMagnitude * scale
+    }
+
+    /// One non-negative float32 magnitude per element, rounded to the nearest
+    /// E4M3FN value, ties to even, in the same float32 dtype.
+    ///
+    /// Both grids are stated as exact integer or exactly-rounded float
+    /// arithmetic, because neither may move a tie:
+    ///
+    /// - **Normal**, `m >= 2^-6`: E4M3 keeps three mantissa bits, so the grid
+    ///   step inside a binade is `2^(e-3)` and rounding to it is
+    ///   round-to-nearest-even on the low 20 bits of the float32 significand.
+    ///   The bias-and-truncate below is that rule, and a carry out of the
+    ///   significand walks into the exponent field on its own — which is
+    ///   exactly what rounding `15.9` steps up to the next binade must do.
+    /// - **Subnormal**, `m < 2^-6`: the grid is the multiples of `2^-9`, and
+    ///   `(m + 2^14) - 2^14` lands on them. `2^14`'s binade has ulp `2^-9`, so
+    ///   the addition is a single IEEE round-to-nearest-even onto the grid and
+    ///   the subtraction is exact. The `which` discards whichever branch did
+    ///   not apply, so the normal branch's carries into a subnormal input, and
+    ///   the magic addition's behaviour above `2^-6`, are never read.
+    ///
+    /// A non-finite magnitude passes through: `+inf`'s bias-and-truncate is
+    /// `+inf` again and a quiet NaN keeps its payload, so a corrupted block
+    /// still reaches the output checks that refuse it rather than a finite
+    /// value that would launder it.
+    ///
+    /// - Warning: the subnormal branch is `(m + c) - c`, which is exactly the
+    ///   shape an optimiser permitted to assume real arithmetic may cancel to
+    ///   `m`. Separate MLX primitives are separate Metal kernels and cannot be
+    ///   cancelled across; a *fused* kernel — `MLX.compile`, or a hand-written
+    ///   one — can be. Anything that fuses this subgraph must re-run
+    ///   `DeepSeekV4FP8RoundingTests` before it is believed.
+    static func roundToFiniteE4M3(_ magnitude: MLXArray) -> MLXArray {
+        let bits = magnitude.view(dtype: .uint32)
+        let keptLowBit =
+            rightShift(bits, MLXArray(droppedMantissaBits)) & MLXArray(UInt32(1))
+        let normal = ((bits + keptLowBit) + MLXArray(roundingBias))
+            & MLXArray(keptMantissaMask)
+        let magic = MLXArray(subnormalRoundingMagic)
+        let subnormal = (magnitude + magic) - magic
+        return which(
+            magnitude .< MLXArray(minimumNormal),
+            subnormal,
+            normal.view(dtype: .float32))
+    }
+
+    /// The rounding above, spelled out one elementwise step at a time.
+    ///
+    /// This is the chain this reference shipped with and
+    /// ``roundToFiniteE4M3(_:)`` reproduces: a `which` ladder over every
+    /// possible binade, and an independent round-to-nearest-even chain per
+    /// grid. It is kept so a test can state the rule without the bit
+    /// arithmetic and compare bit patterns, not because a pass runs it — at 90
+    /// MLX primitives per call against 41 it is the reason this file was
+    /// rewritten.
+    static func spelledOutQuantizeDequantize(
+        _ input: MLXArray,
+        blockSize: Int
+    ) throws -> MLXArray {
+        let groups = input.shape[input.ndim - 1] / blockSize
+        var blockedShape = Array(input.shape.dropLast())
+        blockedShape.append(groups)
+        blockedShape.append(blockSize)
+        let blocked = input.asType(.float32).reshaped(blockedShape)
+        let scale = exactPowerOfTwoScales(
+            MLX.abs(blocked).max(axis: -1), blockedShape: blockedShape)
         let normalized = minimum(
             maximum(blocked / scale, MLXArray(-fp8Maximum)),
             MLXArray(fp8Maximum))

@@ -12,7 +12,7 @@ Weights stream from your SSD through a memory budget you set. Free, local, on Ma
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="Version 0.2" src="https://img.shields.io/badge/version-0.2-3b8cf5"></a>
+  <a href="CHANGELOG.md"><img alt="Version 0.3" src="https://img.shields.io/badge/version-0.3-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
@@ -58,7 +58,7 @@ powered dock — and change with the drive, cable and budget.
 
 | Model | On disk | Mac (M1 Pro, 32 GB) | iPhone 16 Pro | Status |
 | --- | ---: | --- | --- | --- |
-| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731) — 284 B MoE | 167 GB | ≈ 5 s / token, 10.6 GB budget; runs at 2 GB | ≈ 17 s / token, under 2 GB | Chat ready |
+| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731) — 284 B MoE | 167 GB | ≈ 2.5 s / token, 10.7 GB budget; runs at 2 GB | ≈ 17 s / token, under 2 GB | Chat ready |
 | [Kimi K3](https://minirun.dev/models/kimi-k3) — 2.8 T MoE | 1.56 TB | ≈ 70 s / token, 8 GB budget | ≈ 220 s / token, 5.8 GB budget, 2-token replies | Chat ready |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3) — audio & video generation | 64 GB | download, verify and store | download, verify and store | Container ready |
 | Qwen3.8-27B | — | — | — | Coming soon |

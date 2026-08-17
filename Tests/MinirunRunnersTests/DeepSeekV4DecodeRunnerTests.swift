@@ -32,6 +32,41 @@ final class DeepSeekV4DecodeRunnerTests: XCTestCase {
         try super.tearDownWithError()
     }
 
+    /// ADR 0015 spends part of the transient envelope's margin on the batched
+    /// expert gather, and that spend is arithmetic rather than a stored term —
+    /// so it needs a test, or the next change to either number breaks it in
+    /// silence.
+    ///
+    /// The gather holds `tilesPerDispatch` copied tiles plus the one
+    /// concatenated stack built from them. `transferMode: .copy` returns every
+    /// pager lease inside `copyOut`, so none of this is pool bytes; it is
+    /// MLX-owned transient, and the envelope above the observed peak is what
+    /// pays for it.
+    func testTheTransientEnvelopeStillCoversTheBatchedGatherWidth() {
+        // The published geometry, from the same arm that priced the pool term:
+        // 17,826,048 B over `defaultExpertPoolSlots` = 2.
+        let expertTileStride: UInt64 = 8_913_024
+        let expertsPerToken: UInt64 = 6
+
+        let margin =
+            DeepSeekV4ProductMemoryBudget.transientExecutionBytes
+            - DeepSeekV4ProductMemoryBudget.observedMaximumPromptPeakBytes
+        XCTAssertEqual(margin, 252_283_476, "the envelope's headroom moved")
+
+        // Copies, plus the stack concatenated from them.
+        let batchedGatherTransient = 2 * expertsPerToken * expertTileStride
+        XCTAssertEqual(batchedGatherTransient, 106_956_288)
+        XCTAssertLessThan(
+            batchedGatherTransient, margin,
+            "a decode gather's operands must fit the stated transient envelope")
+
+        // ADR 0015's revisit trigger: at half the margin the width needs a floor
+        // term of its own rather than a share of an envelope.
+        XCTAssertLessThan(
+            expertsPerToken * expertTileStride, margin / 2,
+            "ADR 0015 revisit trigger crossed; give the gather width its own term")
+    }
+
     func testProductMemoryPolicyCombinesMeasuredAndExactTermsWithCheckedArithmetic() throws {
         let configURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -358,10 +393,25 @@ final class DeepSeekV4DecodeRunnerTests: XCTestCase {
         let productKnobs = try DeepSeekV4EffectiveKnobs.resolve(
             .init(), scale: .product,
             declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
-        XCTAssertEqual(productKnobs.expertReadAhead, 2)
-        XCTAssertEqual(productKnobs.expertPoolSlots, 2)
-        XCTAssertEqual(productKnobs.expertConfiguration.transferMode, .copy)
+        // The 2026-08-17 defaults: the whole six-region demand window, three
+        // projections prefetched together, and the pool that holds all of it.
+        XCTAssertEqual(productKnobs.expertReadAhead, 6)
+        XCTAssertEqual(productKnobs.queueDepth, 4)
+        XCTAssertEqual(productKnobs.expertPoolSlots, 20)
+        XCTAssertTrue(productKnobs.expertProjectionPrefetch)
+        let productExpertConfiguration = productKnobs.expertConfiguration(
+            tilesPerDispatch: 6)
+        XCTAssertEqual(productExpertConfiguration.transferMode, .copy)
         XCTAssertEqual(productKnobs.asStrings["expertTransferMode"], "copy")
+        // The gather width is the model's own `expertsPerToken`, passed through
+        // rather than clamped: a decode token's whole routing choice becomes one
+        // dispatch, which is the shape the kernel floor was measured at.
+        XCTAssertEqual(productExpertConfiguration.tilesPerDispatch, 6)
+        XCTAssertEqual(
+            productKnobs.expertConfiguration(tilesPerDispatch: 1).tilesPerDispatch, 1)
+        // The pool is untouched by the width: copy transfer returns each lease
+        // inside `copyOut`, so the bound stays `readAhead <= slotCount`.
+        XCTAssertEqual(productExpertConfiguration.slotCount, productKnobs.expertPoolSlots)
 
         XCTAssertThrowsError(
             try runner.validate(request(prompt: .text("hello"), budgetBytes: 8))
@@ -424,6 +474,146 @@ final class DeepSeekV4DecodeRunnerTests: XCTestCase {
         ) { error in
             XCTAssertEqual(error as? RunError, .scopeRefused(path: self.root.path))
         }
+    }
+
+    /// Prefetching a routed layer's three projections puts three readers'
+    /// windows in the one shared pool at the same time, so the pool bound stops
+    /// being `readAhead <= slotCount`. The wider bound is refused by name and
+    /// refused *before* any artifact byte is read. Since 2026-08-17 the default
+    /// is on, with a pool sized for it, so an unstated run gets the overlap the
+    /// expert-overlap record measured; stating it off restores the old bound.
+    func testProjectionPrefetchWidensThePoolBoundAndIsRefusedNotClamped() throws {
+        let unstated = try DeepSeekV4EffectiveKnobs.resolve(
+            .init(), scale: .product,
+            declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
+        XCTAssertTrue(unstated.expertProjectionPrefetch)
+        XCTAssertTrue(
+            unstated.expertConfiguration(tilesPerDispatch: 6).prefetchProjections)
+        XCTAssertEqual(unstated.asStrings["expertProjectionPrefetch"], "true")
+        XCTAssertGreaterThanOrEqual(unstated.expertPoolSlots, 3 * unstated.expertReadAhead + 1)
+
+        let state = V4FakeState()
+        let runner = makeRunner(state: state, minimumBudgetBytes: 8, maximumNewTokens: 4)
+
+        // readAhead 6 over three projections can hold 18 tiles while the
+        // consumer still needs one, so 18 slots is one short and is named as
+        // such rather than quietly narrowed to a window the run did not state.
+        var short = RunKnobs()
+        short.expertProjectionPrefetch = true
+        short.expertReadAhead = 6
+        short.expertPoolSlots = 18
+        XCTAssertThrowsError(
+            try runner.validate(request(budgetBytes: 8, knobs: short))
+        ) { error in
+            guard case RunError.knobOutOfRange(let name, let value, let allowed) = error
+            else { return XCTFail("\(error)") }
+            XCTAssertEqual(name, "expertPoolSlots")
+            XCTAssertEqual(value, "18")
+            XCTAssertTrue(allowed.contains(">= 19"), allowed)
+            XCTAssertTrue(allowed.contains("18 in-layer tiles"), allowed)
+        }
+
+        var sufficient = RunKnobs()
+        sufficient.expertProjectionPrefetch = true
+        sufficient.expertReadAhead = 6
+        sufficient.expertPoolSlots = 19
+        let resolved = try DeepSeekV4EffectiveKnobs.resolve(
+            sufficient, scale: .product,
+            declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
+        XCTAssertTrue(resolved.expertProjectionPrefetch)
+        XCTAssertTrue(
+            resolved.expertConfiguration(tilesPerDispatch: 6).prefetchProjections)
+        XCTAssertEqual(resolved.asRunKnobs.expertProjectionPrefetch, true)
+        XCTAssertEqual(resolved.asStrings["expertProjectionPrefetch"], "true")
+
+        // With the prefetch off the narrower bound still holds, so turning the
+        // knob off is not a way to acquire the wider pool by accident.
+        var offAndNarrow = RunKnobs()
+        offAndNarrow.expertProjectionPrefetch = false
+        offAndNarrow.expertReadAhead = 6
+        offAndNarrow.expertPoolSlots = 6
+        let narrow = try DeepSeekV4EffectiveKnobs.resolve(
+            offAndNarrow, scale: .product,
+            declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
+        XCTAssertFalse(narrow.expertProjectionPrefetch)
+        XCTAssertEqual(narrow.expertPoolSlots, 6)
+    }
+
+    /// The backend lifetime is a knob, it defaults to what every earlier record
+    /// measured, and the cross-layer window it unlocks is priced in the same
+    /// pool rather than beside it.
+    ///
+    /// Three claims, and the third is the one that could quietly cost memory: a
+    /// run-scoped residency keeps 43 backends alive but **one** pool, so
+    /// `expertPoolSlots` still names the whole routed-expert term. The
+    /// cross-layer window adds slots to that one number, visibly, and is
+    /// refused when the declared pool cannot hold it.
+    func testBackendLifetimeIsAKnobAndItsCrossLayerWindowIsPricedInTheSamePool() throws {
+        let unstated = try DeepSeekV4EffectiveKnobs.resolve(
+            .init(), scale: .product,
+            declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
+        XCTAssertFalse(
+            unstated.expertRunScopedBackends,
+            "an unstated run keeps the per-layer lifetime every earlier record measured")
+        XCTAssertEqual(unstated.expertCrossLayerPrefetch, 0)
+        XCTAssertFalse(unstated.expertTileAdoption)
+        XCTAssertEqual(unstated.asStrings["expertTransferMode"], "copy")
+        XCTAssertEqual(
+            unstated.expertConfiguration(tilesPerDispatch: 6).crossLayerPrefetchTiles, 0)
+
+        let state = V4FakeState()
+        let runner = makeRunner(state: state, minimumBudgetBytes: 8, maximumNewTokens: 4)
+
+        // A cross-layer window without run-scoped backends has nowhere to live:
+        // the layer it reads for has no backend until it starts.
+        var orphaned = RunKnobs()
+        orphaned.expertCrossLayerPrefetch = 6
+        XCTAssertThrowsError(
+            try runner.validate(request(budgetBytes: 8, knobs: orphaned))
+        ) { error in
+            guard case RunError.knobOutOfRange(let name, _, let allowed) = error
+            else { return XCTFail("\(error)") }
+            XCTAssertEqual(name, "expertCrossLayerPrefetch")
+            XCTAssertTrue(allowed.contains("expertRunScopedBackends"), allowed)
+        }
+
+        // 3 x 6 in-layer + 6 cross-layer + 1 consumer = 25. The default 20 is
+        // named as short rather than narrowed to a window the run did not ask
+        // for.
+        var short = RunKnobs()
+        short.expertRunScopedBackends = true
+        short.expertCrossLayerPrefetch = 6
+        short.expertReadAhead = 6
+        short.expertPoolSlots = 20
+        XCTAssertThrowsError(
+            try runner.validate(request(budgetBytes: 8, knobs: short))
+        ) { error in
+            guard case RunError.knobOutOfRange(let name, let value, let allowed) = error
+            else { return XCTFail("\(error)") }
+            XCTAssertEqual(name, "expertPoolSlots")
+            XCTAssertEqual(value, "20")
+            XCTAssertTrue(allowed.contains(">= 25"), allowed)
+            XCTAssertTrue(allowed.contains("6 cross-layer tiles"), allowed)
+        }
+
+        var sufficient = short
+        sufficient.expertPoolSlots = 25
+        sufficient.expertTileAdoption = true
+        let resolved = try DeepSeekV4EffectiveKnobs.resolve(
+            sufficient, scale: .product,
+            declaredBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)
+        XCTAssertTrue(resolved.expertRunScopedBackends)
+        XCTAssertEqual(resolved.expertCrossLayerPrefetch, 6)
+        XCTAssertEqual(
+            resolved.expertConfiguration(tilesPerDispatch: 6).crossLayerPrefetchTiles, 6)
+        XCTAssertEqual(
+            resolved.expertConfiguration(tilesPerDispatch: 6).transferMode, .adopt)
+        XCTAssertEqual(resolved.asStrings["expertTransferMode"], "adopt")
+        XCTAssertEqual(resolved.asStrings["expertRunScopedBackends"], "true")
+        XCTAssertEqual(resolved.asStrings["expertCrossLayerPrefetch"], "6")
+        XCTAssertEqual(resolved.asRunKnobs.expertRunScopedBackends, true)
+        XCTAssertEqual(resolved.asRunKnobs.expertCrossLayerPrefetch, 6)
+        XCTAssertEqual(resolved.asRunKnobs.expertTileAdoption, true)
     }
 
     func testProductionRunnerRequiresRootedVerificationAuthority() throws {

@@ -60,17 +60,19 @@ public enum DeepSeekV4HyperConnections {
             throw DeepSeekV4Error.hyperConnection(
                 "head function, scale, base, and residual shapes do not agree")
         }
-        // The one-element `scale` pull is load-bearing: `scaleValues[0]` is a
-        // Swift multiplier in the arithmetic below, so it happens whatever the
-        // diagnostics say, and at one float it cannot move any term.
-        let scaleValues = scale.asType(.float32).asArray(Float.self)
-        // The `base` and `function` pulls are not: both tables are consumed on
-        // the GPU afterwards, and they are read here only for the guard. That
-        // makes this statement group a finiteness sweep — bracketed as one,
-        // and skipped as one. The head tables it sweeps are also swept once on
+        // The one-element `scale` pull used to be load-bearing, because
+        // `scaleValues[0]` was a Swift multiplier below. It is the device scalar
+        // now, for the reason `splitSinkhorn` gives at length, so all three
+        // reads here — scale, base, function — exist only for the guard. That
+        // makes this statement group a finiteness sweep: bracketed as one, and
+        // skipped as one. The head tables it sweeps are also swept once on
         // admission, in `DeepSeekV4GlobalArtifact.readHeadParameters`.
+        let scale32 = scale.asType(.float32)
         if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.hyperConnectionHead)
+            phaseAccounting?.recordEval(.finitenessSweep)
             try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
+                let scaleValues = scale32.asArray(Float.self)
                 let baseValues = base.asType(.float32).asArray(Float.self)
                 let functionValues = function.asType(.float32).asArray(Float.self)
                 guard scaleValues.allSatisfy(\.isFinite), baseValues.allSatisfy(\.isFinite),
@@ -88,7 +90,7 @@ public enum DeepSeekV4HyperConnections {
             mean(flattened * flattened, axis: -1, keepDims: true) + normEpsilon)
         let mixes = k3Linear(flattened, function.asType(.float32)) * inverseRMS
         let coefficients = sigmoid(
-            mixes * scaleValues[0] + base.asType(.float32)) + epsilon
+            mixes * scale32[0] + base.asType(.float32)) + epsilon
         return sum(
             expandedDimensions(coefficients, axis: -1) * widened,
             axis: 1)
@@ -100,7 +102,9 @@ public enum DeepSeekV4HyperConnections {
         base: MLXArray,
         multiplicity: Int,
         iterations: Int,
-        epsilon: Float
+        epsilon: Float,
+        phaseAccounting: DeepSeekV4PhaseAccounting? = nil,
+        diagnostics: DeepSeekV4Diagnostics = .validating
     ) throws -> Split {
         guard multiplicity > 0, iterations > 0, epsilon.isFinite, epsilon > 0 else {
             throw DeepSeekV4Error.hyperConnection(
@@ -127,14 +131,36 @@ public enum DeepSeekV4HyperConnections {
                 "base must be [\(mixedWidth.partialValue)], got \(base.shape)")
         }
 
-        // Deliberately not bracketed as a finiteness sweep: these three floats
-        // are consumed by the arithmetic below, so the pull is load-bearing
-        // and would still happen with the guard removed. Charging it to a
-        // validation term would name work that validation does not own; it
-        // stays in the residual.
-        let scaleValues = scale.asType(.float32).asArray(Float.self)
-        guard scaleValues.count == 3, scaleValues.allSatisfy(\.isFinite) else {
-            throw DeepSeekV4Error.hyperConnection("scale contains a non-finite value")
+        // These three floats used to be pulled to the host unconditionally,
+        // because `scaleValues[0..2]` were Swift multipliers in the coefficients
+        // below. That made the pull load-bearing rather than validation, and it
+        // was the census's second-largest site: 86 per pass, because `prepare`
+        // runs twice per layer — once before attention, once before the MoE tail
+        // — and each pull drains a fresh graph over the whole flattened
+        // residual.
+        //
+        // The multipliers are now the device scalars themselves. `scale` is a
+        // float32 `[3]` checkpoint constant and each coefficient multiplies a
+        // float32 tensor by one of its elements, so `mixParts[i] * scale32[i]`
+        // is the same float32 broadcast multiply against the same value that
+        // `mixParts[i] * scaleValues[i]` was — the arithmetic is unchanged and
+        // only the host round trip is gone.
+        //
+        // What remains of the old statement is the guard, and a guard is all it
+        // is: nothing below reads a host float, so this is a finiteness sweep
+        // like every other. It is bracketed and skipped as one. `.off` — what
+        // both product scales run — therefore makes this site zero, and
+        // `.validating` still exercises it in every fixture suite.
+        let scale32 = scale.asType(.float32)
+        if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.hyperConnectionSplit)
+            phaseAccounting?.recordEval(.finitenessSweep)
+            try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
+                let scaleValues = scale32.asArray(Float.self)
+                guard scaleValues.count == 3, scaleValues.allSatisfy(\.isFinite) else {
+                    throw DeepSeekV4Error.hyperConnection("scale contains a non-finite value")
+                }
+            }
         }
         let doubledMultiplicity = multiplicity.multipliedReportingOverflow(by: 2)
         guard !doubledMultiplicity.overflow else {
@@ -144,10 +170,10 @@ public enum DeepSeekV4HyperConnections {
         let mixParts = split(mixes.asType(.float32), indices: boundaries, axis: -1)
         let baseParts = split(base.asType(.float32), indices: boundaries, axis: -1)
 
-        let pre = sigmoid(mixParts[0] * scaleValues[0] + baseParts[0]) + epsilon
-        let post = sigmoid(mixParts[1] * scaleValues[1] + baseParts[1]) * Float(2)
+        let pre = sigmoid(mixParts[0] * scale32[0] + baseParts[0]) + epsilon
+        let post = sigmoid(mixParts[1] * scale32[1] + baseParts[1]) * Float(2)
         var combination = (
-            mixParts[2] * scaleValues[2] + baseParts[2]
+            mixParts[2] * scale32[2] + baseParts[2]
         ).reshaped([-1, multiplicity, multiplicity])
 
         // Official kernel: row softmax + eps, then a column normalization;
@@ -174,7 +200,9 @@ public enum DeepSeekV4HyperConnections {
         multiplicity: Int,
         iterations: Int,
         epsilon: Float,
-        normEpsilon: Float
+        normEpsilon: Float,
+        phaseAccounting: DeepSeekV4PhaseAccounting? = nil,
+        diagnostics: DeepSeekV4Diagnostics = .validating
     ) throws -> PreparedBranch {
         guard residual.ndim == 3, residual.shape[1] == multiplicity else {
             throw DeepSeekV4Error.hyperConnection(
@@ -212,7 +240,9 @@ public enum DeepSeekV4HyperConnections {
             base: base,
             multiplicity: multiplicity,
             iterations: iterations,
-            epsilon: epsilon)
+            epsilon: epsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let contracted = sum(
             expandedDimensions(split.pre, axis: -1) * residual.asType(.float32),
             axis: 1)

@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="下载 Mac 版" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="版本 0.2" src="https://img.shields.io/badge/version-0.2-3b8cf5"></a>
+  <a href="CHANGELOG.md"><img alt="版本 0.3" src="https://img.shields.io/badge/version-0.3-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
@@ -38,7 +38,7 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 
 | 模型 | 磁盘占用 | Mac（M1 Pro，32 GB） | iPhone 16 Pro | 状态 |
 | --- | ---: | --- | --- | --- |
-| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731)，284B MoE | 167 GB | 约 5 秒/token，预算 10.6 GB；2 GB 也能跑 | 约 17 秒/token，内存不到 2 GB | 可对话 |
+| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731)，284B MoE | 167 GB | 约 2.5 秒/token，预算 10.7 GB；2 GB 也能跑 | 约 17 秒/token，内存不到 2 GB | 可对话 |
 | [Kimi K3](https://minirun.dev/models/kimi-k3)，2.8T MoE | 1.56 TB | 约 70 秒/token，预算 8 GB | 约 220 秒/token，预算 5.8 GB，每轮 2 个 token | 可对话 |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3)，音频与视频生成 | 64 GB | 下载、验证、存储 | 下载、验证、存储 | 容器就绪 |
 | Qwen3.8-27B | — | — | — | 即将推出 |

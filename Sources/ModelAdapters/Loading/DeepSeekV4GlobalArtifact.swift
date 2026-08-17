@@ -563,7 +563,16 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
                 phaseAccounting?.recordPinnedServed()
             }
             let widened = resident[first..<end.partialValue].asType(.float32)
-            widened.eval()
+            // A pinned head window still forces the graph: the slice is a fresh
+            // graph node even though its bytes were never read. Deferred, and
+            // the pin is exactly why it can be — the source is an MLX-owned
+            // resident table, not a `malloc`'d read buffer with a deallocating
+            // finalizer, so nothing is freed underneath the GPU. The matmul
+            // that consumes this window ends in a blocking pull one statement
+            // later, so submitting the widen early only lets the GPU start it
+            // while the CPU builds that matmul.
+            phaseAccounting?.recordAsyncEval(.weightMaterialisation)
+            MLX.asyncEval([widened])
             return widened
         }
         return try readRowRange(
@@ -686,6 +695,10 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             records["hc_head_base"]!, cancellationCheck: cancellationCheck)
         let finalNorm = try load(
             records["norm.weight"]!, cancellationCheck: cancellationCheck)
+        // Admission-time, and memoized by `loadHeadParameters`: this sweep runs
+        // on the first pass of a run and never again, which is why the census
+        // shows it on pass 1 and nowhere in the plateau.
+        phaseAccounting?.recordEval(.finitenessSweep)
         for (name, array) in [
             ("hc_head_fn", function), ("hc_head_scale", scale),
             ("hc_head_base", base), ("norm.weight", finalNorm),
@@ -716,7 +729,10 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
         let normalized = K3Norm.rms(
             collapsed, weight: parameters.finalNorm,
             eps: geometry.rmsNormEpsilon).asType(.float32)
-        normalized.eval()
+        // Deferred: the head walk's first window pull is the wait, and it is
+        // one statement away. Nothing reads a host value from `normalized`.
+        phaseAccounting?.recordAsyncEval(.passBoundary)
+        MLX.asyncEval([normalized])
         return normalized
     }
 
@@ -760,6 +776,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
                 ) {
                     let projected = matmul(
                         hidden.asType(.float32), rows.transposed(1, 0)).asType(.float32)
+                    // One sync per window: `asArray` below copies an array
+                    // this `eval` already materialised.
+                    phaseAccounting?.recordEval(.outputHead)
                     projected.eval()
                     return projected.asArray(Float.self)
                 }
@@ -822,6 +841,7 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             finalizer: { pointer.deallocate() })
         transferred = true
         let widened = raw.asType(.float32)
+        phaseAccounting?.recordEval(.embedding)
         widened.eval()
         return widened
     }
@@ -865,6 +885,7 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             finalizer: { pointer.deallocate() })
         transferred = true
         let widened = raw.asType(.float32)
+        phaseAccounting?.recordEval(.weightMaterialisation)
         widened.eval()
         return widened
     }
@@ -895,6 +916,7 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             rawPointer: pointer, record.shape, dtype: record.dtype.mlxDType,
             finalizer: { pointer.deallocate() })
         transferred = true
+        phaseAccounting?.recordEval(.weightMaterialisation)
         raw.eval()
         return raw
     }

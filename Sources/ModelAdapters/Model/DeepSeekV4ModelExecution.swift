@@ -106,11 +106,33 @@ public final class DeepSeekV4ExecutionControl: @unchecked Sendable {
     private let lock = NSLock()
     private var cancellationReason: String?
     private var activeBackend: PagedRoutedExpertBackend?
+    private var residency: DeepSeekV4RunExpertBackends?
 
     /// Which boundaries this execution reclaims at. It travels with the
     /// control because the control is already threaded to every V4 entry
     /// point that owns a layer or output-head window.
     public let boundaryReclaim: DeepSeekV4BoundaryReclaimPolicy
+
+    /// Serve every layer's expert backend from one run-scoped residency
+    /// instead of building and destroying one per layer per pass.
+    ///
+    /// It travels on the control for the same reason `boundaryReclaim` does:
+    /// the control is already threaded to every V4 entry point that owns a
+    /// layer. Installing one changes no arithmetic — the same containers, the
+    /// same configuration, the same gather — only the lifetime of the readers
+    /// and the number of times the shared pool is allocated. Nil is the
+    /// per-layer lifetime every record before 2026-08-17 measured.
+    public func installExpertResidency(_ residency: DeepSeekV4RunExpertBackends?) {
+        lock.lock()
+        self.residency = residency
+        lock.unlock()
+    }
+
+    public var expertResidency: DeepSeekV4RunExpertBackends? {
+        lock.lock()
+        defer { lock.unlock() }
+        return residency
+    }
 
     public init(
         boundaryReclaim: DeepSeekV4BoundaryReclaimPolicy = DeepSeekV4BoundaryReclaimPolicy()
@@ -123,8 +145,14 @@ public final class DeepSeekV4ExecutionControl: @unchecked Sendable {
         if cancellationReason == nil { cancellationReason = reason }
         let recorded = cancellationReason ?? reason
         let backend = activeBackend
+        let live = residency
         lock.unlock()
         backend?.cancel(reason: recorded)
+        // A run-scoped residency owns readers for layers that are not the
+        // active one, and they share the pool a blocked acquire is waiting on.
+        // Stop has to reach all of them or a cancelled run can still be asleep
+        // in a slot wait for a layer that will never come.
+        live?.cancel(reason: recorded)
     }
 
     public func throwIfCancelled() throws {
@@ -389,7 +417,9 @@ extension DeepSeekV4ModelArtifact {
                 "final hidden does not match the prompt and model geometry")
         }
         let last = hidden[(hidden.shape[0] - 1)..., 0...]
-        last.eval()
+        // The prefill twin of the decode slice above, and deferred for the same
+        // reason: `logits` opens with a blocking pull one statement later.
+        MLX.asyncEval([last])
         let logits = try global.logits(
             for: last,
             chunkRows: logitChunkRows,
@@ -701,7 +731,11 @@ extension DeepSeekV4ModelArtifact {
         }
         let expanded = expandedDimensions(embedding, axis: 1)
         let residual = repeated(expanded, count: multiplicity, axis: 1)
-        residual.eval()
+        // Deferred: an expand-and-repeat of an embedding row the caller has
+        // already materialised. The sequence driver counts the same array as
+        // its `.passBoundary` a statement later, so a blocking eval here would
+        // be an uncounted round trip in front of a deferred one.
+        MLX.asyncEval([residual])
         return residual
     }
 
@@ -748,14 +782,16 @@ extension DeepSeekV4ModelArtifact {
                 "generation state requires at least one model layer")
         }
         var residual = initialResidual
-        residual.eval()
+        phaseAccounting?.recordAsyncEval(.passBoundary)
+        MLX.asyncEval([residual])
         var states = [State]()
         states.reserveCapacity(layers.count)
         for (offset, layer) in layers.enumerated() {
             try cancellationCheck()
             let next = try autoreleasepool {
                 let result = try execute(offset, layer, residual)
-                result.residual.eval()
+                phaseAccounting?.recordAsyncEval(.layerBoundary)
+                MLX.asyncEval([result.residual])
                 return result
             }
             residual = next.residual
@@ -801,14 +837,23 @@ extension DeepSeekV4ModelArtifact {
                 "bounded generation replacement requires one state per model layer")
         }
         var residual = initialResidual
-        residual.eval()
+        phaseAccounting?.recordAsyncEval(.passBoundary)
+        MLX.asyncEval([residual])
         do {
             for (offset, layer) in layers.enumerated() {
                 try cancellationCheck()
                 var prior: State? = states[offset]
                 let next = try autoreleasepool {
                     let result = try execute(offset, layer, residual, prior!)
-                    result.residual.eval()
+                    // The layer boundary, counted here for every sequence the
+                    // driver runs. On the generation path `execute` has
+                    // already submitted this same array a statement earlier,
+                    // so one of the two submissions finds nothing unscheduled
+                    // and returns immediately; the census counts the *forcing
+                    // point*, which is one, and the inner site is commented
+                    // rather than counted.
+                    phaseAccounting?.recordAsyncEval(.layerBoundary)
+                    MLX.asyncEval([result.residual])
                     return result
                 }
                 states[offset] = next.state
@@ -914,7 +959,11 @@ extension DeepSeekV4ModelArtifact {
                 "final hidden does not match the generation step geometry")
         }
         let last = hidden[(expectedRows - 1)..., 0...]
-        last.eval()
+        // Not counted: `finalHidden` submitted `hidden` a statement ago and
+        // records that as `.passBoundary`; slicing it forces nothing new.
+        // Deferred with it — making this one blocking would reinstate exactly
+        // the round trip the pass boundary just gave up, for a slice.
+        MLX.asyncEval([last])
         let logits = try global.logits(
             for: last,
             chunkRows: logitChunkRows,
@@ -935,12 +984,14 @@ extension DeepSeekV4ModelArtifact {
         onLayerCompleted: (_ completed: Int, _ total: Int) -> Void
     ) throws -> MLXArray {
         var residual = initialResidual
-        residual.eval()
+        phaseAccounting?.recordAsyncEval(.passBoundary)
+        MLX.asyncEval([residual])
         for (offset, layer) in layers.enumerated() {
             try cancellationCheck()
             residual = try autoreleasepool {
                 let next = try execute(layer, residual)
-                next.eval()
+                phaseAccounting?.recordAsyncEval(.layerBoundary)
+                MLX.asyncEval([next])
                 return next
             }
             // Evaluated activations remain live. Only recyclable command and
@@ -1029,7 +1080,9 @@ extension DeepSeekV4ModelArtifact {
                     stream: stream,
                     cancellationCheck: control.throwIfCancelled).residual
             }
-            output.eval()
+            // Deferred, and counted by `executeSequence`'s layer boundary one
+            // statement later, exactly as the two generation twins are.
+            MLX.asyncEval([output])
             try control.throwIfCancelled()
             return output
         }
@@ -1123,7 +1176,13 @@ extension DeepSeekV4ModelArtifact {
                 }
                 step = (result.residual, .compressedLearned(state))
             }
-            step.residual.eval()
+            // Not counted, for the reason `executeGenerationDecode`'s twin is
+            // not: `executeStateSequence` forces this array immediately
+            // after this closure returns and counts the boundary there.
+            // Deferred with it — an uncounted *blocking* eval one statement
+            // before a deferred boundary would be the round trip the boundary
+            // just gave up, hidden from the census that exists to find it.
+            MLX.asyncEval([step.residual])
             try control.throwIfCancelled()
             return step
         }
@@ -1218,7 +1277,13 @@ extension DeepSeekV4ModelArtifact {
                 throw DeepSeekV4Error.attention(
                     "generation cache family changed during layer execution")
             }
-            step.residual.eval()
+            // Not recorded in the eval census: `executeReplacingStateSequence`
+            // forces this same array immediately after this closure returns,
+            // and counts the boundary there. One forcing point, one count —
+            // and deferred at both ends, so the count does not understate what
+            // the pass actually waits for. **This is the decode path**: a
+            // blocking `eval` here would be 43 uncounted round trips a pass.
+            MLX.asyncEval([step.residual])
             try control.throwIfCancelled()
             return step
         }
@@ -1267,25 +1332,40 @@ extension DeepSeekV4ModelArtifact {
         body: (PagedRoutedExpertBackend) throws -> Result
     ) throws -> Result {
         try control.throwIfCancelled()
-        let backend = try Self.buildLayerBackend(
-            containers: layer.expertUnit.containers,
-            configuration: expertConfiguration,
-            successfulReadObserver: { [readAccounting] bytes in
-                readAccounting.recordExpert(bytes, didOverflow: false)
-            },
-            phaseAccounting: phaseAccounting)
+        // A run-scoped residency owns the backend's lifetime, so this bracket
+        // neither builds nor shuts one down: it borrows the layer's backend,
+        // marks it active for cancellation, and gives it back. The build cost
+        // it would have paid is charged once per layer per *run*, by the
+        // residency, through the same `expertBackendLifecycle` bracket.
+        let residency = control.expertResidency
+        let backend: PagedRoutedExpertBackend
+        if let residency {
+            backend = try residency.backend(for: layer.plan.layer)
+        } else {
+            backend = try Self.buildLayerBackend(
+                containers: layer.expertUnit.containers,
+                configuration: expertConfiguration,
+                successfulReadObserver: { [readAccounting] bytes in
+                    readAccounting.recordExpert(bytes, didOverflow: false)
+                },
+                phaseAccounting: phaseAccounting)
+        }
         do {
             try control.activate(backend)
         } catch {
-            Self.shutDownLayerBackend(backend, recordingTo: phaseAccounting)
+            if residency == nil {
+                Self.shutDownLayerBackend(backend, recordingTo: phaseAccounting)
+            }
             throw error
         }
         defer {
             control.deactivate(backend)
-            Self.shutDownLayerBackend(backend, recordingTo: phaseAccounting)
-            let accounting = backend.expertReadAccounting
-            if accounting.didOverflow {
-                readAccounting.recordExpert(0, didOverflow: true)
+            if residency == nil {
+                Self.shutDownLayerBackend(backend, recordingTo: phaseAccounting)
+                let accounting = backend.expertReadAccounting
+                if accounting.didOverflow {
+                    readAccounting.recordExpert(0, didOverflow: true)
+                }
             }
         }
         do {

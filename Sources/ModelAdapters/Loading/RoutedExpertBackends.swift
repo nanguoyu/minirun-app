@@ -50,6 +50,29 @@ public protocol RoutedExpertPhaseObserver: AnyObject, Sendable {
     func recordExpertPhase(nanoseconds: UInt64)
     func recordExpertIOWait(nanoseconds: UInt64)
     func recordExpertGatherCompute(nanoseconds: UInt64)
+
+    /// One `eval` that forced part of the gather graph — a count, not a
+    /// duration, and disjoint from nothing: the same call is already timed by
+    /// ``recordExpertGatherCompute(nanoseconds:)``. It exists because a gather
+    /// that costs 6 ms in one dispatch and one that costs 6 ms across twelve
+    /// are different problems, and the seconds cannot tell them apart.
+    ///
+    /// Defaulted to nothing so an observer that only wants the three brackets
+    /// stays source-compatible.
+    func recordExpertGatherEval()
+}
+
+extension RoutedExpertPhaseObserver {
+    public func recordExpertGatherEval() {}
+}
+
+/// Told when a routed layer's router has named its experts.
+///
+/// The one event a cross-layer scheduler needs: it means every tile queued for
+/// `layer` is about to be acquired, so slots occupied by tiles for layers
+/// *after* it can be topped back up to the stated window.
+protocol RoutedExpertScheduleCoordinator: AnyObject {
+    func routedLayerDidSelect(layer: Int) throws
 }
 
 /// Streams routed-expert tiles through a bounded pool.
@@ -92,12 +115,38 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
         /// one token cannot retain a layer-sized pool through the next token;
         /// benchmark/reference callers keep the historical adoption default.
         public var transferMode: BufferTransferMode
+        /// Honour ``PagedRoutedExpertBackend/prefetch(layer:projections:expertIds:)``
+        /// instead of ignoring it.
+        ///
+        /// Off by default, because it is the one setting here that changes what
+        /// the *pool* has to be. With it off, one gather's reader is the only
+        /// one with pending work at any moment, so `readAhead <= slotCount`
+        /// bounds the pool. With it on, every projection's reader can hold its
+        /// whole window at once, and the bound becomes
+        /// `projections * readAhead + 1` — see the initializer, which refuses a
+        /// pool that cannot cover it rather than prefetching fewer tiles than
+        /// the caller asked for.
+        public var prefetchProjections: Bool
+        /// Tiles a *different* layer's readers may hold out of this same pool
+        /// while this layer is consuming.
+        ///
+        /// Zero — the default and the only value a per-layer backend can have —
+        /// means no reader outside this layer has pending work, because the
+        /// backend is built and destroyed inside the layer. A run-scoped
+        /// residency (``DeepSeekV4RunExpertBackends``) keeps other layers'
+        /// readers alive and may schedule ahead of the current layer, and those
+        /// tiles occupy slots in the one shared pool until their own gather
+        /// comes for them. It is priced here, in the pool bound, rather than
+        /// borrowed from the current layer's window.
+        public var crossLayerPrefetchTiles: Int
 
         public init(
             slotCount: Int = 4, queueDepth: Int = 2, readAhead: Int = 2,
             noCache: Bool = false, slotAcquireTimeout: TimeInterval? = 60,
             tilesPerDispatch: Int = 1,
-            transferMode: BufferTransferMode = .adopt
+            transferMode: BufferTransferMode = .adopt,
+            prefetchProjections: Bool = false,
+            crossLayerPrefetchTiles: Int = 0
         ) {
             self.slotCount = slotCount
             self.queueDepth = queueDepth
@@ -106,12 +155,18 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
             self.slotAcquireTimeout = slotAcquireTimeout
             self.tilesPerDispatch = max(1, tilesPerDispatch)
             self.transferMode = transferMode
+            self.prefetchProjections = prefetchProjections
+            self.crossLayerPrefetchTiles = max(0, crossLayerPrefetchTiles)
         }
     }
 
     public let containers: RoutedExpertContainers
     public let configuration: Configuration
     private let pool: BufferPool
+    /// False when the pool belongs to a run-scoped residency. ``shutdown()``
+    /// then closes this layer's readers and descriptors but leaves the pool —
+    /// and every other layer's leases in it — exactly where they are.
+    private let ownsPool: Bool
     private let effectiveReadAhead: Int
     private let successfulReadObserver: (@Sendable (UInt64) -> Void)?
     private let phaseObserver: (any RoutedExpertPhaseObserver)?
@@ -124,9 +179,33 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
     private var counterOverflowed = false
     private var retiredBytes = UInt64Accounting.SaturatingSum()
 
+    public convenience init(
+        containers: RoutedExpertContainers,
+        configuration: Configuration = Configuration(),
+        successfulReadObserver: (@Sendable (UInt64) -> Void)? = nil,
+        phaseObserver: (any RoutedExpertPhaseObserver)? = nil
+    ) throws {
+        try self.init(
+            containers: containers,
+            configuration: configuration,
+            sharedPool: nil,
+            successfulReadObserver: successfulReadObserver,
+            phaseObserver: phaseObserver)
+    }
+
+    /// Build a backend over a pool somebody else owns.
+    ///
+    /// The pool is *the* stated routed-expert memory term, so a run that keeps
+    /// several layers' backends alive at once must keep exactly one pool
+    /// between them: 43 layers each carrying their own would multiply a
+    /// reserved term by 43 without anything in the accounting identity saying
+    /// so. ``DeepSeekV4RunExpertBackends`` owns that one pool and hands it to
+    /// every layer's backend here; ``shutdown()`` therefore releases readers
+    /// and file descriptors but never evicts a pool it does not own.
     public init(
         containers: RoutedExpertContainers,
         configuration: Configuration = Configuration(),
+        sharedPool: BufferPool?,
         successfulReadObserver: (@Sendable (UInt64) -> Void)? = nil,
         phaseObserver: (any RoutedExpertPhaseObserver)? = nil
     ) throws {
@@ -134,6 +213,7 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
         self.configuration = configuration
         self.successfulReadObserver = successfulReadObserver
         self.phaseObserver = phaseObserver
+        self.ownsPool = sharedPool == nil
 
         // Every container in this set has the same tile stride, but that is a
         // property of this model rather than of the format, so the pool is
@@ -142,6 +222,39 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
         guard slotBytes > 0 else {
             throw TinyK3Error.configuration("expert containers describe a zero-byte tile")
         }
+        self.effectiveReadAhead = try Self.validatedReadAhead(
+            configuration: configuration, readerCount: containers.entries.count)
+        if let sharedPool {
+            guard sharedPool.configuration.slotBytes >= slotBytes else {
+                throw PagerError.configuration(
+                    "the shared expert pool has \(sharedPool.configuration.slotBytes)-byte "
+                        + "slots but this unit's widest tile is \(slotBytes) bytes")
+            }
+            guard sharedPool.configuration.slotCount == configuration.slotCount else {
+                throw PagerError.configuration(
+                    "the shared expert pool has \(sharedPool.configuration.slotCount) slots "
+                        + "but this backend states \(configuration.slotCount); one run has "
+                        + "one pool and one stated slot count")
+            }
+            self.pool = sharedPool
+        } else {
+            self.pool = try BufferPool(
+                configuration: BufferPoolConfiguration(
+                    slotCount: configuration.slotCount,
+                    slotBytes: slotBytes,
+                    alignment: max(AlignedBuffer.pageSize, MXFP4TileContainer.regionAlignment)))
+        }
+    }
+
+    /// The read-ahead this configuration may actually use, having refused every
+    /// pool it cannot fit in.
+    ///
+    /// Split out of the initializer so a run-scoped residency can price its one
+    /// shared pool **before** it opens a file descriptor, and so the arithmetic
+    /// that decides the answer exists in exactly one place.
+    static func validatedReadAhead(
+        configuration: Configuration, readerCount: Int
+    ) throws -> Int {
         // The deadlock invariant is conditional on ownership. Adoption leaves
         // every tile in a dispatch leased until MLX evaluates the graph, so it
         // retains the generic `evalEveryK + readAhead <= slotCount` check.
@@ -151,13 +264,14 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
         // necessary and sufficient pool bound. Do not apply the smaller bound
         // to adoption: that recreates the real deadlock PagedReadPlan exists to
         // reject.
+        let effectiveReadAhead: Int
         switch configuration.transferMode {
         case .adopt:
             let plan = try PagedReadPlan(
                 slotCount: configuration.slotCount,
                 readAhead: configuration.readAhead,
                 evalEveryK: configuration.tilesPerDispatch)
-            self.effectiveReadAhead = plan.readAhead
+            effectiveReadAhead = plan.readAhead
         case .copy:
             guard configuration.slotCount >= 1 else {
                 throw PagerError.configuration("slotCount must be at least 1")
@@ -172,13 +286,51 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
                         + "(\(configuration.slotCount)); raise slotCount to at least "
                         + "\(configuration.readAhead), or lower readAhead")
             }
-            self.effectiveReadAhead = configuration.readAhead
+            effectiveReadAhead = configuration.readAhead
         }
-        self.pool = try BufferPool(
-            configuration: BufferPoolConfiguration(
-                slotCount: configuration.slotCount,
-                slotBytes: slotBytes,
-                alignment: max(AlignedBuffer.pageSize, MXFP4TileContainer.regionAlignment)))
+        // Prefetching across projections is the one setting that lets more than
+        // one reader hold pending work at the same time, and the pool is shared
+        // by all of them. A tile that has been read and not yet consumed keeps
+        // its slot until its own gather comes for it, so in the worst case
+        // every projection's window is resident while the consumer is blocked
+        // on a projection that still needs a slot of its own. Refused, not
+        // silently narrowed: a run that prefetched fewer tiles than it stated
+        // would be recorded under a window it did not use (spec §12.3).
+        //
+        // A run-scoped residency adds one more class of holder to exactly the
+        // same pool: readers belonging to a layer that has not started yet.
+        // Those are bounded by `crossLayerPrefetchTiles`, which the residency
+        // enforces by counting scheduled-and-unconsumed regions rather than by
+        // trusting a per-reader window, and they are added to the bound here.
+        //
+        // A configuration that neither prefetches projections nor schedules
+        // across a layer boundary keeps exactly the bound it had before either
+        // existed, so every earlier record's window is still expressible.
+        guard configuration.prefetchProjections
+            || configuration.crossLayerPrefetchTiles > 0
+        else {
+            return effectiveReadAhead
+        }
+        let inLayerReaders = configuration.prefetchProjections ? max(1, readerCount) : 1
+        let inLayer = inLayerReaders.multipliedReportingOverflow(by: effectiveReadAhead)
+        // Adoption keeps one dispatch's tiles leased until MLX evaluates the
+        // graph. Copying returns each lease inside `copyOut` and holds none.
+        let graphHeld = configuration.transferMode == .adopt
+            ? configuration.tilesPerDispatch : 0
+        let total = [inLayer.partialValue, configuration.crossLayerPrefetchTiles, graphHeld, 1]
+            .reduce(into: (value: 0, overflow: inLayer.overflow)) { running, term in
+                let sum = running.value.addingReportingOverflow(term)
+                running = (sum.partialValue, running.overflow || sum.overflow)
+            }
+        guard !total.overflow, configuration.slotCount >= total.value else {
+            throw PagerError.configuration(
+                "this expert window can hold \(inLayer.partialValue) in-layer + "
+                    + "\(configuration.crossLayerPrefetchTiles) cross-layer + "
+                    + "\(graphHeld) graph-held tiles while the consumer still needs one, "
+                    + "but slotCount is \(configuration.slotCount); raise slotCount to at "
+                    + "least \(total.value), or narrow the window")
+        }
+        return effectiveReadAhead
     }
 
     deinit { shutdown() }
@@ -210,7 +362,7 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
                 value: retiredBytes.value, didOverflow: true)
         }
         lifecycle.unlock()
-        pool.evictAll()
+        if ownsPool { pool.evictAll() }
     }
 
     /// Interrupt a routed-expert pass without allocating a replacement path.
@@ -282,6 +434,90 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
         }
     }
 
+    /// Queue every named projection's tiles for this routing decision.
+    ///
+    /// Each projection's regions go to that projection's own reader, so the
+    /// three windows fill in parallel on `queueDepth` workers each while the
+    /// consumer is still inside the first gather. Scheduling is idempotent by
+    /// region identity — ``TileReader/schedule(_:)`` keeps the entry it already
+    /// has — so the per-projection `schedule` inside the gather below stays
+    /// exactly as it was and simply finds the work already queued.
+    ///
+    /// Nothing here waits, and nothing here is speculative: `w1`, `w3` and `w2`
+    /// are gathered over the same selected experts, so these are the bytes the
+    /// layer is about to ask for either way.
+    public func prefetch(
+        layer: Int, projections: [ExpertProjection], expertIds: [[Int]]
+    ) throws {
+        if configuration.prefetchProjections {
+            try throwIfUnavailable()
+            for projection in projections {
+                let entry = try containers.entry(layer: layer, projection: projection)
+                let reader = try self.reader(for: entry)
+                try reader.schedule(try Self.regions(for: entry, expertIds: expertIds))
+            }
+        }
+        // The router has just named this layer's ids, which is also the moment
+        // a run-scoped residency learns that everything it queued for *this*
+        // layer is now about to be consumed and it may schedule further ahead.
+        // Outside the `prefetchProjections` gate on purpose: the cross-layer
+        // window is a separate, separately priced mechanism.
+        try scheduleCoordinator?.routedLayerDidSelect(layer: layer)
+    }
+
+    /// Told, at each routed layer's `routingSelect`, which layer is now
+    /// current. A run-scoped residency uses it to keep a bounded number of
+    /// tiles for *later* layers in flight; a per-layer backend has none.
+    weak var scheduleCoordinator: (any RoutedExpertScheduleCoordinator)?
+
+    /// The regions one projection needs for a routing decision, without
+    /// scheduling them.
+    ///
+    /// A run-scoped residency needs the count *before* it decides how much of a
+    /// not-yet-current layer it can afford to have in flight, so the two halves
+    /// — naming the bytes and queueing them — are separate calls here. The
+    /// gather's own `schedule` still finds whatever this queued, by region
+    /// identity, exactly as the in-layer projection prefetch does.
+    func plannedRegions(
+        layer: Int, projection: ExpertProjection, expertIds: [[Int]]
+    ) throws -> [RegionDescriptor] {
+        try Self.regions(
+            for: try containers.entry(layer: layer, projection: projection),
+            expertIds: expertIds)
+    }
+
+    /// Queue regions this backend's own gather will later acquire.
+    ///
+    /// Deliberately not gated on ``Configuration/prefetchProjections``: that
+    /// switch is about the three projections *inside* one layer, and this is
+    /// the residency's cross-layer window, which is bounded and priced by
+    /// ``Configuration/crossLayerPrefetchTiles`` instead.
+    func scheduleRegions(
+        _ regions: [RegionDescriptor], layer: Int, projection: ExpertProjection
+    ) throws {
+        guard !regions.isEmpty else { return }
+        try throwIfUnavailable()
+        let entry = try containers.entry(layer: layer, projection: projection)
+        try self.reader(for: entry).schedule(regions)
+    }
+
+    /// The container regions a routing decision needs from one projection.
+    ///
+    /// Derived from the same ``TilePlan`` and the same ``stableSourceID`` the
+    /// gather derives its own from. A prefetch that described the same tiles
+    /// with different identities would leave the pager reading each tile twice
+    /// and the prefetch silently useless, which is why
+    /// `DeepSeekV4ExpertBackendTests`'
+    /// `testProjectionPrefetchIsBitIdenticalAndReadsEachTileExactlyOnce`
+    /// asserts the read count rather than only the answer.
+    static func regions(
+        for entry: RoutedExpertContainers.Entry, expertIds: [[Int]]
+    ) throws -> [RegionDescriptor] {
+        let plan = try TilePlan(entry: entry, expertIds: expertIds)
+        let sourceID = stableSourceID(entry.path)
+        return plan.tiles.map { entry.layout.region($0, sourceID: sourceID) }
+    }
+
     public func gather(
         _ x: MLXArray, layer: Int, projection: ExpertProjection, expertIds: [[Int]]
     ) throws -> MLXArray {
@@ -320,7 +556,10 @@ public final class PagedRoutedExpertBackend: RoutedExpertBackend {
             x, entry: entry, expertIds: expertIds,
             tilesPerDispatch: configuration.tilesPerDispatch,
             evalObserver: phaseObserver.map { observer in
-                { nanoseconds in observer.recordExpertGatherCompute(nanoseconds: nanoseconds) }
+                { nanoseconds in
+                    observer.recordExpertGatherCompute(nanoseconds: nanoseconds)
+                    observer.recordExpertGatherEval()
+                }
             }
         ) { tile in
             let lease = try self.acquire(reader, byTile[tile]!)

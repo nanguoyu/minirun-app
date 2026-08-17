@@ -39,12 +39,17 @@ public struct VerificationReport: Sendable, Codable, Equatable {
     /// be paired with a plan to answer "how much will the repair cost" would be
     /// a report nobody could hand to a UI.
     public let bytesToRefetch: UInt64
+    /// What an earlier revision's record spared this pass, when it spared
+    /// anything. Nil for every download-side verification and for any artifact
+    /// pass that read its whole plan. See ADR 0014.
+    public let carryForward: ArtifactCarryForwardSummary?
 
     public init(
         job: DownloadJobID, model: ModelID, depth: VerificationDepth, checkedAt: Date,
         ok: [String], missing: [String], wrongSize: [SizeMismatch],
         wrongDigest: [DigestMismatch], unreadable: [String: String], extraneous: [String],
-        bytesToRefetch: UInt64 = 0
+        bytesToRefetch: UInt64 = 0,
+        carryForward: ArtifactCarryForwardSummary? = nil
     ) {
         self.job = job
         self.model = model
@@ -57,6 +62,7 @@ public struct VerificationReport: Sendable, Codable, Equatable {
         self.unreadable = unreadable
         self.extraneous = extraneous
         self.bytesToRefetch = bytesToRefetch
+        self.carryForward = carryForward
     }
 
     /// Every planned file is present and correct. Extraneous files do not make

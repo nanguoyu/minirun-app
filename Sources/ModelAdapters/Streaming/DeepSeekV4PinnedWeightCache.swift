@@ -197,23 +197,31 @@ final class DeepSeekV4PinnedWeightCache: @unchecked Sendable {
     /// `readBytes` is the tile stride the read charged to
     /// `deterministicBytesRead`; `residentBytes` is what holding the loaded form
     /// costs, which is larger by the scale expansion.
+    /// - Returns: whether this tier now holds these weights. False for an
+    ///   unpinned layer and for a refused fill — in both cases the caller's
+    ///   graph is still the only owner of the bytes, which is what decides
+    ///   whether its projection has to be forced before the loader returns.
+    ///   True also when the tensor was already held, because the tier owns it
+    ///   either way.
+    @discardableResult
     func fill(
         layer: Int, tensor: String, weights: BlockFP8Weights,
         readBytes: UInt64, residentBytes cost: UInt64
-    ) {
-        guard layers.contains(layer) else { return }
+    ) -> Bool {
+        guard layers.contains(layer) else { return false }
         let key = LayerTensor(layer: layer, tensor: tensor)
         lock.lock()
         defer { lock.unlock() }
-        guard blockFP8[key] == nil else { return }
+        guard blockFP8[key] == nil else { return true }
         guard admits(cost) else {
             refusedFillCount += 1
-            return
+            return false
         }
         blockFP8[key] = weights
         residentBytes = adding(cost, to: residentBytes)
         bytesLoaded = adding(readBytes, to: bytesLoaded)
         filledTensorCount += 1
+        return true
     }
 
     // MARK: Plain BF16/F32 tensors
@@ -232,23 +240,27 @@ final class DeepSeekV4PinnedWeightCache: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// - Returns: whether this tier now holds this array, on the same terms as
+    ///   the block-FP8 fill above.
+    @discardableResult
     func fill(
         layer: Int, tensor: String, array: MLXArray,
         readBytes: UInt64, residentBytes cost: UInt64
-    ) {
-        guard layers.contains(layer) else { return }
+    ) -> Bool {
+        guard layers.contains(layer) else { return false }
         let key = LayerTensor(layer: layer, tensor: tensor)
         lock.lock()
         defer { lock.unlock() }
-        guard floating[key] == nil else { return }
+        guard floating[key] == nil else { return true }
         guard admits(cost) else {
             refusedFillCount += 1
-            return
+            return false
         }
         floating[key] = array
         residentBytes = adding(cost, to: residentBytes)
         bytesLoaded = adding(readBytes, to: bytesLoaded)
         filledTensorCount += 1
+        return true
     }
 
     // MARK: Lifecycle

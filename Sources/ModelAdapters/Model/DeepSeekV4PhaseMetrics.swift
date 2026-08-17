@@ -228,6 +228,20 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     /// Sticky. Saturated event counts cannot prove a per-call rate either.
     public var eventAccountingOverflowed: Bool = false
 
+    // MARK: The census, added 2026-08-16
+
+    /// How often the pass stopped, by named site — nil unless
+    /// `MINIRUN_V4_EVAL_CENSUS` armed it.
+    ///
+    /// Strictly additive to everything above: it contributes to no seconds
+    /// term, participates in no accounting identity, and its absence is what
+    /// every record written before 2026-08-16 means. The terms above say where
+    /// the seconds went; this says how many times the GPU pipeline was drained
+    /// to produce them, which the seconds cannot show — a sync whose own
+    /// bracket is 0.1 ms still pushes the work pending behind it into whatever
+    /// bracket is open, usually the residual.
+    public var evalCensus: DeepSeekV4EvalCensus?
+
     public init() {}
 
     // MARK: Derived
@@ -364,6 +378,21 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             guard current >= previous else { return nil }
             result[keyPath: path] = current - previous
         }
+        // The census differences the same way the counts do, and fails the
+        // whole subtraction the same way: a pass whose census cannot be
+        // differenced is a pass whose accounting cannot be trusted either, and
+        // returning the seconds without the syncs would quietly hand back a
+        // half-measured pass. A run with the census off has nil at both ends
+        // and stays nil, which is not a failure.
+        switch (evalCensus, earlier.evalCensus) {
+        case (nil, nil):
+            result.evalCensus = nil
+        case (let current?, let previous?):
+            guard let difference = current.subtracting(previous) else { return nil }
+            result.evalCensus = difference
+        default:
+            return nil
+        }
         return result.isAccountingBalanced ? result : nil
     }
 
@@ -466,6 +495,11 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             sparseAttentionCount, lightningIndexerCount)
     }
 
+    /// The census line, when the run armed one. Separate from
+    /// ``summaryLine`` because it answers a different question and a record
+    /// written without the census must read exactly as it did before.
+    public var evalCensusLine: String? { evalCensus?.summaryLine }
+
     enum CodingKeys: String, CodingKey {
         case deterministicReadCount, tileDigestCount
         case tileDigestSkippedUnderAuthorityCount
@@ -485,6 +519,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         case routingSelectSeconds, sparseAttentionSeconds, lightningIndexerSeconds
         case expertIOWaitSeconds, expertGatherComputeSeconds
         case timingAccountingOverflowed, eventAccountingOverflowed
+        case evalCensus
         case attributedSeconds, unattributedSeconds, expertUnattributedSeconds
         case storageWaitSeconds, residualBracketSeconds, hostSyncSeconds
     }
@@ -558,6 +593,10 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             Bool.self, forKey: .timingAccountingOverflowed) ?? false
         eventAccountingOverflowed = try container.decodeIfPresent(
             Bool.self, forKey: .eventAccountingOverflowed) ?? false
+        // Absent means the census was not armed for that run — which is not
+        // "zero syncs", so it decodes to nil rather than to an empty table.
+        evalCensus = try container.decodeIfPresent(
+            DeepSeekV4EvalCensus.self, forKey: .evalCensus)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -603,6 +642,9 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(expertGatherComputeSeconds, forKey: .expertGatherComputeSeconds)
         try container.encode(timingAccountingOverflowed, forKey: .timingAccountingOverflowed)
         try container.encode(eventAccountingOverflowed, forKey: .eventAccountingOverflowed)
+        // Omitted entirely when the census was not armed, which is what every
+        // record written before it existed already says.
+        try container.encodeIfPresent(evalCensus, forKey: .evalCensus)
         // Derived, written so a reader of the JSON does not have to redo the
         // arithmetic — and never read back, so the two cannot disagree.
         try container.encode(attributedSeconds, forKey: .attributedSeconds)
@@ -696,7 +738,38 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
     private var sparseAttention = Bracket()
     private var lightningIndexer = Bracket()
 
-    public init() {}
+    /// How often the pass stopped, beside where its seconds went.
+    ///
+    /// It rides this object rather than being threaded separately because this
+    /// object is already at every site that could force a sync — that is what
+    /// made bracketing them possible in the first place. Off unless
+    /// `MINIRUN_V4_EVAL_CENSUS` armed it, and then it adds one branch per
+    /// recording site.
+    public let evalCensus: DeepSeekV4EvalCensusCounter
+
+    public convenience init() {
+        self.init(evalCensus: DeepSeekV4EvalCensusCounter())
+    }
+
+    /// Stated explicitly so a test can arm the census without reaching into
+    /// the process environment.
+    public init(evalCensus: DeepSeekV4EvalCensusCounter) {
+        self.evalCensus = evalCensus
+    }
+
+    /// One **blocking** host sync at `site`. Named `recordEval` to sit beside
+    /// the other `record…` calls; it charges no seconds to anything.
+    @inline(__always)
+    public func recordEval(_ site: DeepSeekV4EvalSite) {
+        evalCensus.record(site)
+    }
+
+    /// One **deferred** submission at `site` — an `MLX.asyncEval` that bounded
+    /// the graph without waiting for the GPU.
+    @inline(__always)
+    public func recordAsyncEval(_ site: DeepSeekV4EvalSite) {
+        evalCensus.recordAsync(site)
+    }
 
     public var snapshot: DeepSeekV4PhaseMetrics {
         lock.lock()
@@ -752,6 +825,10 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.eventAccountingOverflowed =
             metrics.eventAccountingOverflowed || tileDigestSkippedOverflowed
                 || pinnedServedOverflowed || packedFinitenessMemoOverflowed
+        // Nil when the census is off. Deliberately not folded into
+        // `eventAccountingOverflowed`: a saturated census says the sync counts
+        // are unusable, not that the seconds are.
+        metrics.evalCensus = evalCensus.snapshot
         return metrics
     }
 
@@ -927,5 +1004,9 @@ extension DeepSeekV4PhaseAccounting: RoutedExpertPhaseObserver {
         lock.lock()
         expertGatherCompute.add(nanoseconds)
         lock.unlock()
+    }
+
+    public func recordExpertGatherEval() {
+        recordEval(.expertGather)
     }
 }

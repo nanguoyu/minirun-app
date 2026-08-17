@@ -297,6 +297,17 @@ public enum DeepSeekV4RoutedExperts {
             throw DeepSeekV4Error.experts("token-by-expert work count overflows Int")
         }
 
+        // The earliest point at which every byte this layer's experts need is
+        // known: the router has already named the ids on the host, and `w1`,
+        // `w3` and `w2` are gathered over that same selection. Queuing all
+        // three schedules here, before the first gather is expressed, is what
+        // lets the reads for `w3` and `w2` proceed underneath the `w1`
+        // dispatch, the SwiGLU, and the shared expert instead of after them.
+        // A backend that holds its bytes, or a pager not configured for it,
+        // does nothing here.
+        try backend.prefetch(
+            layer: layer, projections: ExpertProjection.allCases, expertIds: expertIDs)
+
         var gate = try backend.gather(
             input, layer: layer, projection: .w1, expertIds: expertIDs
         ).asType(.float32)

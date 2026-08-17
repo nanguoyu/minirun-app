@@ -378,7 +378,8 @@ public enum DeepSeekV4CompressorPool {
         score: MLXArray,
         positionalBias: MLXArray,
         startPosition: Int,
-        state: State
+        state: State,
+        phaseAccounting: DeepSeekV4PhaseAccounting? = nil
     ) throws -> DecodeResult {
         guard startPosition > 0 else {
             throw DeepSeekV4Error.compression(
@@ -412,7 +413,13 @@ public enum DeepSeekV4CompressorPool {
         guard end.partialValue.isMultiple(of: state.ratio) else {
             // Decode replaces one row per token. Realising the fixed-size state
             // here prevents the replacement graph from growing with the turn.
-            MLX.eval([updatedValues, updatedScores])
+            //
+            // Deferred: `asyncEval` walks, encodes and commits the same graph a
+            // blocking `eval` would, and detaches every array on the tape, so
+            // the growth this exists to stop is stopped just as completely. No
+            // host value is read from either array, so nothing needs the wait.
+            phaseAccounting?.recordAsyncEval(.compressedState)
+            MLX.asyncEval([updatedValues, updatedScores])
             return DecodeResult(
                 compressed: nil,
                 state: State(
@@ -446,7 +453,12 @@ public enum DeepSeekV4CompressorPool {
         }
         let compressed = weightedPool(values: poolingValues, scores: poolingScores)
             .reshaped([1, state.headDimension])
-        MLX.eval([compressed, nextValues, nextScores])
+        // The boundary-token branch. Mutually exclusive with the one above, so
+        // a compressor contributes exactly one forcing point per decoded token
+        // whichever side of the ratio it lands on. Deferred for the reason
+        // above.
+        phaseAccounting?.recordAsyncEval(.compressedState)
+        MLX.asyncEval([compressed, nextValues, nextScores])
         return DecodeResult(
             compressed: compressed,
             state: State(
@@ -548,7 +560,8 @@ public enum DeepSeekV4LightningIndexer {
         try measuringPhase(phaseAccounting?.recordLightningIndexer(nanoseconds:)) {
             try selecting(
                 scores: scores, topK: topK, ratio: ratio,
-                startPosition: startPosition, offset: offset)
+                startPosition: startPosition, offset: offset,
+                phaseAccounting: phaseAccounting)
         }
     }
 
@@ -560,7 +573,8 @@ public enum DeepSeekV4LightningIndexer {
         topK: Int,
         ratio: Int,
         startPosition: Int,
-        offset: Int
+        offset: Int,
+        phaseAccounting: DeepSeekV4PhaseAccounting? = nil
     ) throws -> [[Int]] {
         guard scores.ndim == 2, scores.shape[0] > 0,
             topK > 0, ratio > 0, startPosition >= 0, offset >= 0
@@ -586,6 +600,9 @@ public enum DeepSeekV4LightningIndexer {
                 repeating: [], count: scores.shape[0])
         }
         let hostScores = scores.asType(.float32)
+        // Counted after the early returns above, so the census states the
+        // selections that actually pulled rather than the calls that entered.
+        phaseAccounting?.recordEval(.indexer)
         hostScores.eval()
         let values = hostScores.asArray(Float.self)
         guard values.allSatisfy({ !$0.isNaN }) else {

@@ -221,6 +221,17 @@ public protocol ArtifactVerificationLedger: Sendable {
     /// answer *this* caller's question is withheld and kept. See
     /// ``ArtifactRecordApplicability``.
     func record(matching lookup: ArtifactVerificationLookup) -> ArtifactVerificationRecord?
+    /// The stored positive record for this root, returned without asking
+    /// whether it answers any current question, and without mutating anything.
+    ///
+    /// This is deliberately narrow. It exists for one caller — ``ArtifactVerifier``,
+    /// deciding whether a file it is about to digest was already digested
+    /// against the same published digest at an earlier revision (ADR 0014) —
+    /// and it is never an answer to a UI or a runtime. Nothing here has been
+    /// checked against the filesystem; the verifier opens every file beneath
+    /// its rooted descriptor and matches the recorded physical identity before
+    /// it spends a single entry.
+    func carryForwardCandidate(rootPath: String) -> ArtifactVerificationRecord?
     func forget(rootPath: String)
 }
 
@@ -235,6 +246,10 @@ public extension ArtifactVerificationLedger {
     /// Old external conformers remain source-compatible, but their path-only
     /// records are not silently promoted to filesystem evidence.
     func record(matching lookup: ArtifactVerificationLookup) -> ArtifactVerificationRecord? { nil }
+
+    /// A conformer that does not implement this offers nothing to carry, which
+    /// is the behaviour every pass had before ADR 0014: read the whole plan.
+    func carryForwardCandidate(rootPath: String) -> ArtifactVerificationRecord? { nil }
 }
 
 public struct UserDefaultsVerificationLedger: ArtifactVerificationLedger {
@@ -369,6 +384,19 @@ public struct UserDefaultsVerificationLedger: ArtifactVerificationLedger {
         }
     }
 
+    public func carryForwardCandidate(rootPath: String) -> ArtifactVerificationRecord? {
+        guard let snapshot = snapshot(for: rootPath),
+            let decoded = try? MinirunKitJSON.decoder().decode(
+                ArtifactVerificationRecord.self, from: snapshot.data),
+            // A record needing migration is not trusted for anything, and this
+            // read deliberately does not perform the migration write: only the
+            // answering path above may mutate the ledger.
+            !decoded.needsEvidenceMigration,
+            decoded.state != .unverified, decoded.evidence != nil
+        else { return nil }
+        return decoded
+    }
+
     public func forget(rootPath: String) {
         Self.coordinationLock.lock()
         defer { Self.coordinationLock.unlock() }
@@ -439,6 +467,16 @@ public final class InMemoryVerificationLedger: ArtifactVerificationLedger, @unch
             guard storage[canonicalPath] == decoded else { return nil }
             return decoded
         }
+    }
+
+    public func carryForwardCandidate(rootPath: String) -> ArtifactVerificationRecord? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let decoded = storage[ArtifactVerificationPathIdentity.canonical(rootPath)],
+            !decoded.needsEvidenceMigration,
+            decoded.state != .unverified, decoded.evidence != nil
+        else { return nil }
+        return decoded
     }
 
     public func forget(rootPath: String) {

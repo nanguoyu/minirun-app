@@ -59,6 +59,43 @@ public struct RunKnobs: Sendable, Equatable, Codable {
     /// Capturing routing margins changes the thing being timed. A run with this
     /// on must not be quoted for tokens per second.
     public var captureRoutingMargins: Bool?
+    /// Start every projection's expert reads the moment the router names the
+    /// ids, instead of at each projection's own gather.
+    ///
+    /// A routed layer reads `w1`, `w3` and `w2` for the *same* selected
+    /// experts, so all three schedules are known at `routingSelect` and the
+    /// last two are being waited for later than they had to be. Turning this on
+    /// widens the pool the layer needs — the reads are in flight together — so
+    /// V4 refuses it rather than clamping when `expertPoolSlots` cannot cover
+    /// the widened window. K3 does not honour it: its router consumes the
+    /// layer's own hidden state, so there is nothing earlier to move it to.
+    public var expertProjectionPrefetch: Bool?
+    /// Keep one routed-expert backend per layer alive for the whole run,
+    /// sharing one pool, instead of building and destroying one per layer per
+    /// pass.
+    ///
+    /// It is a lifetime, not a width: the containers, the window and the gather
+    /// are unchanged. What changes is that readers and the pool are created
+    /// once rather than `layers x passes` times, and that a schedule issued for
+    /// a layer that has not started yet has somewhere to live. V4 honours it;
+    /// K3's expert backend is already run-scoped.
+    public var expertRunScopedBackends: Bool?
+    /// Tiles a layer that has not started yet may hold in the shared pool.
+    ///
+    /// Only reachable with ``expertRunScopedBackends``, and only useful where
+    /// ids are knowable early — in V4 that is the hash-routed layers, whose
+    /// experts are a table lookup on the token id. It widens the pool the run
+    /// needs by exactly this many slots, and V4 refuses rather than clamps when
+    /// ``expertPoolSlots`` cannot cover it.
+    public var expertCrossLayerPrefetch: Int?
+    /// Hand MLX the pager's own bytes instead of copying each tile into
+    /// MLX-owned arrays (ADR-0002).
+    ///
+    /// Adoption removes the per-tile `memmove`, and in exchange every tile in a
+    /// dispatch stays leased until MLX evaluates the graph — so the pool must
+    /// cover the gather width on top of the read-ahead windows. Refused, not
+    /// clamped, when it cannot.
+    public var expertTileAdoption: Bool?
 
     public init() {}
 
@@ -75,6 +112,10 @@ public struct RunKnobs: Sendable, Equatable, Codable {
         if logitChunkRows != nil { names.append("logitChunkRows") }
         if granularity != nil { names.append("granularity") }
         if captureRoutingMargins != nil { names.append("captureRoutingMargins") }
+        if expertProjectionPrefetch != nil { names.append("expertProjectionPrefetch") }
+        if expertRunScopedBackends != nil { names.append("expertRunScopedBackends") }
+        if expertCrossLayerPrefetch != nil { names.append("expertCrossLayerPrefetch") }
+        if expertTileAdoption != nil { names.append("expertTileAdoption") }
         return names
     }
 
@@ -108,6 +149,10 @@ public struct RunKnobs: Sendable, Equatable, Codable {
         if let value = mlxCacheLimitBytes, value < 0 {
             throw RunError.knobOutOfRange(
                 name: "mlxCacheLimitBytes", value: "\(value)", allowed: ">= 0")
+        }
+        if let value = expertCrossLayerPrefetch, value < 0 {
+            throw RunError.knobOutOfRange(
+                name: "expertCrossLayerPrefetch", value: "\(value)", allowed: ">= 0")
         }
         return self
     }

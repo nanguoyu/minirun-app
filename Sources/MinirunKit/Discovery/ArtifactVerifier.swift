@@ -317,11 +317,19 @@ public actor ArtifactVerifier {
         let treeIdentity = ArtifactDigestPlanIdentity.compute(published)
         // A pinned commit is immutable. If an explicit tree fetch nevertheless
         // returns different metadata, an earlier positive record is no longer
-        // attributable to the plan this verifier is about to use.
-        _ = ledger.record(
+        // attributable to the plan this verifier is about to use — and this
+        // call is what deletes it, before anything below could carry it.
+        let applicableRecord = ledger.record(
             matching: ArtifactVerificationLookup(
                 rootPath: artifact.rootPath, model: model, repository: repo,
                 index: artifact.index, currentTreeIdentity: treeIdentity))
+        // A record that already answers this lookup is not carried: the row is
+        // showing verified, so an operator pressing Verify is asking for the
+        // bytes to be read again, and they are. Everything else — a record
+        // about an earlier revision, or one withheld for any other reason — is
+        // a candidate, and is also the record a failed pass must not destroy.
+        let withheldRecord = applicableRecord == nil
+            ? ledger.carryForwardCandidate(rootPath: artifact.rootPath) : nil
 
         let selected = try Self.select(published, for: request)
         let selectedPlanIdentity = ArtifactDigestPlanIdentity.compute(selected)
@@ -405,6 +413,21 @@ public actor ArtifactVerifier {
             resumable = Dictionary(
                 saved.files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         }
+        // Evidence an earlier published revision of this repository already
+        // established, per file (ADR 0014). A model card rewritten upstream
+        // moves the pinned commit and therefore the whole plan identity, but it
+        // does not move one payload byte; without this, one edited README costs
+        // a K3 owner 1.56 TB of reading. `fromScratch` is the operator saying
+        // read it all again, and it is honoured here as well as for progress.
+        var carryForward: ArtifactCarryForwardPlan?
+        if resumption != .fromScratch, let withheldRecord {
+            carryForward = ArtifactCarryForwardPlan.make(
+                source: withheldRecord, model: model, repository: repo,
+                published: published, selected: selected,
+                persistentVolume: persistentVolume, rootIdentity: rootIdentity)
+        }
+        var carriedForwardCount = 0
+        var digestedCount = 0
         var matched: [ArtifactVerifiedFile] = []
 
         var ok: [String] = []
@@ -471,20 +494,30 @@ public actor ArtifactVerifier {
                     reason: ArtifactFilesystemEvidenceError.aliased(
                         path: file.path, firstPath: firstPath).description)
             }
-            // The whole of resumption. The digest is skipped only because it
-            // was already computed against an object whose durable identity —
-            // inode, size, and both nanosecond timestamps, on a volume whose
-            // UUID still matches — is the identity this descriptor reports now.
-            // Any rewrite, replacement or truncation moves one of those fields,
-            // and the file is hashed again.
-            if let saved = resumable[file.path],
-                saved.expectedSizeBytes == file.sizeBytes,
-                saved.digest == file.digest,
-                saved.isPayload == file.isPayload,
-                ArtifactFilesystemEvidence.durableIdentityMatches(
-                    current: before, stored: saved.filesystem,
-                    persistentVolume: persistentVolume)
-            {
+            // The whole of resumption, and of carry-forward. The digest is
+            // skipped only because it was already computed against an object
+            // whose durable identity — inode, size, and both nanosecond
+            // timestamps, on a volume whose UUID still matches — is the
+            // identity this descriptor reports now, *and* the published entry
+            // it was computed against is byte-for-byte the entry this plan
+            // names. Any rewrite, replacement or truncation moves one of those
+            // fields, and the file is hashed again.
+            //
+            // Interrupted progress is offered before an earlier revision's
+            // record only because it is the more recent observation of the same
+            // object; the two carry identical proof and either may be spent.
+            let offers: [(evidence: ArtifactVerifiedFile, isCarriedForward: Bool)] =
+                [resumable[file.path].map { ($0, false) },
+                 carryForward?.offered[file.path].map { ($0, true) }]
+                .compactMap { $0 }
+            if let accepted = offers.first(where: { offer in
+                offer.evidence.expectedSizeBytes == file.sizeBytes
+                    && offer.evidence.digest == file.digest
+                    && offer.evidence.isPayload == file.isPayload
+                    && ArtifactFilesystemEvidence.durableIdentityMatches(
+                        current: before, stored: offer.evidence.filesystem,
+                        persistentVolume: persistentVolume)
+            }) {
                 let carried = ArtifactVerifiedFile(
                     path: file.path, expectedSizeBytes: file.sizeBytes,
                     digest: file.digest, isPayload: file.isPayload,
@@ -492,6 +525,7 @@ public actor ArtifactVerifier {
                 ok.append(file.path)
                 verifiedFiles.append(carried)
                 matched.append(carried)
+                if accepted.isCarriedForward { carriedForwardCount += 1 }
                 bytesChecked = try Self.checkedAdding(
                     bytesChecked, file.sizeBytes,
                     context: "bytes checked after '\(file.path)'")
@@ -499,6 +533,7 @@ public actor ArtifactVerifier {
             }
 
             do {
+                digestedCount += 1
                 let digest = try await digestOffActor(
                     descriptor: descriptor, file: file)
                 let after = try ArtifactFilesystemEvidence.identity(
@@ -560,7 +595,9 @@ public actor ArtifactVerifier {
             bytesToRefetch: try Self.bytesToRefetch(
                 published,
                 paths: missing + wrongSize.map(\.path) + wrongDigest.map(\.path)
-                    + Array(unreadable.keys)))
+                    + Array(unreadable.keys)),
+            carryForward: carryForward?.summary(
+                carriedForward: carriedForwardCount, reread: digestedCount))
 
         // A failed check does not become a verified state, and it does not
         // silently leave the old one standing either: whatever was believed
@@ -623,11 +660,20 @@ public actor ArtifactVerifier {
                 throw Self.filesystemError(error, fallbackPath: root.path, changed: true)
             }
         }
-        ledger.record(
-            ArtifactVerificationRecord(
-                rootPath: artifact.rootPath, state: state, checkedAt: report.checkedAt,
-                detail: Self.sentence(report, request: request, selected: selected.count),
-                evidence: evidence))
+        // A failed pass replaces what was believed about these bytes — but only
+        // when what was believed was an answer to *this* question. A record
+        // about another published revision is not evidence about this one, and
+        // overwriting it here would mean an operator whose local model card is
+        // stale loses a terabyte of evidence to a 4 KB file, then has nothing
+        // to carry when they repair it. That record stays where the ledger put
+        // it: kept and withheld, so the row still reads unverified.
+        if report.isComplete || withheldRecord == nil {
+            ledger.record(
+                ArtifactVerificationRecord(
+                    rootPath: artifact.rootPath, state: state, checkedAt: report.checkedAt,
+                    detail: Self.sentence(report, request: request, selected: selected.count),
+                    evidence: evidence))
+        }
         if report.isComplete {
             // The durable record now covers every file the checkpoint held.
             // A pass that ended with faults keeps its progress instead: the
@@ -829,8 +875,13 @@ public actor ArtifactVerifier {
         case .full: scope = "every published file"
         case .spotCheck: scope = "\(selected) of the largest payload files"
         }
+        // One clause, appended to whichever sentence this is. A pass that read
+        // three files and stood on evidence for six hundred should say so in
+        // both directions: it is the answer to "why was that so fast", and to
+        // "what did you actually check just now".
+        let carried = report.carryForward?.sentence.map { " " + $0 } ?? ""
         if report.isComplete {
-            return "\(scope) matched the digests \(report.model) publishes."
+            return "\(scope) matched the digests \(report.model) publishes." + carried
         }
         var faults: [String] = []
         if !report.missing.isEmpty { faults.append("\(report.missing.count) missing") }
@@ -839,6 +890,6 @@ public actor ArtifactVerifier {
             faults.append("\(report.wrongDigest.count) with a wrong digest")
         }
         if !report.unreadable.isEmpty { faults.append("\(report.unreadable.count) unreadable") }
-        return "Checked \(scope): " + faults.joined(separator: ", ") + "."
+        return "Checked \(scope): " + faults.joined(separator: ", ") + "." + carried
     }
 }

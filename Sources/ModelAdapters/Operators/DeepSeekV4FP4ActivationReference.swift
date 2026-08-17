@@ -48,6 +48,7 @@ public enum DeepSeekV4FP4ActivationReference {
         // Guard-only, and a full sync — the same shape as the FP8 reference's,
         // and skipped under the same switch.
         if diagnostics.validateFiniteness {
+            phaseAccounting?.recordEval(.finitenessSweep)
             guard measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:), {
                 isFinite(blocked).all().item(Bool.self)
             }) else {

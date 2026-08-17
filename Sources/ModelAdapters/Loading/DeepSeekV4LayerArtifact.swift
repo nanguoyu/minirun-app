@@ -746,6 +746,34 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
         inFeatures: Int,
         cancellationCheck: () throws -> Void = {}
     ) throws -> BlockFP8Weights {
+        try loadBlockFP8Reporting(
+            tensor: tensor, outFeatures: outFeatures, inFeatures: inFeatures,
+            cancellationCheck: cancellationCheck
+        ).weights
+    }
+
+    /// One loaded block-FP8 matrix, and who owns the bytes behind it.
+    struct LoadedBlockFP8 {
+        let weights: BlockFP8Weights
+        /// True when the resident tier holds these weights for the rest of the
+        /// run — it served them, or this pass's fill took. False when this pass
+        /// is the only owner, so the transient allocation behind `weights` lives
+        /// exactly as long as the graph that references it.
+        let residentTierOwns: Bool
+    }
+
+    /// ``loadBlockFP8(tensor:outFeatures:inFeatures:cancellationCheck:)``, and
+    /// which tier ends up owning the result.
+    ///
+    /// The provenance is not a statistic. It decides whether the projection
+    /// built on these weights has to be forced before the loader returns — see
+    /// ``projectBlockFP8Reference(_:tensor:outFeatures:inFeatures:stream:cancellationCheck:)``.
+    func loadBlockFP8Reporting(
+        tensor: String,
+        outFeatures: Int,
+        inFeatures: Int,
+        cancellationCheck: () throws -> Void = {}
+    ) throws -> LoadedBlockFP8 {
         guard let record = matrices[tensor] else {
             throw DeepSeekV4Error.artifact("manifest has no FP8 tensor '\(tensor)'")
         }
@@ -768,7 +796,7 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             pinned.noteBlockFP8Served(readBytes: UInt64(layout.tileStride))
             readAccounting?.recordPinnedServed(UInt64(layout.tileStride))
             phaseAccounting?.recordPinnedServed()
-            return weights
+            return LoadedBlockFP8(weights: weights, residentTierOwns: true)
         }
         return try fileAccess.withDescriptor(record.reference) { descriptor in
             let actual = try Self.fileLength(descriptor, reference: record.reference)
@@ -849,22 +877,59 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             // The fill happens on the pass that read the bytes, so they are
             // already inside `deterministicBytesRead` and are recorded here as
             // loaded rather than served.
-            pinned?.fill(
+            //
+            // A fill that took makes the tier — not this graph — the owner of
+            // the adopted allocation from here on, which is the same position a
+            // served tensor is in. A refused fill leaves this pass the only
+            // owner, so the projection must still be forced.
+            let retained = pinned?.fill(
                 layer: layer, tensor: tensor, weights: weights,
                 readBytes: UInt64(layout.tileStride),
                 residentBytes: UInt64(layout.tileStride)
-                    + Self.expandedScaleBytes(layout))
-            return weights
+                    + Self.expandedScaleBytes(layout)) ?? false
+            return LoadedBlockFP8(weights: weights, residentTierOwns: retained)
         }
     }
 
     /// Read, digest-check, and execute one dynamic block-FP8 projection.
     ///
-    /// The result is evaluated before the function returns so the adopted tile
-    /// stays alive through GPU consumption and can then be released. This is a
-    /// bounded correctness path for layer bring-up; the product decoder must
-    /// replace its unfused activation reference before V4 is advertised as a
-    /// supported runtime.
+    /// ## Where this projection is evaluated, and why that is a decision
+    ///
+    /// This function used to end with `projected.eval()` unconditionally. The
+    /// reason was real but narrow: a tile *this pass adopted* is owned by the
+    /// `MLXArray` the pending graph holds, so the transient allocation behind it
+    /// cannot be released until that graph runs. Forcing here bounded the
+    /// loader's transient footprint at one matrix.
+    ///
+    /// It also made the model one graph per *matrix*. The 2026-08-16 census
+    /// counted 510 of those drains in a single decode pass — half of all 1,056
+    /// host syncs — and the seconds they cost land in the phase table's residual
+    /// where they read as arithmetic.
+    ///
+    /// So the force is now conditional on the thing that actually motivated it.
+    /// When the resident tier owns these weights — it served them, or this
+    /// pass's fill took and the tier holds them from here on — **no allocation
+    /// depends on this graph**, evaluating frees nothing, and the force is
+    /// skipped. When this pass is the tile's only owner the force stays exactly
+    /// where it was.
+    ///
+    /// That split is deliberate rather than conservative. Releasing a streamed
+    /// layer's tiles at the layer boundary instead would work, but it raises the
+    /// in-flight dense set from one matrix to a whole layer — ~140.8 MB at the
+    /// published geometry against a `transientExecutionBytes` envelope with
+    /// ~252 MB of margin, and at the 2 GB product scale *nothing* is pinned, so
+    /// every layer would be streamed at exactly the budget where that margin is
+    /// tightest. Spending it silently is what
+    /// `DeepSeekV4ProductMemoryBudget`'s stated-terms discipline exists to
+    /// prevent, so the wider release waits for the floor term that pays for it
+    /// (ADR 0015).
+    ///
+    /// The arithmetic is untouched either way: the same ops in the same order,
+    /// with only the point at which some of them are forced moved outward.
+    ///
+    /// This is still a bounded correctness path for layer bring-up; the product
+    /// decoder must replace its unfused activation reference before V4 is
+    /// advertised as a supported runtime.
     public func projectBlockFP8Reference(
         _ input: MLXArray,
         tensor: String,
@@ -875,17 +940,20 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
     ) throws -> MLXArray {
         try cancellationCheck()
         let output = try autoreleasepool { () throws -> MLXArray in
-            let weights = try loadBlockFP8(
+            let loaded = try loadBlockFP8Reporting(
                 tensor: tensor,
                 outFeatures: outFeatures,
                 inFeatures: inFeatures,
                 cancellationCheck: cancellationCheck)
             try cancellationCheck()
             let projected = try DeepSeekV4BlockFP8LinearReference.project(
-                input, weights: weights, stream: stream,
+                input, weights: loaded.weights, stream: stream,
                 phaseAccounting: phaseAccounting,
                 diagnostics: diagnostics)
-            projected.eval()
+            if !loaded.residentTierOwns {
+                phaseAccounting?.recordEval(.projection)
+                projected.eval()
+            }
             return projected
         }
         try cancellationCheck()
@@ -894,6 +962,10 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
 
     /// Read and execute the grouped V4 attention output projection while
     /// retaining at most the one validated `wo_a` tile.
+    ///
+    /// Forced only when this pass owns the tile, for the reason
+    /// ``projectBlockFP8Reference(_:tensor:outFeatures:inFeatures:stream:cancellationCheck:)``
+    /// gives.
     public func projectGroupedBlockFP8Reference(
         _ input: MLXArray,
         tensor: String,
@@ -905,7 +977,7 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
     ) throws -> MLXArray {
         try cancellationCheck()
         let output = try autoreleasepool { () throws -> MLXArray in
-            let weights = try loadBlockFP8(
+            let loaded = try loadBlockFP8Reporting(
                 tensor: tensor,
                 outFeatures: outFeatures,
                 inFeatures: inFeatures,
@@ -913,13 +985,16 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             try cancellationCheck()
             let projected = try DeepSeekV4BlockFP8LinearReference.projectGroupedOutput(
                 input,
-                weights: weights,
+                weights: loaded.weights,
                 groups: groups,
                 stream: stream,
                 cancellationCheck: cancellationCheck,
                 phaseAccounting: phaseAccounting,
                 diagnostics: diagnostics)
-            projected.eval()
+            if !loaded.residentTierOwns {
+                phaseAccounting?.recordEval(.projection)
+                projected.eval()
+            }
             return projected
         }
         try cancellationCheck()
@@ -935,6 +1010,26 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
         expectedShape: [Int],
         cancellationCheck: () throws -> Void = {}
     ) throws -> MLXArray {
+        try loadFloatingTensorReporting(
+            tensor: tensor, expectedDType: expectedDType,
+            expectedShape: expectedShape, cancellationCheck: cancellationCheck
+        ).array
+    }
+
+    /// One loaded plain tensor, and who owns the bytes behind it. The BF16
+    /// projection closures need the same ownership answer the block-FP8 path
+    /// does, and for the same reason.
+    struct LoadedFloatingTensor {
+        let array: MLXArray
+        let residentTierOwns: Bool
+    }
+
+    func loadFloatingTensorReporting(
+        tensor: String,
+        expectedDType: PlainDType,
+        expectedShape: [Int],
+        cancellationCheck: () throws -> Void = {}
+    ) throws -> LoadedFloatingTensor {
         guard let record = plain[tensor] else {
             throw DeepSeekV4Error.artifact("manifest has no plain tensor '\(tensor)'")
         }
@@ -952,7 +1047,7 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             pinned.noteFloatingServed(readBytes: record.bytes)
             readAccounting?.recordPinnedServed(record.bytes)
             phaseAccounting?.recordPinnedServed()
-            return array
+            return LoadedFloatingTensor(array: array, residentTierOwns: true)
         }
         let data = try read(record, cancellationCheck: cancellationCheck)
         let pointer = UnsafeMutableRawPointer.allocate(
@@ -961,13 +1056,16 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
         let array = MLXArray(
             rawPointer: pointer, record.shape, dtype: mlxDType,
             finalizer: { pointer.deallocate() })
+        // Only the unpinned path reaches here: a pinned tensor returned above
+        // without reading and without forcing anything.
+        phaseAccounting?.recordEval(.weightMaterialisation)
         array.eval()
         // The array keeps the member's own dtype, so a pinned plain tensor
         // costs exactly the bytes it stops reading.
-        pinned?.fill(
+        let retained = pinned?.fill(
             layer: layer, tensor: tensor, array: array,
-            readBytes: record.bytes, residentBytes: record.bytes)
-        return array
+            readBytes: record.bytes, residentBytes: record.bytes) ?? false
+        return LoadedFloatingTensor(array: array, residentTierOwns: retained)
     }
 
     /// Load a hash-routing table and narrow every I64 id explicitly. This is

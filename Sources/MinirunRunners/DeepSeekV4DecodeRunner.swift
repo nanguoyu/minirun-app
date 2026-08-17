@@ -26,6 +26,8 @@ public struct DeepSeekV4DecodeRunner: RunnerFacade {
     /// would make the recorded setting describe a different quantity.
     public static let knobs: Set<String> = [
         "expertReadAhead", "queueDepth", "expertPoolSlots",
+        "expertProjectionPrefetch",
+        "expertRunScopedBackends", "expertCrossLayerPrefetch", "expertTileAdoption",
         "mlxCacheLimitBytes", "logitChunkRows",
     ]
 
@@ -189,6 +191,18 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
     var expertReadAhead: Int
     var queueDepth: Int
     var expertPoolSlots: Int
+    /// Whether one routed layer's three projections are read as one window.
+    ///
+    /// Defaults to `false`, so a run that states nothing is byte-for-byte the
+    /// scheduling every record before 2026-08-17 measured.
+    var expertProjectionPrefetch: Bool
+    /// Whether every layer's expert backend lives for the run, over one shared
+    /// pool, instead of being built and destroyed inside each layer.
+    var expertRunScopedBackends: Bool
+    /// Tiles a not-yet-current layer may hold in that shared pool.
+    var expertCrossLayerPrefetch: Int
+    /// Whether the gather adopts the pager's bytes or copies them (ADR-0002).
+    var expertTileAdoption: Bool
     var mlxCacheLimitBytes: Int
     var logitChunkRows: Int
 
@@ -196,12 +210,39 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
     /// larger than this buys nothing V4 has evidence for, whatever the budget.
     static let maximumDefaultMLXCacheBytes: UInt64 = 512 << 20
 
+    /// The pager window a run gets when the operator states none. Set from the
+    /// 2026-08-17 expert-overlap arms: a gather names `expertsPerToken` = 6
+    /// regions, so a read-ahead of 6 is the whole demand-path window (12 was
+    /// no better); queue depth 4 lets that window drain concurrently; and with
+    /// projection prefetch on, all three projections' readers hold a window at
+    /// once, so the pool is 3 × 6 + 1 for the tile the consumer is waiting on.
+    /// Against 2/2/2 with prefetch off this took the expert I/O wait from 0.61
+    /// to 0.36 s per pass and the pass from 2.84 to 2.50 s (−11.9%), byte-
+    /// identical logits, 43/43 layers still pinned at 10.7 GB
+    /// (`docs/experiments/2026-08-17-v4-expert-overlap.md`).
+    static let defaultExpertReadAhead = 6
+    static let defaultQueueDepth = 4
+    static let defaultExpertProjectionPrefetch = true
+
     /// Copy transfer returns every pager lease before compute is expressed, so
-    /// the default pool is exactly the two-tile read-ahead window rather than
-    /// that window plus a graph-held operand slot as adoption requires. Named
+    /// the pool is exactly the read-ahead windows in flight rather than those
+    /// windows plus a graph-held operand slot as adoption requires. Named
     /// because the memory dial prices the expert-pool term with it before a
-    /// run exists to resolve knobs.
-    static let defaultExpertPoolSlots = 2
+    /// run exists to resolve knobs. 20 = 3 projections × read-ahead 6 + 1.
+    static let defaultExpertPoolSlots = 20
+
+    /// The backend lifetime, the cross-layer window, and the transfer mode a
+    /// run gets when the operator states none.
+    ///
+    /// All three keep the 2026-08-17 expert-overlap defaults: per-layer
+    /// backends, no cross-layer schedule, and `copy` transfer. They are stated
+    /// here so that a run that declares nothing is byte-for-byte — and pool-for
+    /// -pool — the configuration `docs/experiments/2026-08-17-v4-expert-overlap.md`
+    /// measured, and so that the lifetime record's arms differ from it in the
+    /// knob and in nothing else.
+    static let defaultExpertRunScopedBackends = false
+    static let defaultExpertCrossLayerPrefetch = 0
+    static let defaultExpertTileAdoption = false
 
     /// The MLX cache limit a run gets when the operator states none.
     ///
@@ -231,9 +272,16 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
         declaredBudgetBytes: UInt64
     ) throws -> DeepSeekV4EffectiveKnobs {
         let result = DeepSeekV4EffectiveKnobs(
-            expertReadAhead: knobs.expertReadAhead ?? 2,
-            queueDepth: knobs.queueDepth ?? 2,
+            expertReadAhead: knobs.expertReadAhead ?? defaultExpertReadAhead,
+            queueDepth: knobs.queueDepth ?? defaultQueueDepth,
             expertPoolSlots: knobs.expertPoolSlots ?? defaultExpertPoolSlots,
+            expertProjectionPrefetch: knobs.expertProjectionPrefetch
+                ?? defaultExpertProjectionPrefetch,
+            expertRunScopedBackends: knobs.expertRunScopedBackends
+                ?? defaultExpertRunScopedBackends,
+            expertCrossLayerPrefetch: knobs.expertCrossLayerPrefetch
+                ?? defaultExpertCrossLayerPrefetch,
+            expertTileAdoption: knobs.expertTileAdoption ?? defaultExpertTileAdoption,
             // A stated `mlxCacheLimitBytes` always wins, including an explicit
             // 0: §5.3 knobs are honoured, never silently overridden.
             mlxCacheLimitBytes: knobs.mlxCacheLimitBytes
@@ -254,15 +302,97 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
                 name: "expertPoolSlots", value: "\(result.expertPoolSlots)",
                 allowed: ">= expertReadAhead (\(result.expertReadAhead)) for copy transfer")
         }
+        // Prefetching the layer's whole routing decision means all three
+        // projections' readers hold a window at once, out of the one pool they
+        // share, while the consumer is still blocked inside the first gather.
+        // Refused here rather than clamped, and refused *before* 166 GB are
+        // verified: a run that had to narrow its own window would be recorded
+        // under a window it did not use (spec §12.3, §5.3).
+        // A cross-layer window has nowhere to live without run-scoped backends:
+        // the layer it would read for has no backend until it starts, and the
+        // backend that could have held the schedule is destroyed at the
+        // previous layer's boundary. Refused by name rather than ignored.
+        guard result.expertCrossLayerPrefetch == 0 || result.expertRunScopedBackends else {
+            throw RunError.knobOutOfRange(
+                name: "expertCrossLayerPrefetch",
+                value: "\(result.expertCrossLayerPrefetch)",
+                allowed: "0 unless expertRunScopedBackends is on; a per-layer backend "
+                    + "cannot hold a schedule for a layer that has not started")
+        }
+        if result.expertProjectionPrefetch || result.expertCrossLayerPrefetch > 0 {
+            let inLayer = result.expertProjectionPrefetch
+                ? projectionsPerRoutedLayer * result.expertReadAhead
+                : result.expertReadAhead
+            let required = inLayer + result.expertCrossLayerPrefetch + 1
+            guard result.expertPoolSlots >= required else {
+                throw RunError.knobOutOfRange(
+                    name: "expertPoolSlots", value: "\(result.expertPoolSlots)",
+                    allowed: ">= \(required), which is \(inLayer) in-layer tiles "
+                        + "(\(result.expertProjectionPrefetch ? projectionsPerRoutedLayer : 1) "
+                        + "reader(s) x expertReadAhead \(result.expertReadAhead)) + "
+                        + "\(result.expertCrossLayerPrefetch) cross-layer tiles + 1 for the "
+                        + "tile the consumer is waiting on")
+            }
+        }
+        // Adoption's own term — one dispatch's tiles held until MLX evaluates —
+        // is `expertsPerToken`, which is read from the verified config and is
+        // therefore not knowable here, before 166 GB are verified. It is
+        // enforced by `PagedRoutedExpertBackend.validatedReadAhead` at the
+        // moment the backend is built, which is still before the first expert
+        // byte is read and still a refusal rather than a clamp.
         return result
     }
 
-    var expertConfiguration: PagedRoutedExpertBackend.Configuration {
+    /// `w1`, `w3`, `w2` — the projections one routed layer reads for the same
+    /// selected experts, and therefore the number of pager readers a prefetched
+    /// layer keeps busy at once.
+    static let projectionsPerRoutedLayer = ExpertProjection.allCases.count
+
+    /// The routed-expert backend configuration, gathering `tilesPerDispatch`
+    /// tiles per dispatch.
+    ///
+    /// ## Why the width is a parameter rather than 1
+    ///
+    /// At V4's geometry a routed tile holds exactly one expert, so a decode
+    /// token's top-`k` routing selects `k` distinct tiles. With
+    /// `tilesPerDispatch: 1` the loop issued **one `gatherQuantizedMM` per
+    /// tile**, each producing a full `[tokens, slots, out]` result that was then
+    /// folded in with `which` — `k` kernels, `k` merges and `k` host syncs to
+    /// compute what one kernel over the concatenated `k`-expert stack computes
+    /// directly. That is the whole of the gap the 2026-08-16 census measured:
+    /// 6.04 ms per gather in the pass against a 0.89 ms kernel floor measured at
+    /// the same published shape, where the floor probe issues exactly one
+    /// dispatch over a 6-expert stack.
+    ///
+    /// Passing the model's own `expertsPerToken` therefore makes a decode gather
+    /// one dispatch, which is the shape the floor was measured at. It is not a
+    /// new program: `gatherOverTiles` has carried both widths since the batched
+    /// path was added, both backends are given the same value so paged and
+    /// resident arms cannot drift, and the equivalence is asserted by
+    /// `MLXBridgeTests.BatchedGatherEquivalenceTests` and arm-against-arm by
+    /// `PagedExpertGatherTests`.
+    ///
+    /// ## What it costs
+    ///
+    /// Nothing in pager slots. `transferMode: .copy` releases each lease inside
+    /// `copyOut`, before the loop asks for its next tile, so the pool bound
+    /// stays `readAhead <= slotCount` and ``defaultExpertPoolSlots`` is
+    /// unchanged. What it does hold is MLX-owned bytes: `tilesPerDispatch`
+    /// copied tiles plus the one concatenated stack built from them, so the
+    /// gather's transient peak is `2 * tilesPerDispatch * tileStride` against
+    /// the single tile a width of 1 held. That term is priced in ADR 0015
+    /// against the envelope ``DeepSeekV4ProductMemoryBudget/transientExecutionBytes``
+    /// already states.
+    func expertConfiguration(
+        tilesPerDispatch: Int
+    ) -> PagedRoutedExpertBackend.Configuration {
         PagedRoutedExpertBackend.Configuration(
             slotCount: expertPoolSlots, queueDepth: queueDepth,
             readAhead: expertReadAhead, noCache: false,
-            slotAcquireTimeout: 60, tilesPerDispatch: 1,
-            transferMode: .copy)
+            slotAcquireTimeout: 60, tilesPerDispatch: tilesPerDispatch,
+            transferMode: expertTileAdoption ? .adopt : .copy,
+            prefetchProjections: expertProjectionPrefetch,
+            crossLayerPrefetchTiles: expertCrossLayerPrefetch)
     }
 
     /// Where this run reclaims. A zero cache limit recycles nothing, so it
@@ -281,6 +411,10 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
         result.expertReadAhead = expertReadAhead
         result.queueDepth = queueDepth
         result.expertPoolSlots = expertPoolSlots
+        result.expertProjectionPrefetch = expertProjectionPrefetch
+        result.expertRunScopedBackends = expertRunScopedBackends
+        result.expertCrossLayerPrefetch = expertCrossLayerPrefetch
+        result.expertTileAdoption = expertTileAdoption
         result.mlxCacheLimitBytes = mlxCacheLimitBytes
         result.logitChunkRows = logitChunkRows
         return result
@@ -291,9 +425,14 @@ struct DeepSeekV4EffectiveKnobs: Sendable, Equatable {
             "expertReadAhead": "\(expertReadAhead)",
             "queueDepth": "\(queueDepth)",
             "expertPoolSlots": "\(expertPoolSlots)",
+            "expertProjectionPrefetch": "\(expertProjectionPrefetch)",
+            "expertRunScopedBackends": "\(expertRunScopedBackends)",
+            "expertCrossLayerPrefetch": "\(expertCrossLayerPrefetch)",
             "mlxCacheLimitBytes": "\(mlxCacheLimitBytes)",
             "logitChunkRows": "\(logitChunkRows)",
-            "expertTransferMode": BufferTransferMode.copy.rawValue,
+            "expertTransferMode":
+                (expertTileAdoption ? BufferTransferMode.adopt : BufferTransferMode.copy)
+                .rawValue,
         ]
     }
 }

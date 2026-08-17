@@ -749,7 +749,9 @@ public enum DeepSeekV4HashWindowBlock {
             multiplicity: geometry.hyperConnectionMultiplicity,
             iterations: geometry.hyperConnectionSinkhornIterations,
             epsilon: geometry.hyperConnectionEpsilon,
-            normEpsilon: geometry.rmsNormEpsilon)
+            normEpsilon: geometry.rmsNormEpsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let attentionInput = K3Norm.rms(
             attentionPrepared.input, weight: plain.attentionNorm,
             eps: geometry.rmsNormEpsilon)
@@ -829,7 +831,8 @@ public enum DeepSeekV4HashWindowBlock {
         if let decodePositionLimit {
             let cache = makeWindowCache(
                 keyValues, windowSize: geometry.slidingWindow)
-            MLX.eval([ffn.residual, cache])
+            phaseAccounting?.recordAsyncEval(.blockCache)
+            MLX.asyncEval([ffn.residual, cache])
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -879,7 +882,9 @@ public enum DeepSeekV4HashWindowBlock {
             multiplicity: geometry.hyperConnectionMultiplicity,
             iterations: geometry.hyperConnectionSinkhornIterations,
             epsilon: geometry.hyperConnectionEpsilon,
-            normEpsilon: geometry.rmsNormEpsilon)
+            normEpsilon: geometry.rmsNormEpsilon,
+            phaseAccounting: phaseAccounting,
+            diagnostics: diagnostics)
         let attentionInput = K3Norm.rms(
             attentionPrepared.input,
             weight: plain.attentionNorm,
@@ -968,7 +973,8 @@ public enum DeepSeekV4HashWindowBlock {
             geometry: geometry,
             artifactIdentity: artifactIdentity,
             windowKeyValues: windowCache)
-        MLX.eval([ffn.residual, windowCache])
+        phaseAccounting?.recordAsyncEval(.blockCache)
+        MLX.asyncEval([ffn.residual, windowCache])
         try cancellationCheck()
         return DecodeResult(
             residual: ffn.residual,

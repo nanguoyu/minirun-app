@@ -711,7 +711,12 @@ final class InstalledModels {
                 // not report success merely because it returned a complete
                 // digest report: prove the exact record can already be read
                 // back while the security scope and rooted fd are still live.
-                if self.verificationOperation == nil {
+                //
+                // Only for a complete report. A failed pass deliberately does
+                // not overwrite a positive record about another published
+                // revision (ADR 0014), so there may be nothing new to read
+                // back — and there is no success being claimed to prove.
+                if self.verificationOperation == nil, verificationReport.isComplete {
                     guard let model = remapped.artifact.model,
                         let repository = self.catalog.descriptor(model)?.source.repo,
                         let record = self.ledger.record(
@@ -746,7 +751,8 @@ final class InstalledModels {
                     body: verificationReport.isComplete
                         ? Self.verifiedSummary(
                             artifact: target, progress: self.verificationProgress,
-                            files: verificationReport.ok.count)
+                            files: verificationReport.ok.count,
+                            carryForward: verificationReport.carryForward)
                         : sentence,
                     isFailure: !verificationReport.isComplete)
             } catch is CancellationError {
@@ -876,8 +882,15 @@ final class InstalledModels {
     /// "1.56 TB, 470 files" — the two numbers that say which pass this was.
     private static func verifiedSummary(
         artifact: DiscoveredArtifact, progress: ArtifactVerificationProgress?,
-        files: Int
+        files: Int, carryForward: ArtifactCarryForwardSummary? = nil
     ) -> String {
+        // A pass that carried evidence forward read a few files, not a
+        // terabyte. Saying "1.56 TB, 631 files" would be a claim about this
+        // pass that this pass did not make.
+        if let carryForward, carryForward.carriedForward > 0 {
+            return "\(MRFormat.grouped(carryForward.reread)) re-read, "
+                + "\(MRFormat.grouped(carryForward.carriedForward)) carried forward"
+        }
         let bytes = progress?.bytesToCheck ?? artifact.bytesOnDisk
         return "\(MRFormat.measuredBytes(bytes)), \(MRFormat.grouped(files)) files"
     }

@@ -205,9 +205,24 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
     private let readAccounting: DeepSeekV4ReadAccounting
     private let phaseAccounting: DeepSeekV4PhaseAccounting
     private let configuration: DeepSeekV4Config
+    /// How many routed-expert tiles one gather dispatch covers.
+    ///
+    /// Read from the model's own `expertsPerToken`, because at V4's geometry a
+    /// tile holds one expert and a decode token selects exactly that many: the
+    /// width that turns a decode gather into a single dispatch. See
+    /// ``DeepSeekV4EffectiveKnobs/expertConfiguration(tilesPerDispatch:)`` for
+    /// why it is not 1 and what it costs.
+    private let expertGatherTilesPerDispatch: Int
     /// Captured at shutdown so the metrics survive the artifact being released,
     /// exactly as the terminal read accounting is.
     private var releasedPinnedTierMetrics: DeepSeekV4PinnedTierMetrics?
+    /// Every layer's expert backend, alive for the run over one shared pool.
+    /// Nil for the per-layer lifetime, which is the default and every record
+    /// before this one.
+    private var expertResidency: DeepSeekV4RunExpertBackends?
+    /// The hash-routed layers and their token tables, built once the artifact
+    /// has read them, so a pass can name their experts before it starts.
+    private var hashRoutedLayers: [DeepSeekV4RunExpertBackends.HashRoutedLayer] = []
 
     init(
         artifact: DeepSeekV4ModelArtifact,
@@ -245,6 +260,16 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
         self.readAccounting = artifact.readAccounting
         self.phaseAccounting = artifact.phaseAccounting
         self.configuration = artifact.plan.config
+        // Refused rather than clamped, like every other width this run states:
+        // a config that routes to no experts describes no gather, and silently
+        // substituting 1 would reintroduce the per-tile dispatch this width
+        // exists to remove without saying so anywhere.
+        guard artifact.plan.config.expertsPerToken >= 1 else {
+            throw RunError.artifactNotReady(
+                "the V4 config routes each token to \(artifact.plan.config.expertsPerToken) "
+                    + "experts; a routed-expert gather needs at least one")
+        }
+        self.expertGatherTilesPerDispatch = artifact.plan.config.expertsPerToken
     }
 
     var readAccountingSnapshot: DeepSeekV4ReadAccountingSnapshot? {
@@ -309,11 +334,20 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
         let result = try artifact.prefillGenerationSession(
             tokenIDs: tokenIDs,
             decodePositionLimit: decodePositionLimit,
-            expertConfiguration: knobs.expertConfiguration,
+            expertConfiguration: knobs.expertConfiguration(
+                tilesPerDispatch: expertGatherTilesPerDispatch),
             logitChunkRows: knobs.logitChunkRows,
             control: control,
             onLayerCompleted: onLayerCompleted)
         generationSession = result.session
+        // After prefill, because that is when the hash layers' `tid2eid`
+        // tables have been read and retained. Building the plan here therefore
+        // re-reads nothing; before prefill it would have pulled three tables
+        // off the drive that the prefill was about to pull anyway.
+        if knobs.expertCrossLayerPrefetch > 0 {
+            hashRoutedLayers = artifact.hashRoutedExpertPlan(
+                cancellationCheck: cancellationCheck)
+        }
         return DeepSeekV4WorkloadStep(
             tokenID: result.greedyTokenID, logits: result.logits,
             completedLayers: result.completedLayers)
@@ -328,10 +362,19 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
             throw RunError.artifactNotReady(
                 "V4 decode has no admitted artifact and prefill state")
         }
+        // The one point in a decode pass at which the next token id is known
+        // and no layer has run: everything a hash-routed layer will read is a
+        // table lookup away, and queueing it here is the whole of the
+        // cross-layer dividend. Costs nothing when the window is 0.
+        if let expertResidency {
+            try expertResidency.beginPass(
+                tokenID: tokenID, hashRoutedLayers: hashRoutedLayers)
+        }
         let result = try artifact.decode(
             tokenID: tokenID,
             session: generationSession,
-            expertConfiguration: knobs.expertConfiguration,
+            expertConfiguration: knobs.expertConfiguration(
+                tilesPerDispatch: expertGatherTilesPerDispatch),
             logitChunkRows: knobs.logitChunkRows,
             control: control,
             onLayerCompleted: onLayerCompleted)
@@ -351,6 +394,12 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
         control.cancel(reason: "V4 workload teardown")
         generationSession?.release()
         generationSession = nil
+        // The pool and 129 readers are the largest thing a run-scoped
+        // residency holds; a run that finished must not still hold them.
+        control.installExpertResidency(nil)
+        expertResidency?.shutdown()
+        expertResidency = nil
+        hashRoutedLayers = []
         // Pinned weights are the largest allocation a stated run holds, and a
         // run that finished should not still be holding them. The metrics are
         // captured first; the arrays do not survive.
@@ -367,8 +416,37 @@ final class DeepSeekV4ArtifactWorkload: DeepSeekV4RunWorkload {
         if !beganExecution {
             MLX.Memory.cacheLimit = knobs.mlxCacheLimitBytes
             Self.reclaimTransientMemory()
+            try installExpertResidencyIfStated()
             beganExecution = true
         }
+    }
+
+    /// Build the run's one expert residency, if the run asked for it.
+    ///
+    /// Built here rather than in `init` for one reason that matters: the pool
+    /// it allocates is the stated `expertPoolBudgetBytes`, and that term has to
+    /// be *reserved before the memory dial plans* — which has already happened
+    /// by the time the first pass runs and has not by the time the workload is
+    /// constructed. Same bytes either way; this ordering is the one where the
+    /// dial never sees a pool it did not price.
+    private func installExpertResidencyIfStated() throws {
+        guard knobs.expertRunScopedBackends, expertResidency == nil,
+            let artifact
+        else { return }
+        let residency = try artifact.makeRunScopedExpertBackends(
+            configuration: knobs.expertConfiguration(
+                tilesPerDispatch: expertGatherTilesPerDispatch))
+        // The one accounting check that matters: a residency that shared no
+        // pool would have multiplied a reserved term by the layer count.
+        guard UInt64(residency.poolBudgetBytes) == expertPoolBudgetBytes else {
+            residency.shutdown()
+            throw RunError.artifactNotReady(
+                "the run-scoped expert residency reserved "
+                    + "\(residency.poolBudgetBytes) B against the "
+                    + "\(expertPoolBudgetBytes) B the memory plan priced")
+        }
+        expertResidency = residency
+        control.installExpertResidency(residency)
     }
 
     private static func reclaimTransientMemory() {

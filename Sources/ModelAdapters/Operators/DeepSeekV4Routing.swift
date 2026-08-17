@@ -106,7 +106,8 @@ public enum DeepSeekV4Router {
                 expertCount: expertCount,
                 expertsPerToken: expertsPerToken,
                 normalizeSelectedWeights: normalizeSelectedWeights,
-                routingScale: routingScale)
+                routingScale: routingScale,
+                phaseAccounting: phaseAccounting)
         }
     }
 
@@ -116,7 +117,8 @@ public enum DeepSeekV4Router {
         expertCount: Int,
         expertsPerToken: Int,
         normalizeSelectedWeights: Bool,
-        routingScale: Float
+        routingScale: Float,
+        phaseAccounting: DeepSeekV4PhaseAccounting?
     ) throws -> Selection {
         guard logits.ndim == 2, logits.shape[1] == expertCount else {
             throw DeepSeekV4Error.routing(
@@ -134,7 +136,41 @@ public enum DeepSeekV4Router {
         }
 
         let scores = sqrt(K3Activation.softplus(logits.asType(.float32)))
-        scores.eval()
+
+        // Both host values this selection needs are built *before* either is
+        // pulled, so the round trip that delivers them is one.
+        //
+        // Learned routing reads two arrays: the sqrt-softplus scores become the
+        // weights, and the bias-ranked scores decide the choice. Expressing the
+        // ranked score after forcing the plain one made it a second graph, and
+        // a second graph after a drain is a second GPU round trip — 40 of the
+        // 43 layers paid one every pass for nothing but statement order. The
+        // shape guard therefore moves up to here, which is the only observable
+        // difference: a call whose bias has the wrong shape *and* whose scores
+        // are non-finite now reports the shape first. Both are configuration
+        // errors that abort the pass, and both messages are unchanged.
+        let ranked: MLXArray?
+        switch choice {
+        case .learned(let correctionBias):
+            guard correctionBias.ndim == 1, correctionBias.shape[0] == expertCount else {
+                throw DeepSeekV4Error.routing(
+                    "correction bias must be [\(expertCount)], got \(correctionBias.shape)")
+            }
+            ranked = scores + correctionBias.asType(.float32)
+        case .tokenHash:
+            ranked = nil
+        }
+
+        // One sync, however many arrays it delivers: the `asArray` calls below
+        // copy arrays this `eval` has already materialised, so they wait for
+        // nothing. This is the pass's irreducible per-layer stop — the pager
+        // cannot name a tile until these ids exist on the host.
+        phaseAccounting?.recordEval(.routingSelect)
+        if let ranked {
+            MLX.eval([scores, ranked])
+        } else {
+            scores.eval()
+        }
         let values = scores.asArray(Float.self)
         guard values.allSatisfy(\.isFinite) else {
             throw DeepSeekV4Error.routing("sqrt-softplus produced a non-finite score")
@@ -145,13 +181,13 @@ public enum DeepSeekV4Router {
         let scoresForChoice: MLXArray?
         let margins: [Double]?
         switch choice {
-        case .learned(let correctionBias):
-            guard correctionBias.ndim == 1, correctionBias.shape[0] == expertCount else {
+        case .learned:
+            // Built from this same case a few statements above. The guard
+            // states that invariant instead of forcing it.
+            guard let ranked else {
                 throw DeepSeekV4Error.routing(
-                    "correction bias must be [\(expertCount)], got \(correctionBias.shape)")
+                    "learned routing reached selection without a biased score")
             }
-            let ranked = scores + correctionBias.asType(.float32)
-            ranked.eval()
             let rankedValues = ranked.asArray(Float.self)
             guard rankedValues.allSatisfy(\.isFinite) else {
                 throw DeepSeekV4Error.routing("biased selection score is non-finite")

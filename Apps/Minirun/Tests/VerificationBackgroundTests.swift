@@ -164,6 +164,9 @@ private final class FrontmostFlag {
 private final class VerificationDriver: @unchecked Sendable {
     enum Outcome {
         case matched
+        /// Matched, having spent an earlier revision's evidence for all but a
+        /// few files — what an edited model card produces (ADR 0014).
+        case matchedCarryingForward
         case wrongDigest
         case refused(String)
     }
@@ -231,6 +234,15 @@ private final class VerificationDriver: @unchecked Sendable {
                 job: DownloadJobID(), model: model, depth: .digestEverything,
                 checkedAt: Date(), ok: ["global/embed_tokens.bin"], missing: [],
                 wrongSize: [], wrongDigest: [], unreadable: [:], extraneous: [])
+        case .matchedCarryingForward:
+            return VerificationReport(
+                job: DownloadJobID(), model: model, depth: .digestEverything,
+                checkedAt: Date(), ok: ["global/embed_tokens.bin"], missing: [],
+                wrongSize: [], wrongDigest: [], unreadable: [:], extraneous: [],
+                carryForward: ArtifactCarryForwardSummary(
+                    sourceRevision: String(repeating: "c", count: 40),
+                    sourceState: .fullyVerified, carriedForward: 627, reread: 3,
+                    newFiles: 0, removedFiles: 0))
         case .wrongDigest:
             return VerificationReport(
                 job: DownloadJobID(), model: model, depth: .digestEverything,
@@ -591,5 +603,25 @@ final class VerificationBackgroundTests: XCTestCase {
         driver.release()
         await verification.value
         XCTAssertTrue(scope.isReleased, "and released once, when the pass ends")
+    }
+
+    func testACarriedForwardPassSaysWhatItReadAndWhatItStoodOn() async throws {
+        driver.outcome = .matchedCarryingForward
+        frontmost.value = false
+        let artifact = try await registeredArtifact()
+        let verification = Task { await installed.verify(artifact, .full) }
+        try await driver.waitUntilStarted()
+        driver.release()
+        await verification.value
+
+        let outcome = try XCTUnwrap(installed.verificationOutcome[artifact.rootPath])
+        XCTAssertTrue(
+            outcome.hasSuffix("3 files re-read, 627 carried forward from the previous revision."),
+            "the row says why a terabyte finished in seconds: \(outcome)")
+        let announcement = try XCTUnwrap(announcer.announcements.last)
+        XCTAssertFalse(announcement.isFailure)
+        XCTAssertEqual(
+            announcement.body, "3 re-read, 627 carried forward",
+            "and the notification does not claim a terabyte was read")
     }
 }
