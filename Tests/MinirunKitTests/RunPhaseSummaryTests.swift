@@ -184,6 +184,67 @@ final class RunPhaseSummaryTests: XCTestCase {
         XCTAssertEqual(RunPhaseTermName.displayName(for: ""), "")
     }
 
+    /// The word a screen says for the GPU boundary, and the sentence under it.
+    ///
+    /// The sentence is the load-bearing part. "Routing" naming 0.38 s of a
+    /// 2.3 s pass was true arithmetic and a false impression, and the fix has
+    /// two halves: the seconds moved to ``RunPhaseTermName/gpuWait``, and the
+    /// two terms it moved out of now say so where a reader can see it.
+    func testTheGPUBoundaryTermsAreNamedAndExplained() throws {
+        XCTAssertEqual(
+            RunPhaseTermName.displayName(for: RunPhaseTermName.gpuWait),
+            "Waiting for the GPU")
+        XCTAssertEqual(
+            RunPhaseTermName.displayName(for: RunPhaseTermName.gpuSubmit),
+            "Submitting work to the GPU")
+
+        let wait = try XCTUnwrap(RunPhaseTermName.description(for: RunPhaseTermName.gpuWait))
+        XCTAssertTrue(wait.contains("blocking eval"))
+        // It must not read as one operation's arithmetic, which is the exact
+        // mistake the old labels invited.
+        XCTAssertTrue(wait.contains("queue draining"))
+
+        for name in [RunPhaseTermName.routingSelect, RunPhaseTermName.lightningIndexer] {
+            let text = try XCTUnwrap(RunPhaseTermName.description(for: name))
+            XCTAssertTrue(
+                text.contains("Waiting for the GPU"),
+                "\(name) must point at the term its wait moved to, got: \(text)")
+        }
+        // A term this build has never heard of gets no invented sentence.
+        XCTAssertNil(RunPhaseTermName.description(for: "kvCacheRebuild"))
+    }
+
+    /// The accounting identity survives the two new terms: a summary carrying
+    /// them still sums to its pass with the residual, and the residual shrinks
+    /// by exactly what they name.
+    func testTheGPUBoundaryTermsKeepTheAccountingIdentity() throws {
+        let terms = [
+            RunPhaseTerm(name: RunPhaseTermName.expertIOWait, seconds: 0.48, count: 774),
+            RunPhaseTerm(name: RunPhaseTermName.routingSelect, seconds: 0.004, count: 43),
+            RunPhaseTerm(name: RunPhaseTermName.lightningIndexer, seconds: 0.002, count: 21),
+            RunPhaseTerm(name: RunPhaseTermName.gpuWait, seconds: 0.54, count: 96),
+            RunPhaseTerm(name: RunPhaseTermName.gpuSubmit, seconds: 0.31, count: 225),
+        ]
+        let summary = RunPhaseSummary(
+            passKind: .decode, passIndex: 12, passSeconds: 2.34, terms: terms)
+
+        XCTAssertTrue(summary.isBalanced)
+        XCTAssertEqual(summary.attributedSeconds, 1.336, accuracy: 1e-9)
+        XCTAssertEqual(
+            summary.orderedTermsWithResidual.reduce(0) { $0 + $1.seconds },
+            2.34,
+            accuracy: 1e-9)
+        // Largest first, so the bar and the legend agree: the wait outranks
+        // the two terms it was taken out of, which is the whole point.
+        let ordered = summary.orderedTermsWithResidual.map(\.name)
+        XCTAssertEqual(ordered.first, RunPhaseTermName.gpuWait)
+        XCTAssertEqual(ordered[1], RunPhaseTermName.expertIOWait)
+        XCTAssertEqual(ordered.last, RunPhaseTermName.unattributed)
+        XCTAssertLessThan(
+            try XCTUnwrap(ordered.firstIndex(of: RunPhaseTermName.gpuWait)),
+            try XCTUnwrap(ordered.firstIndex(of: RunPhaseTermName.routingSelect)))
+    }
+
     /// The record written before terms could sit beside a pass, and before an
     /// aggregate could state a pass count.
     func testAnOlderRecordDecodesWithTheMeaningItWasWrittenUnder() throws {

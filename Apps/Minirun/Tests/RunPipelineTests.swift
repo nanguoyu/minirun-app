@@ -17,13 +17,14 @@ import iOSBench
 final class RunPipelineTests: XCTestCase {
 
     private func request(
+        model: ModelID = .kimiK3,
         budget: UInt64 = CatalogFixtures.k3ProductMinimumBudget,
         tokens: Int = 1,
         knobs: RunKnobs = RunKnobs(),
         scope: StorageScope? = nil
     ) -> RunRequest {
         RunRequest(
-            model: .kimiK3,
+            model: model,
             artifact: ArtifactReference(
                 root: URL(fileURLWithPath: "/tmp/k3"), scope: scope),
             prompt: .tokenIDs([17529]), memoryBudgetBytes: budget,
@@ -387,6 +388,60 @@ final class RunPipelineTests: XCTestCase {
             XCTAssertGreaterThan(summary.passSeconds, 0)
             XCTAssertNotNil(summary.seconds(of: RunPhaseTermName.expertIOWait))
         }
+        controller.clear()
+    }
+
+    /// "Where the time went" must name the GPU wait, and the rows the panel
+    /// draws must still sum to the pass.
+    ///
+    /// Both halves matter. Before the wait had a term, the panel's top four
+    /// read `Routing 0.38 s` and `Indexer 0.21 s` for a host sort and a top-k
+    /// costing milliseconds each — arithmetic that summed correctly and told
+    /// the reader the wrong thing about what to fix.
+    func testTheDecodeSplitNamesTheGPUWaitAndStillSumsToThePass() async throws {
+        let controller = RunController()
+        let ended = expectation(description: "turn ended")
+        controller.onTurnEnded = { _ in ended.fulfill() }
+        let runner = MockDecodeRunner(
+            entry: CatalogFixtures.deepseekV4Flash, reviewSeconds: 1.5)
+        let tokens = min(3, DeepSeekV4ProductMemoryBudget.maximumNewTokens)
+        controller.start(
+            runner: runner,
+            request: request(
+                model: .deepseekV4Flash,
+                budget: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes,
+                tokens: tokens),
+            linkCeiling: nil,
+            layerCount: 4, storedBytesPerLayer: 1, widenedBytesPerLayer: 2)
+
+        await fulfillment(of: [ended], timeout: 30)
+        let decode = try XCTUnwrap(controller.snapshot.decodePhaseAggregate)
+
+        XCTAssertTrue(decode.isBalanced)
+        let wait = try XCTUnwrap(decode.seconds(of: RunPhaseTermName.gpuWait))
+        XCTAssertGreaterThan(wait, 0)
+        XCTAssertEqual(
+            RunPhaseTermName.displayName(for: RunPhaseTermName.gpuWait),
+            "Waiting for the GPU")
+
+        // The accounting identity, read exactly as the bar draws it: every
+        // slice including the residual, summing to the pass.
+        XCTAssertEqual(
+            decode.orderedTermsWithResidual.reduce(0) { $0 + $1.seconds },
+            decode.passSeconds,
+            accuracy: 1e-9)
+
+        // The legend shows the four largest named terms. The wait must be in
+        // them and must outrank the two terms it was taken out of, or the
+        // panel would still be pointing at the router.
+        let legend = decode.orderedTermsWithResidual
+            .filter { $0.name != RunPhaseTermName.unattributed }
+            .prefix(4)
+            .map(\.name)
+        XCTAssertTrue(legend.contains(RunPhaseTermName.gpuWait), "legend was \(legend)")
+        XCTAssertFalse(legend.contains(RunPhaseTermName.routingSelect), "legend was \(legend)")
+        XCTAssertFalse(
+            legend.contains(RunPhaseTermName.lightningIndexer), "legend was \(legend)")
         controller.clear()
     }
 

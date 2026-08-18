@@ -99,8 +99,8 @@ targets:
         SWIFT_VERSION: "5.0"
         MACOSX_DEPLOYMENT_TARGET: "15.0"
         ENABLE_HARDENED_RUNTIME: "YES"
-        CURRENT_PROJECT_VERSION: "2026081701"
-        MARKETING_VERSION: "0.3"
+        CURRENT_PROJECT_VERSION: "2026081801"
+        MARKETING_VERSION: "0.4"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: "NO"
 
@@ -137,6 +137,11 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
+        # Export compliance.  The app ships no cryptography of its own: it
+        # fetches over HTTPS through the system's TLS and verifies with SHA-256,
+        # which is a hash rather than encryption.  Declaring the exemption here
+        # means App Store Connect never asks the question per upload.
+        ITSAppUsesNonExemptEncryption: false
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UISupportedInterfaceOrientations:
@@ -168,9 +173,13 @@ targets:
         GENERATE_INFOPLIST_FILE: "NO"
         SWIFT_VERSION: "5.0"
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
-        TARGETED_DEVICE_FAMILY: "1,2"
-        CURRENT_PROJECT_VERSION: "2026081701"
-        MARKETING_VERSION: "0.3"
+        # iPhone only, which is what the product claims (iPhone 15 Pro or later,
+        # a USB 3 port, a powered dock). An iPad build would have to support all
+        # four orientations or declare full-screen for App Store validation, and
+        # nothing here has been run on an iPad. Widen this when it has.
+        TARGETED_DEVICE_FAMILY: "1"
+        CURRENT_PROJECT_VERSION: "2026081801"
+        MARKETING_VERSION: "0.4"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS: "NO"
 

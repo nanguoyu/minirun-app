@@ -132,14 +132,29 @@ final class DeepSeekV4ProductGateTests: XCTestCase {
                     authority: authority, promptIDs: promptIDs,
                     maximumNewTokens: memoryTokens,
                     configuration: configuration)
-                XCTAssertEqual(plateau.summary.tokenIDs.count, memoryTokens)
+                // The arm asks for `memoryTokens` and the engine stops early only
+                // at end-of-sentence, which it records as the last id. The
+                // reference completion (ADR 0018) reaches it at 38 of 40, so a
+                // shorter arm is the model finishing, not a pass going missing —
+                // provided the id that ended it is the one the vocabulary calls
+                // end-of-sentence.
+                let endOfSentenceID = try vocabulary.id(
+                    for: DeepSeekV4ChatControl.endOfSentence.rawValue)
+                let generated = plateau.summary.tokenIDs.count
+                if generated < memoryTokens {
+                    XCTAssertEqual(
+                        plateau.summary.tokenIDs.last, endOfSentenceID,
+                        "the arm generated \(generated) of \(memoryTokens) tokens without ending at end-of-sentence")
+                } else {
+                    XCTAssertEqual(generated, memoryTokens)
+                }
                 XCTAssertEqual(
                     Array(plateau.summary.tokenIDs.prefix(configuration.expectedTokenIDs.count)),
                     configuration.expectedTokenIDs,
                     "the longer lifecycle arm diverged before the reference prefix")
                 try assertDecodeMemoryPlateau(
                     plateau.telemetry,
-                    expectedDecodePasses: memoryTokens - 1,
+                    expectedDecodePasses: generated - 1,
                     declaredBudgetBytes: configuration.memoryBudgetBytes)
                 try assertScaleMemoryContract(
                     plateau.resultJSON, arm: "memory-plateau",

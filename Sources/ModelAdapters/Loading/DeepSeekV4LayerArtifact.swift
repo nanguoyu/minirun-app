@@ -835,7 +835,10 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
                 // The whole single-tile matrix is re-hashed on every load. The
                 // 2026-08-15 gate measured that at 45.1 s of a 58.2 s V4 decode
                 // pass, which is why the other policy exists.
-                try measuringPhase(phaseAccounting?.recordTileDigest(nanoseconds:)) {
+                try measuringPhase(
+                    phaseAccounting,
+                    excludingGPUBoundaryFrom: phaseAccounting?.recordTileDigest(nanoseconds:)
+                ) {
                     try QuantizedTileContainer.verifyTileDigest(tile, layout: layout, tile: 0)
                 }
             case .trustHeldAuthority:
@@ -851,7 +854,8 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             // it is so it keeps measuring whatever adoption still costs.
             let finiteness = self.packedFinitenessCheck(for: tensor)
             let weights = try measuringPhase(
-                phaseAccounting?.recordTileAdoption(nanoseconds:)
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?.recordTileAdoption(nanoseconds:)
             ) {
                 try BlockFP8Weights.adopting(
                     packedPointer: allocation,
@@ -951,8 +955,9 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
                 phaseAccounting: phaseAccounting,
                 diagnostics: diagnostics)
             if !loaded.residentTierOwns {
-                phaseAccounting?.recordEval(.projection)
-                projected.eval()
+                waitingForGPU(phaseAccounting, .projection) {
+                    projected.eval()
+                }
             }
             return projected
         }
@@ -992,8 +997,9 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
                 phaseAccounting: phaseAccounting,
                 diagnostics: diagnostics)
             if !loaded.residentTierOwns {
-                phaseAccounting?.recordEval(.projection)
-                projected.eval()
+                waitingForGPU(phaseAccounting, .projection) {
+                    projected.eval()
+                }
             }
             return projected
         }
@@ -1058,8 +1064,9 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
             finalizer: { pointer.deallocate() })
         // Only the unpinned path reaches here: a pinned tensor returned above
         // without reading and without forcing anything.
-        phaseAccounting?.recordEval(.weightMaterialisation)
-        array.eval()
+        waitingForGPU(phaseAccounting, .weightMaterialisation) {
+            array.eval()
+        }
         // The array keeps the member's own dtype, so a pinned plain tensor
         // costs exactly the bytes it stops reading.
         let retained = pinned?.fill(
@@ -1256,7 +1263,10 @@ public final class DeepSeekV4LayerArtifact: @unchecked Sendable {
         readAccounting: DeepSeekV4ReadAccounting?,
         phaseAccounting: DeepSeekV4PhaseAccounting?
     ) throws {
-        try measuringPhase(phaseAccounting?.recordDeterministicRead(nanoseconds:)) {
+        try measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordDeterministicRead(nanoseconds:)
+        ) {
             try readChunks(
                 descriptor: descriptor, reference: reference,
                 offset: offset, length: length, destination: destination,

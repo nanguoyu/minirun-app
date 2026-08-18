@@ -18,7 +18,10 @@ import MLX
 /// nobody had measured the total.
 enum DeepSeekV4TransientMemory {
     static func reclaim(recordingTo phaseAccounting: DeepSeekV4PhaseAccounting? = nil) {
-        measuringPhase(phaseAccounting?.recordReclaim(nanoseconds:)) {
+        measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordReclaim(nanoseconds:)
+        ) {
             MLX.Memory.clearCache()
             _ = malloc_zone_pressure_relief(nil, 0)
         }
@@ -782,16 +785,18 @@ extension DeepSeekV4ModelArtifact {
                 "generation state requires at least one model layer")
         }
         var residual = initialResidual
-        phaseAccounting?.recordAsyncEval(.passBoundary)
-        MLX.asyncEval([residual])
+        submittingToGPU(phaseAccounting, .passBoundary) {
+            MLX.asyncEval([residual])
+        }
         var states = [State]()
         states.reserveCapacity(layers.count)
         for (offset, layer) in layers.enumerated() {
             try cancellationCheck()
             let next = try autoreleasepool {
                 let result = try execute(offset, layer, residual)
-                phaseAccounting?.recordAsyncEval(.layerBoundary)
-                MLX.asyncEval([result.residual])
+                submittingToGPU(phaseAccounting, .layerBoundary) {
+                    MLX.asyncEval([result.residual])
+                }
                 return result
             }
             residual = next.residual
@@ -837,8 +842,9 @@ extension DeepSeekV4ModelArtifact {
                 "bounded generation replacement requires one state per model layer")
         }
         var residual = initialResidual
-        phaseAccounting?.recordAsyncEval(.passBoundary)
-        MLX.asyncEval([residual])
+        submittingToGPU(phaseAccounting, .passBoundary) {
+            MLX.asyncEval([residual])
+        }
         do {
             for (offset, layer) in layers.enumerated() {
                 try cancellationCheck()
@@ -852,8 +858,9 @@ extension DeepSeekV4ModelArtifact {
                     // and returns immediately; the census counts the *forcing
                     // point*, which is one, and the inner site is commented
                     // rather than counted.
-                    phaseAccounting?.recordAsyncEval(.layerBoundary)
-                    MLX.asyncEval([result.residual])
+                    submittingToGPU(phaseAccounting, .layerBoundary) {
+                        MLX.asyncEval([result.residual])
+                    }
                     return result
                 }
                 states[offset] = next.state
@@ -984,14 +991,16 @@ extension DeepSeekV4ModelArtifact {
         onLayerCompleted: (_ completed: Int, _ total: Int) -> Void
     ) throws -> MLXArray {
         var residual = initialResidual
-        phaseAccounting?.recordAsyncEval(.passBoundary)
-        MLX.asyncEval([residual])
+        submittingToGPU(phaseAccounting, .passBoundary) {
+            MLX.asyncEval([residual])
+        }
         for (offset, layer) in layers.enumerated() {
             try cancellationCheck()
             residual = try autoreleasepool {
                 let next = try execute(layer, residual)
-                phaseAccounting?.recordAsyncEval(.layerBoundary)
-                MLX.asyncEval([next])
+                submittingToGPU(phaseAccounting, .layerBoundary) {
+                    MLX.asyncEval([next])
+                }
                 return next
             }
             // Evaluated activations remain live. Only recyclable command and
@@ -1305,7 +1314,10 @@ extension DeepSeekV4ModelArtifact {
         successfulReadObserver: (@Sendable (UInt64) -> Void)?,
         phaseAccounting: DeepSeekV4PhaseAccounting?
     ) throws -> PagedRoutedExpertBackend {
-        try measuringPhase(phaseAccounting?.recordExpertBackendBuild(nanoseconds:)) {
+        try measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordExpertBackendBuild(nanoseconds:)
+        ) {
             try PagedRoutedExpertBackend(
                 containers: containers,
                 configuration: configuration,
@@ -1320,7 +1332,10 @@ extension DeepSeekV4ModelArtifact {
         _ backend: PagedRoutedExpertBackend,
         recordingTo phaseAccounting: DeepSeekV4PhaseAccounting?
     ) {
-        measuringPhase(phaseAccounting?.recordExpertBackendShutdown(nanoseconds:)) {
+        measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordExpertBackendShutdown(nanoseconds:)
+        ) {
             backend.shutdown()
         }
     }

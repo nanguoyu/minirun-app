@@ -1051,8 +1051,9 @@ public enum DeepSeekV4CompressedIndexedBlock {
                     // Forced only when this pass owns the bytes: see
                     // `DeepSeekV4LayerArtifact.projectBlockFP8Reference`.
                     if !loaded.residentTierOwns {
-                        artifact.phaseAccounting?.recordEval(.projection)
-                        projected.eval()
+                        waitingForGPU(artifact.phaseAccounting, .projection) {
+                            projected.eval()
+                        }
                     }
                     return projected
                 }

@@ -71,9 +71,10 @@ final class UnsuspendedVerificationWork: VerificationBackgroundWork {
     /// checkpoints every completed file, so it becomes a pause.
     ///
     /// The identifier follows the shape the framework header requires: the
-    /// bundle id, semantic context, and a unique final component, registered
-    /// once through the matching `.*` wildcard. `Info-iOS.plist` lists that
-    /// wildcard under `BGTaskSchedulerPermittedIdentifiers`; no
+    /// bundle id, semantic context, and a unique final component, each one
+    /// registered by name before it is submitted. `Info-iOS.plist` permits them
+    /// through the matching `.*` wildcard under
+    /// `BGTaskSchedulerPermittedIdentifiers`; no
     /// `UIBackgroundModes` entry is involved, because a continued-processing
     /// task is a foreground-initiated assertion rather than a background launch.
     @available(iOS 26.0, *)
@@ -84,7 +85,6 @@ final class UnsuspendedVerificationWork: VerificationBackgroundWork {
         static let identifierPrefix = "wang.wangdongdong.minirun.verification"
         static var permittedIdentifier: String { identifierPrefix + ".*" }
 
-        private static var registeredHandler = false
         private static weak var current: ContinuedProcessingVerificationWork?
 
         private var task: BGContinuedProcessingTask?
@@ -106,11 +106,24 @@ final class UnsuspendedVerificationWork: VerificationBackgroundWork {
         ) -> Bool {
             guard !isRunning else { return true }
             refusal = nil
-            registerLaunchHandlerIfNeeded()
-            Self.current = self
 
             let identifier =
                 Self.identifierPrefix + "." + UUID().uuidString.prefix(8).lowercased()
+            // Registered by its exact name, immediately before it is submitted.
+            // `submit` raises an Objective-C exception — not a Swift error — when
+            // no launch handler covers the identifier, and that exception ends
+            // the process. Registering the `.*` wildcard once was enough on
+            // iOS 26; on the iOS 27 seed the phone runs, `submit` reported "no
+            // launch handler registered" for an identifier under a registered
+            // wildcard and the app died on Verify all files. A handler under
+            // the exact name cannot be missed by any matching rule, and the
+            // framework's own return value says whether it took it: a `false`
+            // is a refusal shown to the operator, never a submission.
+            guard Self.registerLaunchHandler(for: identifier) else {
+                refusal = "the system did not accept a background handler for this verification"
+                return false
+            }
+            Self.current = self
             let request = BGContinuedProcessingTaskRequest(
                 identifier: identifier, title: title, subtitle: subtitle)
             // `.fail` rather than `.queue`. A queued request runs when the
@@ -166,14 +179,14 @@ final class UnsuspendedVerificationWork: VerificationBackgroundWork {
 
         // MARK: - System callbacks
 
-        private func registerLaunchHandlerIfNeeded() {
-            // Registering the same identifier twice terminates the app, and a
-            // continued-processing handler is explicitly exempt from the
-            // register-before-launch-finishes rule, so this is done once here
-            // rather than at startup for a feature most launches never use.
-            guard !Self.registeredHandler else { return }
-            Self.registeredHandler = BGTaskScheduler.shared.register(
-                forTaskWithIdentifier: Self.permittedIdentifier, using: .main
+        /// One handler per submitted identifier. Continued-processing handlers
+        /// are exempt from the register-before-launch-finishes rule, and each
+        /// identifier is unique, so registering here — rather than at startup
+        /// for a feature most launches never use — neither collides nor
+        /// terminates. Returns what the framework returned.
+        private static func registerLaunchHandler(for identifier: String) -> Bool {
+            BGTaskScheduler.shared.register(
+                forTaskWithIdentifier: identifier, using: .main
             ) { task in
                 MainActor.assumeIsolated {
                     guard let continuation = task as? BGContinuedProcessingTask else {

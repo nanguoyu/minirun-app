@@ -48,10 +48,15 @@ public enum DeepSeekV4FP4ActivationReference {
         // Guard-only, and a full sync — the same shape as the FP8 reference's,
         // and skipped under the same switch.
         if diagnostics.validateFiniteness {
-            phaseAccounting?.recordEval(.finitenessSweep)
-            guard measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:), {
-                isFinite(blocked).all().item(Bool.self)
-            }) else {
+            guard measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:),
+                {
+                    waitingForGPU(phaseAccounting, .finitenessSweep) {
+                        isFinite(blocked).all().item(Bool.self)
+                    }
+                }) else {
                 throw DeepSeekV4Error.attention(
                     "FP4 activation input contains a non-finite value")
             }
@@ -60,7 +65,8 @@ public enum DeepSeekV4FP4ActivationReference {
         // What is left inside the bracket is graph construction: the scale is
         // chosen where the maxima are, with no host round trip.
         let scales = measuringPhase(
-            phaseAccounting?.recordActivationScaleSync(nanoseconds:)
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordActivationScaleSync(nanoseconds:)
         ) {
             exactPowerOfTwoScales(
                 MLX.abs(blocked).max(axis: -1), blockedShape: blockedShape)

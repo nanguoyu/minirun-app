@@ -418,8 +418,9 @@ public enum DeepSeekV4CompressorPool {
             // blocking `eval` would, and detaches every array on the tape, so
             // the growth this exists to stop is stopped just as completely. No
             // host value is read from either array, so nothing needs the wait.
-            phaseAccounting?.recordAsyncEval(.compressedState)
-            MLX.asyncEval([updatedValues, updatedScores])
+            submittingToGPU(phaseAccounting, .compressedState) {
+                MLX.asyncEval([updatedValues, updatedScores])
+            }
             return DecodeResult(
                 compressed: nil,
                 state: State(
@@ -457,8 +458,9 @@ public enum DeepSeekV4CompressorPool {
         // a compressor contributes exactly one forcing point per decoded token
         // whichever side of the ratio it lands on. Deferred for the reason
         // above.
-        phaseAccounting?.recordAsyncEval(.compressedState)
-        MLX.asyncEval([compressed, nextValues, nextScores])
+        submittingToGPU(phaseAccounting, .compressedState) {
+            MLX.asyncEval([compressed, nextValues, nextScores])
+        }
         return DecodeResult(
             compressed: compressed,
             state: State(
@@ -557,7 +559,10 @@ public enum DeepSeekV4LightningIndexer {
         offset: Int,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil
     ) throws -> [[Int]] {
-        try measuringPhase(phaseAccounting?.recordLightningIndexer(nanoseconds:)) {
+        try measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordLightningIndexer(nanoseconds:)
+        ) {
             try selecting(
                 scores: scores, topK: topK, ratio: ratio,
                 startPosition: startPosition, offset: offset,
@@ -566,8 +571,14 @@ public enum DeepSeekV4LightningIndexer {
     }
 
     /// The selection itself. It is a separate function so the bracket above is
-    /// exactly its scope: the `eval`/`asArray` sync and the host top-k, and
-    /// therefore also whatever deferred index graph that sync forces.
+    /// exactly its scope: the `asArray` and the host top-k.
+    ///
+    /// It used to be the scope of the *wait* too — "and therefore also whatever
+    /// deferred index graph that sync forces", which was an honest description
+    /// of a term that had stopped meaning "indexer". Since the graph-bounding
+    /// evals were deferred (2026-08-17) this is one of the two points a layer
+    /// blocks at, so what it forces is the layer, not the index; that wait is
+    /// `DeepSeekV4PhaseMetrics.gpuWaitSeconds`.
     private static func selecting(
         scores: MLXArray,
         topK: Int,
@@ -602,8 +613,11 @@ public enum DeepSeekV4LightningIndexer {
         let hostScores = scores.asType(.float32)
         // Counted after the early returns above, so the census states the
         // selections that actually pulled rather than the calls that entered.
-        phaseAccounting?.recordEval(.indexer)
-        hostScores.eval()
+        // The bracket is the `eval` alone: by the time it returns the array is
+        // materialised and the `asArray` below waits for nothing.
+        waitingForGPU(phaseAccounting, .indexer) {
+            hostScores.eval()
+        }
         let values = hostScores.asArray(Float.self)
         guard values.allSatisfy({ !$0.isNaN }) else {
             throw DeepSeekV4Error.indexing("lightning-index score contains NaN")
@@ -636,6 +650,97 @@ public enum DeepSeekV4LightningIndexer {
 /// The sink has no value vector: it can absorb probability mass but contributes
 /// zero to the numerator. Treating it as another KV row is therefore wrong.
 public enum DeepSeekV4SparseAttention {
+
+    /// Whether the head loop is expressed as one batched graph instead of one
+    /// graph per head.
+    ///
+    /// **On by default since 2026-08-17, by the owner's decision, and this
+    /// comment used to say the opposite.** What it said was that batching must
+    /// stay off until an arm showed the 40-token digest unmoved. The arm was
+    /// taken and the digest *moved*; the decision was made anyway, on grounds
+    /// the earlier comment had not considered, and
+    /// `docs/adr/0018-v4-batched-heads-and-the-reference-digest.md` is the
+    /// record.
+    ///
+    /// The reason the digest moves is measured rather than assumed
+    /// (`docs/experiments/2026-08-17-v4-batched-heads-logits.md`). The two
+    /// forms compute the same equation with different *reduction shapes*, and a
+    /// float32 sum is not associative: `sum(kv * query, axis: -1)` over
+    /// `[rows, dimension]` and `sum(kv * queries, axis: -1)` over
+    /// `[heads, rows, dimension]` reduce the same 512 products per row in
+    /// whatever order mlx's kernel picks for that shape. At the operator the
+    /// gap is **2.4e-7** of the attention output's own magnitude, and a
+    /// double-precision oracle shows *neither* form is the wrong one — the
+    /// suite below asserts both of those. It arrives at the output head as
+    /// whole logits only because **20% of the MoE layer-calls then select a
+    /// different set of experts**: past that point the two forms are not the
+    /// same arithmetic rounded differently, they are different weights.
+    ///
+    /// That is why this is a decision and not a tolerance. What the product
+    /// promises is that the answer does not depend on the *memory budget*, and
+    /// the batched form is budget-independent exactly as the loop was —
+    /// `docs/experiments/2026-08-17-v4-batched-heads-default.md` re-takes the
+    /// whole budget ladder to show it. It does not promise agreement with a
+    /// digest recorded before an arithmetic change, and no engine offers that:
+    /// batch-size-dependent numerics are the norm everywhere this kind of
+    /// kernel is written.
+    ///
+    /// The prize: `docs/experiments/2026-08-17-v4-mlx-dispatch.md` measures the
+    /// loop below at ~1,450 MLX primitives per layer against 43 layers — the
+    /// largest single family in a decode pass, larger than everything the FP8
+    /// rewrite removed — and `docs/experiments/2026-08-17-v4-dispatch-cuts.md`
+    /// measures the pass falling 2.08 → 1.57 s with it batched, −24%.
+    ///
+    /// `MINIRUN_V4_BATCH_HEADS=0` restores the per-head loop. That is the
+    /// escape hatch, and it is also the historical control arm: with it set,
+    /// the stated 40-token gate still reproduces the *superseded* reference
+    /// digest `4ef788685175bec5bcd7487b6b7a05e099a722aa2d05ffe0d4696bcc0ed97dc3`
+    /// over 40 ids. The **current** reference digest is not repeated here on
+    /// purpose — ADR 0018 §Decision 4 keeps it in two places, the ADR and the
+    /// bisect script, so that changing it is an amendment rather than an edit.
+    /// Anything other than an exact `0` — including the variable being absent —
+    /// is batched, and the test beside this says so.
+    public static let batchesHeadsByDefault = resolvesBatching(
+        in: ProcessInfo.processInfo.environment)
+
+    static func resolvesBatching(in environment: [String: String]) -> Bool {
+        environment["MINIRUN_V4_BATCH_HEADS"] != "0"
+    }
+
+    /// Whether the shared MQA gather is taken once per token instead of once
+    /// per head.
+    ///
+    /// **A property of the loop path only.** ``forward`` passes this to
+    /// ``expressing`` and to nothing else: the batched form gathers once per
+    /// token by construction, so with ``batchesHeadsByDefault`` on — the
+    /// default since 2026-08-17 — this flag has no effect at all. It matters
+    /// exactly when `MINIRUN_V4_BATCH_HEADS=0` puts the loop back, which is
+    /// what the control arm and the same-binary `main` reproduction below do.
+    ///
+    /// **On**: every head in a token's loop gathered the *same* rows with the
+    /// *same* indices, so
+    /// hoisting the gather out of the loop hands all 64 heads one array instead
+    /// of 64 equal ones. No reduction changes shape, no operand changes value,
+    /// and mlx's own CSE could not do it because each iteration built a fresh
+    /// index array (`docs/experiments/2026-08-17-v4-mlx-dispatch.md` §2, "the
+    /// finding within the finding"). It is the part of the batching prototype
+    /// that is bit-identical by construction, and
+    /// ``DeepSeekV4SparseAttentionBatchingTests`` runs the loop both ways to
+    /// show it rather than to assert it.
+    ///
+    /// `MINIRUN_V4_HOIST_GATHER=0` restores the per-head gather. That is the
+    /// escape hatch, and it is also what makes a same-binary reproduction of
+    /// the pre-batching `main` possible: with `MINIRUN_V4_BATCH_HEADS=0`,
+    /// `MINIRUN_V4_HOIST_GATHER=0` and `MINIRUN_V4_COMPILE=0` set together,
+    /// this file builds the graph that `main` built before either change,
+    /// primitive for primitive.
+    public static let hoistsSharedGatherByDefault = resolvesHoist(
+        in: ProcessInfo.processInfo.environment)
+
+    static func resolvesHoist(in environment: [String: String]) -> Bool {
+        environment["MINIRUN_V4_HOIST_GATHER"] != "0"
+    }
+
     /// The bracket around this call states what it costs to *express* the
     /// per-head graph — the head loop below forces nothing, so the arithmetic
     /// it describes is charged to whichever later sync evaluates it.
@@ -645,12 +750,22 @@ public enum DeepSeekV4SparseAttention {
         sinks: MLXArray,
         indices: [[Int]],
         scale: Float,
+        batchingHeads: Bool = batchesHeadsByDefault,
+        hoistingSharedGather: Bool = hoistsSharedGatherByDefault,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil
     ) throws -> MLXArray {
-        try measuringPhase(phaseAccounting?.recordSparseAttention(nanoseconds:)) {
-            try expressing(
-                queries: queries, keysAndValues: keysAndValues, sinks: sinks,
-                indices: indices, scale: scale)
+        try measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordSparseAttention(nanoseconds:)
+        ) {
+            batchingHeads
+                ? try expressingBatched(
+                    queries: queries, keysAndValues: keysAndValues, sinks: sinks,
+                    indices: indices, scale: scale)
+                : try expressing(
+                    queries: queries, keysAndValues: keysAndValues, sinks: sinks,
+                    indices: indices, scale: scale,
+                    hoistingSharedGather: hoistingSharedGather)
         }
     }
 
@@ -659,7 +774,8 @@ public enum DeepSeekV4SparseAttention {
         keysAndValues: MLXArray,
         sinks: MLXArray,
         indices: [[Int]],
-        scale: Float
+        scale: Float,
+        hoistingSharedGather: Bool
     ) throws -> MLXArray {
         guard queries.ndim == 3, queries.shape[0] > 0, queries.shape[1] > 0,
             queries.shape[2] > 0,
@@ -687,6 +803,14 @@ public enum DeepSeekV4SparseAttention {
                 }
                 return index
             }
+            // The gather every head in this token's loop shares. Taken once
+            // when hoisted, and once per head when not: the two forms differ in
+            // *how many times* the same rows are gathered with the same
+            // indices, and in nothing else.
+            let sharedRows: MLXArray? =
+                hoistingSharedGather && !valid.isEmpty
+                ? keysAndValues.take(MLXArray(valid), axis: 0).asType(.float32)
+                : nil
             var headOutputs = [MLXArray]()
             headOutputs.reserveCapacity(queries.shape[1])
             for head in 0..<queries.shape[1] {
@@ -695,7 +819,8 @@ public enum DeepSeekV4SparseAttention {
                         MLXArray.zeros([queries.shape[2]], dtype: .float32))
                     continue
                 }
-                let kv = keysAndValues.take(MLXArray(valid), axis: 0).asType(.float32)
+                let kv =
+                    sharedRows ?? keysAndValues.take(MLXArray(valid), axis: 0).asType(.float32)
                 let query = queries[token, head, 0...].asType(.float32)
                 let attentionScores = sum(kv * query, axis: -1) * scale
                 let sink = sinks[head].asType(.float32)
@@ -708,6 +833,88 @@ public enum DeepSeekV4SparseAttention {
                     sum(kv * exponentials[.ellipsis, .newAxis], axis: 0) / denominator)
             }
             tokenOutputs.append(stacked(headOutputs, axis: 0))
+        }
+        return stacked(tokenOutputs, axis: 0)
+    }
+
+    /// The same equation with the head loop written as a batch axis.
+    ///
+    /// Statement for statement this mirrors ``expressing(queries:…)`` above —
+    /// the same products, the same subtracted maximum, the same sink term
+    /// outside the numerator — with `[heads]` prepended to every intermediate
+    /// and every reduction moved from "all of a vector" to "the last axis of a
+    /// matrix". Two consequences, and only the second is in doubt:
+    ///
+    /// - **The primitive count stops depending on the head count.** The loop
+    ///   emitted ~22 primitives per head; this emits a fixed handful. At the
+    ///   published 64 heads that is ~1,410 per call against ~15.
+    /// - **The reduction order is mlx's to choose.** `max` is exact and cannot
+    ///   move, but the three sums can: a row of 512 products reduced as one row
+    ///   of a `[64, rows, 512]` array need not accumulate in the order it does
+    ///   as one row of a `[rows, 512]` array. Whether it does is measured, not
+    ///   argued — `DeepSeekV4SparseAttentionBatchingTests`.
+    ///
+    /// The gather is also hoisted out of the loop, which is a saving the count
+    /// above understates: the per-head form ran `keysAndValues.take(...)` once
+    /// per head over identical indices, so 64 identical gathers of the shared
+    /// MQA rows became one.
+    private static func expressingBatched(
+        queries: MLXArray,
+        keysAndValues: MLXArray,
+        sinks: MLXArray,
+        indices: [[Int]],
+        scale: Float
+    ) throws -> MLXArray {
+        guard queries.ndim == 3, queries.shape[0] > 0, queries.shape[1] > 0,
+            queries.shape[2] > 0,
+            keysAndValues.ndim == 2, keysAndValues.shape[0] > 0,
+            keysAndValues.shape[1] == queries.shape[2],
+            sinks.shape == [queries.shape[1]], indices.count == queries.shape[0],
+            scale.isFinite, scale > 0
+        else {
+            throw DeepSeekV4Error.attention(
+                "sparse attention queries, shared KV, sinks, indices, or scale are invalid")
+        }
+        let heads = queries.shape[1]
+        let dimension = queries.shape[2]
+        var tokenOutputs = [MLXArray]()
+        tokenOutputs.reserveCapacity(queries.shape[0])
+        for token in 0..<queries.shape[0] {
+            var seen = Set<Int>()
+            let valid = try indices[token].compactMap { index -> Int? in
+                if index == -1 { return nil }
+                guard index >= 0, index < keysAndValues.shape[0] else {
+                    throw DeepSeekV4Error.attention(
+                        "token \(token) names KV row \(index), outside the cache")
+                }
+                guard seen.insert(index).inserted else {
+                    throw DeepSeekV4Error.attention(
+                        "token \(token) names KV row \(index) more than once")
+                }
+                return index
+            }
+            guard !valid.isEmpty else {
+                tokenOutputs.append(MLXArray.zeros([heads, dimension], dtype: .float32))
+                continue
+            }
+            // `[rows, dimension]`, gathered once for every head rather than
+            // once per head.
+            let kv = keysAndValues.take(MLXArray(valid), axis: 0).asType(.float32)
+            let query = queries[token, 0..., 0...].asType(.float32)
+            let attentionScores =
+                sum(
+                    kv[.newAxis, 0..., 0...] * query[0..., .newAxis, 0...],
+                    axis: -1) * scale
+            let sink = sinks.asType(.float32)[0..., .newAxis]
+            let maximumScore = max(
+                concatenated([attentionScores, sink], axis: -1), axis: -1, keepDims: true)
+            let exponentials = exp(attentionScores - maximumScore)
+            let denominator =
+                sum(exponentials, axis: -1, keepDims: true) + exp(sink - maximumScore)
+            tokenOutputs.append(
+                sum(
+                    kv[.newAxis, 0..., 0...] * exponentials[0..., 0..., .newAxis],
+                    axis: 1) / denominator)
         }
         return stacked(tokenOutputs, axis: 0)
     }

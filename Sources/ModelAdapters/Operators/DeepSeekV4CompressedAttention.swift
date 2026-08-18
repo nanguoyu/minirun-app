@@ -364,8 +364,9 @@ public enum DeepSeekV4CompressedAttention {
                 indexKeys,
                 capacity: compressedCapacity,
                 width: geometry.indexHeadDimension)
-            phaseAccounting?.recordAsyncEval(.blockCache)
-            MLX.asyncEval([attention, windowCache, fixedCompressedCache, fixedIndexCache])
+            submittingToGPU(phaseAccounting, .blockCache) {
+                MLX.asyncEval([attention, windowCache, fixedCompressedCache, fixedIndexCache])
+            }
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -566,8 +567,9 @@ public enum DeepSeekV4CompressedAttention {
         // which `asyncEval` does, because it runs the same `eval_impl` and
         // detaches the same tape. What it does not do is stop the decode thread
         // for the GPU round trip, and nothing here reads a host value.
-        phaseAccounting?.recordAsyncEval(.blockCache)
-        MLX.asyncEval([attention, windowCache, compressedCache, indexCache])
+        submittingToGPU(phaseAccounting, .blockCache) {
+            MLX.asyncEval([attention, windowCache, compressedCache, indexCache])
+        }
         try cancellationCheck()
         return DecodeResult(attention: attention, indices: indices, state: next)
     }
@@ -639,11 +641,17 @@ public enum DeepSeekV4CompressedAttention {
         // switch too, for the same reason — the fourteen syncs are one
         // diagnostic and are skipped together.
         if diagnostics.validateFiniteness {
-            phaseAccounting?.recordEval(.finitenessSweep)
-            try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
-                for array in arrays where !isFinite(array).all().item(Bool.self) {
-                    throw DeepSeekV4Error.attention(
-                        "compressed attention projection or parameter contains a non-finite value")
+            try measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:)
+            ) {
+                try waitingForGPU(phaseAccounting, .finitenessSweep) {
+                    for array in arrays where !isFinite(array).all().item(Bool.self) {
+                        throw DeepSeekV4Error.attention(
+                            "compressed attention projection or parameter contains "
+                                + "a non-finite value")
+                    }
                 }
             }
         }
@@ -1035,8 +1043,9 @@ public enum DeepSeekV4CausalCompressedAttention {
                 compressedKeyValues,
                 capacity: compressedCapacity,
                 width: geometry.headDimension)
-            phaseAccounting?.recordAsyncEval(.blockCache)
-            MLX.asyncEval([attention, windowCache, fixedCompressedCache])
+            submittingToGPU(phaseAccounting, .blockCache) {
+                MLX.asyncEval([attention, windowCache, fixedCompressedCache])
+            }
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -1175,8 +1184,9 @@ public enum DeepSeekV4CausalCompressedAttention {
             windowKeyValues: windowCache,
             compressedKeyValues: compressedCache,
             compressorState: compressedStep.state)
-        phaseAccounting?.recordAsyncEval(.blockCache)
-        MLX.asyncEval([attention, windowCache, compressedCache])
+        submittingToGPU(phaseAccounting, .blockCache) {
+            MLX.asyncEval([attention, windowCache, compressedCache])
+        }
         try cancellationCheck()
         return DecodeResult(attention: attention, indices: indices, state: next)
     }
@@ -1224,11 +1234,16 @@ public enum DeepSeekV4CausalCompressedAttention {
                 "causal compressed attention inputs must be real floating point")
         }
         if diagnostics.validateFiniteness {
-            phaseAccounting?.recordEval(.finitenessSweep)
-            try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
-                for array in arrays where !isFinite(array).all().item(Bool.self) {
-                    throw DeepSeekV4Error.attention(
-                        "causal compressed attention input contains a non-finite value")
+            try measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:)
+            ) {
+                try waitingForGPU(phaseAccounting, .finitenessSweep) {
+                    for array in arrays where !isFinite(array).all().item(Bool.self) {
+                        throw DeepSeekV4Error.attention(
+                            "causal compressed attention input contains a non-finite value")
+                    }
                 }
             }
         }

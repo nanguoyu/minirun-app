@@ -86,10 +86,17 @@ public enum DeepSeekV4Router {
         public let relativeMargins: [Double]?
     }
 
-    /// The bracket covers the whole selection: the sqrt-softplus `eval` and
-    /// `asArray`, the host sort over every expert, and the re-upload of the
-    /// gathered weights. All three are one decision, and splitting them would
-    /// name three fractions of a round trip rather than the round trip.
+    /// The bracket covers the selection's own work — the `asArray`, the host
+    /// sort over every expert, and the re-upload of the gathered weights — and
+    /// **not** the wait for the scores, which is
+    /// `DeepSeekV4PhaseMetrics.gpuWaitSeconds`.
+    ///
+    /// It used to cover the wait as well, on the argument that the three are
+    /// one decision. That argument stopped being true when the graph-bounding
+    /// evals were deferred (2026-08-17): this pull became one of the two points
+    /// a layer still blocks at, so the wait here is the whole layer's arithmetic
+    /// draining, not the router's. Keeping it inside made "Routing" read 0.38 s
+    /// of a 2.3 s pass for a sort that costs milliseconds.
     public static func select(
         logits: MLXArray,
         choice: Choice,
@@ -99,7 +106,10 @@ public enum DeepSeekV4Router {
         routingScale: Float,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil
     ) throws -> Selection {
-        try measuringPhase(phaseAccounting?.recordRoutingSelect(nanoseconds:)) {
+        try measuringPhase(
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordRoutingSelect(nanoseconds:)
+        ) {
             try selecting(
                 logits: logits,
                 choice: choice,
@@ -165,11 +175,15 @@ public enum DeepSeekV4Router {
         // copy arrays this `eval` has already materialised, so they wait for
         // nothing. This is the pass's irreducible per-layer stop — the pager
         // cannot name a tile until these ids exist on the host.
-        phaseAccounting?.recordEval(.routingSelect)
-        if let ranked {
-            MLX.eval([scores, ranked])
-        } else {
-            scores.eval()
+        // The bracket is the `eval` alone. The `asArray` calls below copy
+        // arrays it has already materialised, so charging them here would put a
+        // host memcpy inside "waiting for the GPU".
+        waitingForGPU(phaseAccounting, .routingSelect) {
+            if let ranked {
+                MLX.eval([scores, ranked])
+            } else {
+                scores.eval()
+            }
         }
         let values = scores.asArray(Float.self)
         guard values.allSatisfy(\.isFinite) else {

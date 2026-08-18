@@ -60,7 +60,8 @@ public enum DeepSeekV4FP8ActivationReference {
         _ input: MLXArray,
         blockSize: Int,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil,
-        diagnostics: DeepSeekV4Diagnostics = .validating
+        diagnostics: DeepSeekV4Diagnostics = .validating,
+        compiling: Bool = DeepSeekV4Compile.compilesFP8Chain
     ) throws -> MLXArray {
         guard input.ndim > 0, let width = input.shape.last, width > 0,
             blockSize > 0, width.isMultiple(of: blockSize),
@@ -81,10 +82,17 @@ public enum DeepSeekV4FP8ActivationReference {
         // activation before a single scale has been chosen. Diagnostic, so it
         // is skipped entirely — sync and check — unless the caller asked for it.
         if diagnostics.validateFiniteness {
-            phaseAccounting?.recordEval(.finitenessSweep)
-            guard measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:), {
-                isFinite(blocked).all().item(Bool.self)
-            }) else {
+            guard measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:),
+                {
+                    // `.item` is the force, so the wait is the whole body and
+                    // the sweep's own bracket keeps only what is left.
+                    waitingForGPU(phaseAccounting, .finitenessSweep) {
+                        isFinite(blocked).all().item(Bool.self)
+                    }
+                }) else {
                 throw DeepSeekV4Error.attention(
                     "FP8 activation input contains a non-finite value")
             }
@@ -93,12 +101,22 @@ public enum DeepSeekV4FP8ActivationReference {
         // The bracket stays around what is left of the scale search: graph
         // construction, and no host round trip at all.
         let scale = measuringPhase(
-            phaseAccounting?.recordActivationScaleSync(nanoseconds:)
+            phaseAccounting,
+            excludingGPUBoundaryFrom: phaseAccounting?.recordActivationScaleSync(nanoseconds:)
         ) {
             exactPowerOfTwoScales(
                 absolute.max(axis: -1), blockedShape: blockedShape)
         }
-        return roundAndDequantize(blocked: blocked, scale: scale)
+        // The post-scale chain, fused or not. `roundAndDequantize` is a pure
+        // function of its two operands — the scale search above has already
+        // taken whatever host round trip this operator makes — so it is the
+        // whole of what `MLX.compile` can have here, and
+        // ``DeepSeekV4Compile/fp8ChainCompiledByDefault`` is what decides.
+        let rounded =
+            compiling
+            ? DeepSeekV4CompiledSubgraphs.fp8RoundAndDequantize(blocked, scale)
+            : roundAndDequantize(blocked: blocked, scale: scale)
+        return rounded
             .reshaped(input.shape)
             .asType(input.dtype)
     }

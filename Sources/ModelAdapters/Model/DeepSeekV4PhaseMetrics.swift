@@ -30,6 +30,7 @@ import StorageCore
 ///              + activationScaleSyncSeconds + finitenessSweepSeconds
 ///              + routingSelectSeconds + sparseAttentionSeconds
 ///              + lightningIndexerSeconds
+///              + gpuWaitSeconds + gpuSubmitSeconds
 ///              + unattributedSeconds
 /// ```
 ///
@@ -109,6 +110,36 @@ import StorageCore
 ///   bracket this one *does* contain a sync, so it also absorbs whatever
 ///   deferred graph that sync forces.
 ///
+/// ## Waiting for the GPU, added 2026-08-17
+///
+/// The two terms above them are what the async-forcing change of the same day
+/// made necessary. Once the 225 graph-bounding evals became `asyncEval`, the
+/// only points at which the decode thread still stops are the handful of pulls
+/// that need a host value — routing ids, the indexer's top-k, the head's
+/// logits, the embedding rows. A whole layer's GPU work therefore completes
+/// *behind* whichever of those comes next, and the previous instrument charged
+/// all of it to that pull's bracket. `routingSelectSeconds` read 0.38 s of a
+/// 2.3 s pass while the router's own arithmetic is milliseconds; the label was
+/// not describing the router.
+///
+/// - ``gpuWaitSeconds`` is the time inside a **blocking** `eval`/`item()` —
+///   the queue draining, charged to nothing but itself. Every enclosing named
+///   bracket subtracts its nested share, exactly as ``layerArtifactSetupSeconds``
+///   subtracts the reads inside it, so `routingSelectSeconds` and
+///   ``lightningIndexerSeconds`` are now the pull's *own* host work and nothing
+///   else.
+/// - ``gpuSubmitSeconds`` is the time inside a **deferred** `MLX.asyncEval` —
+///   the same graph walk, kernel encode and command-buffer commit, with the
+///   wait given up. It is CPU dispatching MLX, and before this term existed it
+///   was part of the residual.
+///
+/// **``expertGatherComputeSeconds`` is deliberately not folded into
+/// ``gpuWaitSeconds``**, though it is a GPU wait by the same definition: it is
+/// the routed-expert gather's own `eval`, its bracket is already named after
+/// the thing it waits for, and every expert-overlap record since v0.6.18 reads
+/// that term. ``blockingGPUWaitSeconds`` is the sum for a reader who wants the
+/// whole wait.
+///
 /// ``unattributedSeconds`` is the remainder, and it is *derived* rather than
 /// stored so it can never disagree with the terms. It is not small and is not
 /// meant to look small: attention and MLP arithmetic, the rotary and
@@ -176,6 +207,11 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     public var sparseAttentionCount: Int = 0
     /// `DeepSeekV4LightningIndexer.select` entries.
     public var lightningIndexerCount: Int = 0
+    /// Blocking `eval`/`item()` waits bracketed. Equal to the census's blocking
+    /// total less the routed-expert gather, which keeps its own term.
+    public var gpuWaitCount: Int = 0
+    /// Deferred `MLX.asyncEval` submissions bracketed.
+    public var gpuSubmitCount: Int = 0
 
     // MARK: The pass
 
@@ -213,8 +249,18 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     public var routingSelectSeconds: Double = 0
     /// Expressing the 64-head sparse attention graph. Forces no arithmetic.
     public var sparseAttentionSeconds: Double = 0
-    /// `DeepSeekV4LightningIndexer.select`: score sync and host top-k.
+    /// `DeepSeekV4LightningIndexer.select`: the host top-k, less the wait for
+    /// the scores — that is ``gpuWaitSeconds``.
     public var lightningIndexerSeconds: Double = 0
+
+    // MARK: The GPU boundary, added 2026-08-17
+
+    /// Blocked inside a blocking `eval`/`item()` while the GPU drained.
+    /// Excluded from every bracket that encloses one of these pulls.
+    public var gpuWaitSeconds: Double = 0
+    /// Inside `MLX.asyncEval`: graph walk, kernel encode, command-buffer
+    /// commit, and no wait.
+    public var gpuSubmitSeconds: Double = 0
 
     // MARK: Inside the expert phase
 
@@ -246,7 +292,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
 
     // MARK: Derived
 
-    /// The fourteen disjoint terms. Never stored, so it cannot drift.
+    /// The sixteen disjoint terms. Never stored, so it cannot drift.
     public var attributedSeconds: Double {
         deterministicReadSeconds + tileDigestSeconds + expertPhaseSeconds
             + outputHeadReadSeconds + outputHeadComputeSeconds + reclaimSeconds
@@ -255,6 +301,18 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             + activationScaleSyncSeconds + finitenessSweepSeconds
             + routingSelectSeconds + sparseAttentionSeconds
             + lightningIndexerSeconds
+            + gpuWaitSeconds + gpuSubmitSeconds
+    }
+
+    /// Every second the decode thread spent blocked on the GPU, whichever term
+    /// holds it.
+    ///
+    /// ``gpuWaitSeconds`` deliberately excludes the routed-expert gather, whose
+    /// `eval` keeps ``expertGatherComputeSeconds`` so the expert phase stays
+    /// comparable with every record since v0.6.18. A reader who wants the whole
+    /// wait rather than the schedulable part of it wants this.
+    public var blockingGPUWaitSeconds: Double {
+        gpuWaitSeconds + expertGatherComputeSeconds
     }
 
     /// Of the pass, the terms added when the residual got its own brackets.
@@ -270,9 +328,16 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
 
     /// Everything the pass spent blocked on a host round trip that exists to
     /// validate or to decide, rather than to produce an activation.
+    ///
+    /// ``gpuWaitSeconds`` joined this sum on 2026-08-17 and the total's meaning
+    /// is unchanged by that: the wait it names used to sit inside
+    /// ``routingSelectSeconds`` and ``lightningIndexerSeconds``, which are two
+    /// of the other members. Splitting a term out of a sum and leaving it in
+    /// the sum is what keeps this number comparable across the change.
     public var hostSyncSeconds: Double {
         activationScaleSyncSeconds + finitenessSweepSeconds
             + routingSelectSeconds + lightningIndexerSeconds
+            + gpuWaitSeconds
     }
 
     /// The pass minus everything named. Nil when no pass wall was stated,
@@ -310,6 +375,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             activationScaleSyncSeconds, finitenessSweepSeconds,
             routingSelectSeconds, sparseAttentionSeconds,
             lightningIndexerSeconds,
+            gpuWaitSeconds, gpuSubmitSeconds,
             expertIOWaitSeconds, expertGatherComputeSeconds,
         ]
         guard terms.allSatisfy({ $0 >= 0 }) else { return false }
@@ -353,6 +419,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             \.activationScaleSyncSeconds, \.finitenessSweepSeconds,
             \.routingSelectSeconds, \.sparseAttentionSeconds,
             \.lightningIndexerSeconds,
+            \.gpuWaitSeconds, \.gpuSubmitSeconds,
             \.expertIOWaitSeconds, \.expertGatherComputeSeconds,
         ]
         for path in seconds {
@@ -371,6 +438,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             \.activationScaleSyncCount, \.finitenessSweepCount,
             \.routingSelectCount, \.sparseAttentionCount,
             \.lightningIndexerCount,
+            \.gpuWaitCount, \.gpuSubmitCount,
         ]
         for path in counts {
             let current = self[keyPath: path]
@@ -451,6 +519,12 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             RunPhaseTerm(
                 name: RunPhaseTermName.lightningIndexer,
                 seconds: lightningIndexerSeconds, count: lightningIndexerCount),
+            RunPhaseTerm(
+                name: RunPhaseTermName.gpuWait,
+                seconds: gpuWaitSeconds, count: gpuWaitCount),
+            RunPhaseTerm(
+                name: RunPhaseTermName.gpuSubmit,
+                seconds: gpuSubmitSeconds, count: gpuSubmitCount),
         ]
     }
 
@@ -470,13 +544,15 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
                 + "(%.1f io / %.1f gather) + %.1f s head read + %.1f s head compute "
                 + "+ %.1f s reclaim + %.1f s backend + %.1f s layer setup "
                 + "+ %.1f s adoption + %.1f s scale sync + %.1f s finiteness + %.1f s routing "
-                + "+ %.1f s sparse attn + %.1f s indexer + %@ other; "
+                + "+ %.1f s sparse attn + %.1f s indexer "
+                + "+ %.1f s gpu wait + %.1f s gpu submit + %@ other; "
                 + "%d det reads, %d pinned, %d digests, "
                 + "%d loads trusted, %d gathers, %d acquires, %d head windows, "
                 + "%d reclaims, %d backends, %d layer setups, %d adoptions "
                 + "(%d finiteness memo hits), "
                 + "%d scale syncs, "
-                + "%d sweeps, %d routes, %d sparse attns, %d indexer selects",
+                + "%d sweeps, %d routes, %d sparse attns, %d indexer selects, "
+                + "%d gpu waits, %d gpu submits",
             passSeconds.map { String(format: "%.1f s", $0) } ?? "unstated",
             deterministicReadSeconds, tileDigestSeconds, expertPhaseSeconds,
             expertIOWaitSeconds, expertGatherComputeSeconds,
@@ -485,6 +561,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             tileAdoptionSeconds,
             activationScaleSyncSeconds, finitenessSweepSeconds,
             routingSelectSeconds, sparseAttentionSeconds, lightningIndexerSeconds,
+            gpuWaitSeconds, gpuSubmitSeconds,
             unattributedSeconds.map { String(format: "%.1f s", $0) } ?? "unknown",
             deterministicReadCount, pinnedServedCount, tileDigestCount,
             tileDigestSkippedUnderAuthorityCount, expertGatherCallCount,
@@ -492,7 +569,8 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             expertBackendLifecycleCount, layerArtifactSetupCount,
             tileAdoptionCount, packedFinitenessMemoHitCount,
             activationScaleSyncCount, finitenessSweepCount, routingSelectCount,
-            sparseAttentionCount, lightningIndexerCount)
+            sparseAttentionCount, lightningIndexerCount,
+            gpuWaitCount, gpuSubmitCount)
     }
 
     /// The census line, when the run armed one. Separate from
@@ -510,6 +588,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         case packedFinitenessMemoHitCount
         case activationScaleSyncCount, finitenessSweepCount
         case routingSelectCount, sparseAttentionCount, lightningIndexerCount
+        case gpuWaitCount, gpuSubmitCount
         case passSeconds
         case deterministicReadSeconds, tileDigestSeconds, expertPhaseSeconds
         case outputHeadReadSeconds, outputHeadComputeSeconds, reclaimSeconds
@@ -517,11 +596,13 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         case tileAdoptionSeconds
         case activationScaleSyncSeconds, finitenessSweepSeconds
         case routingSelectSeconds, sparseAttentionSeconds, lightningIndexerSeconds
+        case gpuWaitSeconds, gpuSubmitSeconds
         case expertIOWaitSeconds, expertGatherComputeSeconds
         case timingAccountingOverflowed, eventAccountingOverflowed
         case evalCensus
         case attributedSeconds, unattributedSeconds, expertUnattributedSeconds
         case storageWaitSeconds, residualBracketSeconds, hostSyncSeconds
+        case blockingGPUWaitSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -561,6 +642,13 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             Int.self, forKey: .sparseAttentionCount) ?? 0
         lightningIndexerCount = try container.decodeIfPresent(
             Int.self, forKey: .lightningIndexerCount) ?? 0
+        // Absent from every record written before the GPU boundary got its own
+        // terms (2026-08-17). Zero is not what those runs measured — the waits
+        // happened — but it *is* what they attributed here, and the seconds are
+        // still inside the terms that held them, so the identity a decoded
+        // record asserts is the identity it was written with.
+        gpuWaitCount = try container.decodeIfPresent(Int.self, forKey: .gpuWaitCount) ?? 0
+        gpuSubmitCount = try container.decodeIfPresent(Int.self, forKey: .gpuSubmitCount) ?? 0
         passSeconds = try container.decodeIfPresent(Double.self, forKey: .passSeconds)
         deterministicReadSeconds = try container.decode(
             Double.self, forKey: .deterministicReadSeconds)
@@ -586,6 +674,10 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             Double.self, forKey: .sparseAttentionSeconds) ?? 0
         lightningIndexerSeconds = try container.decodeIfPresent(
             Double.self, forKey: .lightningIndexerSeconds) ?? 0
+        gpuWaitSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .gpuWaitSeconds) ?? 0
+        gpuSubmitSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .gpuSubmitSeconds) ?? 0
         expertIOWaitSeconds = try container.decode(Double.self, forKey: .expertIOWaitSeconds)
         expertGatherComputeSeconds = try container.decode(
             Double.self, forKey: .expertGatherComputeSeconds)
@@ -622,6 +714,8 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(routingSelectCount, forKey: .routingSelectCount)
         try container.encode(sparseAttentionCount, forKey: .sparseAttentionCount)
         try container.encode(lightningIndexerCount, forKey: .lightningIndexerCount)
+        try container.encode(gpuWaitCount, forKey: .gpuWaitCount)
+        try container.encode(gpuSubmitCount, forKey: .gpuSubmitCount)
         try container.encodeIfPresent(passSeconds, forKey: .passSeconds)
         try container.encode(deterministicReadSeconds, forKey: .deterministicReadSeconds)
         try container.encode(tileDigestSeconds, forKey: .tileDigestSeconds)
@@ -638,6 +732,8 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(routingSelectSeconds, forKey: .routingSelectSeconds)
         try container.encode(sparseAttentionSeconds, forKey: .sparseAttentionSeconds)
         try container.encode(lightningIndexerSeconds, forKey: .lightningIndexerSeconds)
+        try container.encode(gpuWaitSeconds, forKey: .gpuWaitSeconds)
+        try container.encode(gpuSubmitSeconds, forKey: .gpuSubmitSeconds)
         try container.encode(expertIOWaitSeconds, forKey: .expertIOWaitSeconds)
         try container.encode(expertGatherComputeSeconds, forKey: .expertGatherComputeSeconds)
         try container.encode(timingAccountingOverflowed, forKey: .timingAccountingOverflowed)
@@ -653,24 +749,91 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(storageWaitSeconds, forKey: .storageWaitSeconds)
         try container.encode(residualBracketSeconds, forKey: .residualBracketSeconds)
         try container.encode(hostSyncSeconds, forKey: .hostSyncSeconds)
+        try container.encode(blockingGPUWaitSeconds, forKey: .blockingGPUWaitSeconds)
     }
 }
 
-/// Bracket exactly one call and hand the elapsed nanoseconds to `record`.
+// The plain `measuringPhase(record, body)` that used to live here is gone on
+// purpose, and this comment is its gravestone.
+//
+// It charged a bracket its whole elapsed time. That was right while every
+// forcing point was inside the term that caused it, and it became wrong the
+// moment the GPU boundary got its own terms: a bracket that encloses a wrapped
+// `eval` and does not subtract it counts those seconds twice, once under its
+// own name and once under `gpuWaitSeconds`, and `isAccountingBalanced` cannot
+// see that — it checks that the parts fit inside the pass, not that they are
+// disjoint.
+//
+// Which brackets enclose a forcing point is a property of the call graph, not
+// of the bracket, and it moves: `outputHeadReadSeconds` looked like pure
+// storage work and turned out to contain the head window's own materialisation
+// `eval` two calls down. So there is one bracket helper and it always
+// subtracts. See `measuringPhase(_:excludingGPUBoundaryFrom:_:)` below.
+
+/// Bracket one call and charge it to `record`, **less** any GPU wait or
+/// deferred submission that happened inside it.
 ///
-/// The bracket is this function's own scope, so it cannot accidentally extend
-/// over the statements that follow the measured call — which is the mistake a
-/// bare `defer` at the call site makes. A call that throws still spent its
-/// time and is still recorded: a total that silently drops the failing case is
-/// the flattering kind of wrong. With no recorder, this is `body()`.
+/// This is the same trick ``measuringLayerArtifactSetup(_:_:)`` plays with
+/// nested reads, and it exists for the same reason: a term that contains
+/// another term's seconds is not a term, it is a sum wearing one term's name.
+/// `routingSelectSeconds` was exactly that until 2026-08-17 — 0.38 s of a 2.3 s
+/// pass, of which the router's own sort was milliseconds and the rest was a
+/// layer's arithmetic completing behind the routing pull.
+///
+/// A saturating subtraction rather than a signed one, for
+/// ``DeepSeekV4PhaseAccounting/recordLayerArtifactSetup(nanoseconds:excluding:)``'s
+/// reason: every stored term must stay non-negative so the identity can still
+/// be asserted, and a nested total larger than its own bracket already means a
+/// counter saturated, which fails ``DeepSeekV4PhaseMetrics/isAccountingBalanced``.
 @inline(__always)
 func measuringPhase<Result>(
-    _ record: ((UInt64) -> Void)?,
+    _ accounting: DeepSeekV4PhaseAccounting?,
+    excludingGPUBoundaryFrom record: ((UInt64) -> Void)?,
     _ body: () throws -> Result
 ) rethrows -> Result {
-    guard let record else { return try body() }
+    guard let accounting, let record else { return try body() }
+    let boundaryAtStart = accounting.gpuBoundaryNanoseconds
     let start = MonotonicClock.now()
-    defer { record(MonotonicClock.now() &- start) }
+    defer {
+        let elapsed = MonotonicClock.now() &- start
+        let nested = accounting.gpuBoundaryNanoseconds &- boundaryAtStart
+        record(elapsed > nested ? elapsed &- nested : 0)
+    }
+    return try body()
+}
+
+/// Bracket one **blocking** forcing point: the census entry and the wait, in
+/// one place so the two can never disagree about how many there were.
+///
+/// The bracket is this function's own scope and the body is the `eval` alone,
+/// never the `asArray` that follows it — by the time an `eval` returns, the
+/// array is materialised and the copy waits for nothing. Charging the copy here
+/// would make "waiting for the GPU" contain a host memcpy.
+@inline(__always)
+func waitingForGPU<Result>(
+    _ accounting: DeepSeekV4PhaseAccounting?,
+    _ site: DeepSeekV4EvalSite,
+    _ body: () throws -> Result
+) rethrows -> Result {
+    guard let accounting else { return try body() }
+    accounting.recordEval(site)
+    let start = MonotonicClock.now()
+    defer { accounting.recordGPUWait(nanoseconds: MonotonicClock.now() &- start) }
+    return try body()
+}
+
+/// Bracket one **deferred** submission: the census entry and the CPU time
+/// `MLX.asyncEval` spends walking, encoding and committing without waiting.
+@inline(__always)
+func submittingToGPU<Result>(
+    _ accounting: DeepSeekV4PhaseAccounting?,
+    _ site: DeepSeekV4EvalSite,
+    _ body: () throws -> Result
+) rethrows -> Result {
+    guard let accounting else { return try body() }
+    accounting.recordAsyncEval(site)
+    let start = MonotonicClock.now()
+    defer { accounting.recordGPUSubmit(nanoseconds: MonotonicClock.now() &- start) }
     return try body()
 }
 
@@ -737,6 +900,12 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
     private var routingSelect = Bracket()
     private var sparseAttention = Bracket()
     private var lightningIndexer = Bracket()
+    /// Blocked in a blocking `eval`/`item()`. Every bracket that can enclose
+    /// one of these subtracts its nested share, which is what makes the term
+    /// disjoint from the rest rather than a second copy of them.
+    private var gpuWait = Bracket()
+    /// Inside `MLX.asyncEval`: the same walk, encode and commit, no wait.
+    private var gpuSubmit = Bracket()
 
     /// How often the pass stopped, beside where its seconds went.
     ///
@@ -792,6 +961,8 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.routingSelectCount = routingSelect.count
         metrics.sparseAttentionCount = sparseAttention.count
         metrics.lightningIndexerCount = lightningIndexer.count
+        metrics.gpuWaitCount = gpuWait.count
+        metrics.gpuSubmitCount = gpuSubmit.count
         metrics.expertBackendLifecycleSeconds =
             expertBackendBuild.seconds + expertBackendShutdown.seconds
         metrics.layerArtifactSetupSeconds = layerArtifactSetup.seconds
@@ -801,6 +972,8 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.routingSelectSeconds = routingSelect.seconds
         metrics.sparseAttentionSeconds = sparseAttention.seconds
         metrics.lightningIndexerSeconds = lightningIndexer.seconds
+        metrics.gpuWaitSeconds = gpuWait.seconds
+        metrics.gpuSubmitSeconds = gpuSubmit.seconds
         metrics.deterministicReadSeconds = deterministicRead.seconds
         metrics.tileDigestSeconds = tileDigest.seconds
         metrics.expertPhaseSeconds = expertPhase.seconds
@@ -815,7 +988,7 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
             expertBackendBuild, expertBackendShutdown, layerArtifactSetup,
             tileAdoption,
             activationScaleSync, finitenessSweep, routingSelect,
-            sparseAttention, lightningIndexer,
+            sparseAttention, lightningIndexer, gpuWait, gpuSubmit,
         ] {
             metrics.timingAccountingOverflowed =
                 metrics.timingAccountingOverflowed || bracket.nanoseconds.didOverflow
@@ -938,6 +1111,38 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// One blocking `eval`/`item()`, from the call to the GPU signalling it.
+    ///
+    /// Not `fileprivate`, because the sites that block are spread across the
+    /// operators and the loaders; ``waitingForGPU(_:_:_:)`` is the only thing
+    /// that should call it, and it is the only caller.
+    func recordGPUWait(nanoseconds: UInt64) {
+        lock.lock()
+        gpuWait.add(nanoseconds)
+        lock.unlock()
+    }
+
+    /// One deferred `MLX.asyncEval`: walk, encode, commit, and no wait.
+    func recordGPUSubmit(nanoseconds: UInt64) {
+        lock.lock()
+        gpuSubmit.add(nanoseconds)
+        lock.unlock()
+    }
+
+    /// The GPU-boundary totals so far, for a bracket that has to subtract the
+    /// ones that happened inside it.
+    ///
+    /// Read at both ends of an enclosing bracket, exactly as
+    /// ``nestedReadNanoseconds`` is. Both boundaries are summed into one number
+    /// because an enclosing term wants to exclude *all* of them: a bracket that
+    /// subtracted the waits but kept the submissions would still be reporting
+    /// MLX's dispatch cost as its own work.
+    var gpuBoundaryNanoseconds: UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return gpuWait.nanoseconds.value &+ gpuSubmit.nanoseconds.value
+    }
+
     /// The deterministic-read and tile-digest totals so far.
     ///
     /// ``measuringLayerArtifactSetup(_:_:)`` reads this at both ends of its
@@ -965,12 +1170,12 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
 }
 
 /// Bracket one layer's artifact-execution setup, excluding the deterministic
-/// reads and tile digests it performs.
+/// reads, tile digests and GPU boundaries it performs.
 ///
 /// The nested terms are read from the accounting itself rather than passed in,
 /// so the exclusion cannot drift from what those brackets actually recorded.
 /// Every recording site inside the body is on this same thread; a background
-/// expert read does not touch either of the two excluded brackets.
+/// expert read does not touch any of the excluded brackets.
 @inline(__always)
 func measuringLayerArtifactSetup<Result>(
     _ accounting: DeepSeekV4PhaseAccounting?,
@@ -978,11 +1183,14 @@ func measuringLayerArtifactSetup<Result>(
 ) rethrows -> Result {
     guard let accounting else { return try body() }
     let nestedAtStart = accounting.nestedReadNanoseconds
+    let boundaryAtStart = accounting.gpuBoundaryNanoseconds
     let start = MonotonicClock.now()
     defer {
+        let nested =
+            (accounting.nestedReadNanoseconds &- nestedAtStart)
+            &+ (accounting.gpuBoundaryNanoseconds &- boundaryAtStart)
         accounting.recordLayerArtifactSetup(
-            nanoseconds: MonotonicClock.now() &- start,
-            excluding: accounting.nestedReadNanoseconds &- nestedAtStart)
+            nanoseconds: MonotonicClock.now() &- start, excluding: nested)
     }
     return try body()
 }

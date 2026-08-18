@@ -596,9 +596,15 @@ final class MockDecodeRunner: InstrumentedRunner, @unchecked Sendable {
                 term(RunPhaseTermName.tileAdoption, 0.07, count: layerCount * 3),
                 term(RunPhaseTermName.activationScaleSync, 0.06, count: 480),
                 term(RunPhaseTermName.finitenessSweep, 0.01, count: 553),
-                term(RunPhaseTermName.routingSelect, 0.03, count: layerCount),
+                // Routing and the indexer are milliseconds of host sort once
+                // the wait behind them is its own term, and the preview says
+                // so: a mock that kept the old shares would train the eye on a
+                // split the real engine no longer produces.
+                term(RunPhaseTermName.routingSelect, 0.002, count: layerCount),
                 term(RunPhaseTermName.sparseAttention, 0.05, count: layerCount),
-                term(RunPhaseTermName.lightningIndexer, 0.02, count: layerCount),
+                term(RunPhaseTermName.lightningIndexer, 0.001, count: layerCount),
+                term(RunPhaseTermName.gpuWait, 0.19, count: layerCount * 2 + 33),
+                term(RunPhaseTermName.gpuSubmit, 0.09, count: layerCount * 5),
             ]
         default:
             terms = [

@@ -831,8 +831,9 @@ public enum DeepSeekV4HashWindowBlock {
         if let decodePositionLimit {
             let cache = makeWindowCache(
                 keyValues, windowSize: geometry.slidingWindow)
-            phaseAccounting?.recordAsyncEval(.blockCache)
-            MLX.asyncEval([ffn.residual, cache])
+            submittingToGPU(phaseAccounting, .blockCache) {
+                MLX.asyncEval([ffn.residual, cache])
+            }
             state = State(
                 nextPosition: sequence,
                 positionLimit: decodePositionLimit,
@@ -973,8 +974,9 @@ public enum DeepSeekV4HashWindowBlock {
             geometry: geometry,
             artifactIdentity: artifactIdentity,
             windowKeyValues: windowCache)
-        phaseAccounting?.recordAsyncEval(.blockCache)
-        MLX.asyncEval([ffn.residual, windowCache])
+        submittingToGPU(phaseAccounting, .blockCache) {
+            MLX.asyncEval([ffn.residual, windowCache])
+        }
         try cancellationCheck()
         return DecodeResult(
             residual: ffn.residual,

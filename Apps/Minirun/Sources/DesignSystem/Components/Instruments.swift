@@ -551,6 +551,12 @@ struct PhaseSplitBar: View {
                     .foregroundStyle(MRColor.tertiary)
                     .animation(nil, value: term.seconds)
                 }
+                // A term's name is a label, not an explanation, and two of
+                // these labels were actively misleading before the GPU wait
+                // was split out: "Routing" named a layer's arithmetic draining
+                // behind the routing pull. The sentence is what stops a reader
+                // re-making that inference from the word alone.
+                .help(RunPhaseTermName.description(for: term.name) ?? "")
             }
         }
         .accessibilityElement(children: .ignore)
@@ -658,6 +664,12 @@ enum PhaseTermPalette {
         // Host round trips that decide rather than compute.
         RunPhaseTermName.activationScaleSync: (MRColor.tierStaged, 1),
         RunPhaseTermName.routingSelect: (MRColor.tierStaged, 0.62),
+
+        // The GPU boundary. `tierHot` is the only token not already spoken
+        // for, and it is the right one: waiting for the GPU is the term this
+        // product most wants a reader's eye to land on.
+        RunPhaseTermName.gpuWait: (MRColor.tierHot, 1),
+        RunPhaseTermName.gpuSubmit: (MRColor.tierHot, 0.55),
 
         // Verification and the work of turning bytes into an operand.
         RunPhaseTermName.tileDigest: (MRColor.verify, 1),

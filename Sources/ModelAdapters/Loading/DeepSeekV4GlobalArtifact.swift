@@ -571,8 +571,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             // that consumes this window ends in a blocking pull one statement
             // later, so submitting the widen early only lets the GPU start it
             // while the CPU builds that matmul.
-            phaseAccounting?.recordAsyncEval(.weightMaterialisation)
-            MLX.asyncEval([widened])
+            submittingToGPU(phaseAccounting, .weightMaterialisation) {
+                MLX.asyncEval([widened])
+            }
             return widened
         }
         return try readRowRange(
@@ -698,13 +699,16 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
         // Admission-time, and memoized by `loadHeadParameters`: this sweep runs
         // on the first pass of a run and never again, which is why the census
         // shows it on pass 1 and nowhere in the plateau.
-        phaseAccounting?.recordEval(.finitenessSweep)
-        for (name, array) in [
-            ("hc_head_fn", function), ("hc_head_scale", scale),
-            ("hc_head_base", base), ("norm.weight", finalNorm),
-        ] {
-            guard array.asType(.float32).asArray(Float.self).allSatisfy(\.isFinite) else {
-                throw DeepSeekV4Error.artifact("\(name) contains a non-finite value")
+        // No explicit `eval` here: the `asArray` below is the force, so the
+        // whole loop is the wait and the bracket is the whole loop.
+        try waitingForGPU(phaseAccounting, .finitenessSweep) {
+            for (name, array) in [
+                ("hc_head_fn", function), ("hc_head_scale", scale),
+                ("hc_head_base", base), ("norm.weight", finalNorm),
+            ] {
+                guard array.asType(.float32).asArray(Float.self).allSatisfy(\.isFinite) else {
+                    throw DeepSeekV4Error.artifact("\(name) contains a non-finite value")
+                }
             }
         }
         return HeadParameters(
@@ -731,8 +735,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             eps: geometry.rmsNormEpsilon).asType(.float32)
         // Deferred: the head walk's first window pull is the wait, and it is
         // one statement away. Nothing reads a host value from `normalized`.
-        phaseAccounting?.recordAsyncEval(.passBoundary)
-        MLX.asyncEval([normalized])
+        submittingToGPU(phaseAccounting, .passBoundary) {
+            MLX.asyncEval([normalized])
+        }
         return normalized
     }
 
@@ -765,21 +770,29 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
                 // window n's matmul has been forced — so the split is what
                 // says whether overlapping them is worth building.
                 let rows = try measuringPhase(
-                    phaseAccounting?.recordOutputHeadRead(nanoseconds:)
+                    phaseAccounting,
+                    excludingGPUBoundaryFrom: phaseAccounting?.recordOutputHeadRead(nanoseconds:)
                 ) {
                     try headRows(
                         from: first, count: count,
                         cancellationCheck: cancellationCheck)
                 }
                 return measuringPhase(
-                    phaseAccounting?.recordOutputHeadCompute(nanoseconds:)
+                    phaseAccounting,
+                    excludingGPUBoundaryFrom: phaseAccounting?
+                        .recordOutputHeadCompute(nanoseconds:)
                 ) {
                     let projected = matmul(
                         hidden.asType(.float32), rows.transposed(1, 0)).asType(.float32)
-                    // One sync per window: `asArray` below copies an array
-                    // this `eval` already materialised.
-                    phaseAccounting?.recordEval(.outputHead)
-                    projected.eval()
+                    // One sync per window, and the wait for it is
+                    // `gpuWaitSeconds` rather than head compute: this walk is
+                    // serial, so window n's wait is the head's own matmul
+                    // draining and nothing else — but it is still a wait, and
+                    // the term that names the matmul should name the matmul.
+                    // `asArray` copies an array the `eval` already materialised.
+                    waitingForGPU(phaseAccounting, .outputHead) {
+                        projected.eval()
+                    }
                     return projected.asArray(Float.self)
                 }
             }
@@ -841,8 +854,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             finalizer: { pointer.deallocate() })
         transferred = true
         let widened = raw.asType(.float32)
-        phaseAccounting?.recordEval(.embedding)
-        widened.eval()
+        waitingForGPU(phaseAccounting, .embedding) {
+            widened.eval()
+        }
         return widened
     }
 
@@ -885,8 +899,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             finalizer: { pointer.deallocate() })
         transferred = true
         let widened = raw.asType(.float32)
-        phaseAccounting?.recordEval(.weightMaterialisation)
-        widened.eval()
+        waitingForGPU(phaseAccounting, .weightMaterialisation) {
+            widened.eval()
+        }
         return widened
     }
 
@@ -916,8 +931,9 @@ public final class DeepSeekV4GlobalArtifact: @unchecked Sendable {
             rawPointer: pointer, record.shape, dtype: record.dtype.mlxDType,
             finalizer: { pointer.deallocate() })
         transferred = true
-        phaseAccounting?.recordEval(.weightMaterialisation)
-        raw.eval()
+        waitingForGPU(phaseAccounting, .weightMaterialisation) {
+            raw.eval()
+        }
         return raw
     }
 

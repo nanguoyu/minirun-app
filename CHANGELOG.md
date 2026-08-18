@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4 (2026081801) — 2026-08-18
+
+- DeepSeek V4 Flash decodes about a third faster on Mac; the sparse-attention
+  heads are computed in one batch. Summing 64 heads together rounds
+  differently from summing them one at a time, so wording can differ very
+  slightly from 0.3 — the answer is still byte-identical at every memory
+  budget, which is the guarantee the memory dial rests on.
+- iPhone: *Verify all files* no longer ends the app on iOS 27, where the
+  system rejected the background-continuation handler the app registered by
+  wildcard; each continuation is now registered by name, and a refusal is
+  shown instead of raised.
+- The streaming caret follows the text instead of sitting at the end of the
+  first line.
+- The iOS app targets iPhone only, which is what the product claims; the
+  first TestFlight builds come from this release.
 
 ## 0.3 (2026081701) — 2026-08-17
 

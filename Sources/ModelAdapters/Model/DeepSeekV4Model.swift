@@ -4,8 +4,9 @@ import Foundation
 ///
 /// The repository commit is intentionally absent. A live catalogue revision
 /// supplies verified bytes; those bytes select an understood operator family
-/// here or receive a named refusal. MTP predictors are not part of the causal
-/// language-model forward and therefore do not appear in this main-layer plan.
+/// here or receive a named refusal. The `mtp.*` units — DSpark's speculative
+/// stages, not a next-token predictor head; see ADR-0017 — are not part of the
+/// causal language-model forward and therefore do not appear in this plan.
 public enum DeepSeekV4LayerPlan: Sendable, Equatable {
     case hashWindow(DeepSeekV4HashWindowBlock.Geometry)
     case compressedIndexed(DeepSeekV4CompressedIndexedBlock.Geometry)
@@ -81,6 +82,11 @@ public struct DeepSeekV4ModelPlan: Sendable, Equatable {
                     "layer \(layer) combines token-hash routing with ratio-128 compression")
 
             case (false, 0):
+                // This is exactly the signature of a DSpark stage: index >=
+                // num_hidden_layers, so outside num_hash_layers, a real
+                // 256x4096 router, and `compress_ratios` 0 for its 128-wide
+                // window (`DSparkAttention` asserts `compress_ratio == 0`).
+                // Implementing that fourth family is blocker B1 of ADR-0017.
                 throw DeepSeekV4Error.unsupportedArchitecture(
                     "layer \(layer) combines learned routing with uncompressed window attention")
 
@@ -599,6 +605,19 @@ public final class DeepSeekV4ModelArtifact {
         return result
     }
 
+    /// Admit the publication's non-main, non-global units.
+    ///
+    /// These are named `mtp00…`, and the name is the only thing about them that
+    /// says "MTP": they are DeepSeek's **DSpark** speculative stages, stored
+    /// under the checkpoint's `mtp.*` namespace (ADR-0017). The published
+    /// artifact carries three of them — three complete blocks, each with its
+    /// own 256 routed FP4 experts — while the transformers-side
+    /// `num_nextn_predict_layers` is 1. That field therefore does **not** count
+    /// these units, and the check below is deliberately presence-only: a
+    /// publication either has DSpark stages and declares a predictor count, or
+    /// has neither. What is enforced strictly is the unit-name contract —
+    /// consecutive, canonically formatted, no unknown auxiliary unit — because
+    /// that is what keeps an unrecognized unit from arriving unnoticed.
     @discardableResult
     static func validateAuxiliaryUnitSet(
         config: DeepSeekV4Config,
@@ -622,12 +641,13 @@ public final class DeepSeekV4ModelArtifact {
             let expected = Set(0...(indices.max() ?? 0))
             let missing = expected.subtracting(actual).sorted().map(Self.mtpUnitID)
             throw DeepSeekV4Error.artifact(
-                "MTP publication units are not consecutive"
+                "DSpark (mtp.*) publication units are not consecutive"
                     + (missing.isEmpty ? "" : "; missing: \(missing.joined(separator: ", "))"))
         }
         guard (config.numberOfMTPPredictors == 0) == auxiliary.isEmpty else {
             throw DeepSeekV4Error.artifact(
-                "MTP publication presence disagrees with num_nextn_predict_layers")
+                "DSpark (mtp.*) publication presence disagrees with "
+                    + "num_nextn_predict_layers")
         }
         return auxiliary.sorted { $0.id < $1.id }
     }

@@ -70,16 +70,24 @@ public enum DeepSeekV4HyperConnections {
         let scale32 = scale.asType(.float32)
         if diagnostics.validateFiniteness {
             phaseAccounting?.recordEval(.hyperConnectionHead)
-            phaseAccounting?.recordEval(.finitenessSweep)
-            try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
-                let scaleValues = scale32.asArray(Float.self)
-                let baseValues = base.asType(.float32).asArray(Float.self)
-                let functionValues = function.asType(.float32).asArray(Float.self)
-                guard scaleValues.allSatisfy(\.isFinite), baseValues.allSatisfy(\.isFinite),
-                    functionValues.allSatisfy(\.isFinite)
-                else {
-                    throw DeepSeekV4Error.hyperConnection(
-                        "head parameters contain a non-finite value")
+            try measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:)
+            ) {
+                // The three `asArray` calls are the force, so the wait is the
+                // whole guard and the sweep keeps only the comparisons.
+                try waitingForGPU(phaseAccounting, .finitenessSweep) {
+                    let scaleValues = scale32.asArray(Float.self)
+                    let baseValues = base.asType(.float32).asArray(Float.self)
+                    let functionValues = function.asType(.float32).asArray(Float.self)
+                    guard scaleValues.allSatisfy(\.isFinite),
+                        baseValues.allSatisfy(\.isFinite),
+                        functionValues.allSatisfy(\.isFinite)
+                    else {
+                        throw DeepSeekV4Error.hyperConnection(
+                            "head parameters contain a non-finite value")
+                    }
                 }
             }
         }
@@ -104,7 +112,8 @@ public enum DeepSeekV4HyperConnections {
         iterations: Int,
         epsilon: Float,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil,
-        diagnostics: DeepSeekV4Diagnostics = .validating
+        diagnostics: DeepSeekV4Diagnostics = .validating,
+        compiling: Bool = DeepSeekV4Compile.compilesSinkhorn
     ) throws -> Split {
         guard multiplicity > 0, iterations > 0, epsilon.isFinite, epsilon > 0 else {
             throw DeepSeekV4Error.hyperConnection(
@@ -154,11 +163,17 @@ public enum DeepSeekV4HyperConnections {
         let scale32 = scale.asType(.float32)
         if diagnostics.validateFiniteness {
             phaseAccounting?.recordEval(.hyperConnectionSplit)
-            phaseAccounting?.recordEval(.finitenessSweep)
-            try measuringPhase(phaseAccounting?.recordFinitenessSweep(nanoseconds:)) {
-                let scaleValues = scale32.asArray(Float.self)
-                guard scaleValues.count == 3, scaleValues.allSatisfy(\.isFinite) else {
-                    throw DeepSeekV4Error.hyperConnection("scale contains a non-finite value")
+            try measuringPhase(
+                phaseAccounting,
+                excludingGPUBoundaryFrom: phaseAccounting?
+                    .recordFinitenessSweep(nanoseconds:)
+            ) {
+                try waitingForGPU(phaseAccounting, .finitenessSweep) {
+                    let scaleValues = scale32.asArray(Float.self)
+                    guard scaleValues.count == 3, scaleValues.allSatisfy(\.isFinite) else {
+                        throw DeepSeekV4Error.hyperConnection(
+                            "scale contains a non-finite value")
+                    }
                 }
             }
         }
@@ -166,7 +181,43 @@ public enum DeepSeekV4HyperConnections {
         guard !doubledMultiplicity.overflow else {
             throw DeepSeekV4Error.hyperConnection("split boundary overflows Int")
         }
-        let boundaries = [multiplicity, doubledMultiplicity.partialValue]
+
+        // Everything from here down is a pure function of `(mixes, scale,
+        // base)`: no host read, no diagnostic, no accounting. That is the
+        // precondition `MLX.compile` needs, and the 20-iteration loop below is
+        // the reason it is worth meeting — 153 of the operator's 188 primitives
+        // are iterations 2…20 over a `[1, 4, 4]` matrix
+        // (`docs/experiments/2026-08-17-v4-mlx-dispatch.md` §3).
+        let outputs =
+            compiling
+            ? DeepSeekV4CompiledSubgraphs.sinkhornTail(
+                multiplicity: multiplicity, iterations: iterations, epsilon: epsilon)(
+                    [mixes, scale, base])
+            : sinkhornTail(
+                mixes: mixes, scale: scale, base: base,
+                multiplicity: multiplicity, iterations: iterations, epsilon: epsilon)
+        return Split(pre: outputs[0], post: outputs[1], combination: outputs[2])
+    }
+
+    /// The split, the Sinkhorn iterations, and nothing else.
+    ///
+    /// Named and separated from ``splitSinkhorn(mixes:scale:base:multiplicity:iterations:epsilon:phaseAccounting:diagnostics:compiling:)``'s
+    /// guards for the same reason
+    /// ``DeepSeekV4FP8ActivationReference/roundAndDequantize(blocked:scale:)``
+    /// is named: it is the exact subgraph the compiled kernel has to reproduce,
+    /// so a test can hold the two forms against each other's bits. The result
+    /// order is `[pre, post, combination]` because `MLX.compile`'s multi-output
+    /// form speaks in arrays, not in ``Split``.
+    static func sinkhornTail(
+        mixes: MLXArray,
+        scale: MLXArray,
+        base: MLXArray,
+        multiplicity: Int,
+        iterations: Int,
+        epsilon: Float
+    ) -> [MLXArray] {
+        let scale32 = scale.asType(.float32)
+        let boundaries = [multiplicity, multiplicity * 2]
         let mixParts = split(mixes.asType(.float32), indices: boundaries, axis: -1)
         let baseParts = split(base.asType(.float32), indices: boundaries, axis: -1)
 
@@ -188,7 +239,7 @@ public enum DeepSeekV4HyperConnections {
                     / (sum(combination, axis: -2, keepDims: true) + epsilon)
             }
         }
-        return Split(pre: pre, post: post, combination: combination)
+        return [pre, post, combination]
     }
 
     /// Contract `multiplicity` residual streams into one branch input.
@@ -202,7 +253,8 @@ public enum DeepSeekV4HyperConnections {
         epsilon: Float,
         normEpsilon: Float,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil,
-        diagnostics: DeepSeekV4Diagnostics = .validating
+        diagnostics: DeepSeekV4Diagnostics = .validating,
+        compiling: Bool = DeepSeekV4Compile.compilesSinkhorn
     ) throws -> PreparedBranch {
         guard residual.ndim == 3, residual.shape[1] == multiplicity else {
             throw DeepSeekV4Error.hyperConnection(
@@ -242,7 +294,8 @@ public enum DeepSeekV4HyperConnections {
             iterations: iterations,
             epsilon: epsilon,
             phaseAccounting: phaseAccounting,
-            diagnostics: diagnostics)
+            diagnostics: diagnostics,
+            compiling: compiling)
         let contracted = sum(
             expandedDimensions(split.pre, axis: -1) * residual.asType(.float32),
             axis: 1)

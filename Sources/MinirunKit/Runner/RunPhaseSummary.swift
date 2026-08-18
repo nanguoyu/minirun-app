@@ -312,6 +312,21 @@ public enum RunPhaseTermName {
     public static let sparseAttention = "sparseAttention"
     public static let lightningIndexer = "lightningIndexer"
 
+    /// The decode thread stopped inside a blocking `eval`, waiting for the GPU
+    /// to finish work that was already submitted.
+    ///
+    /// Added 2026-08-17. Before it existed this time was charged to whichever
+    /// bracket happened to contain the pull — overwhelmingly ``routingSelect``
+    /// and ``lightningIndexer``, whose own arithmetic is milliseconds — which
+    /// made those two terms read as the cost of routing and indexing when they
+    /// were mostly the cost of the layer's compute completing behind them.
+    public static let gpuWait = "gpuWait"
+
+    /// The decode thread inside a *deferred* submission: MLX walking the graph,
+    /// encoding kernels and committing the command buffer, without waiting for
+    /// any of it to run. Added 2026-08-17 beside ``gpuWait``.
+    public static let gpuSubmit = "gpuSubmit"
+
     /// Both engines: returning pages at a boundary.
     public static let reclaim = "reclaim"
 
@@ -336,8 +351,83 @@ public enum RunPhaseTermName {
         routingSelect: "Routing",
         sparseAttention: "Sparse attention",
         lightningIndexer: "Indexer",
+        gpuWait: "Waiting for the GPU",
+        gpuSubmit: "Submitting work to the GPU",
         reclaim: "Memory reclaim",
     ]
+
+    /// One honest sentence about what a term measures, for a legend or a
+    /// tooltip. Nil for a name this build has never heard of — a guessed
+    /// description would be worse than none.
+    ///
+    /// These exist because the labels alone were misleading. "Routing" named
+    /// 0.38 s of a 2.3 s pass while the routing arithmetic itself is
+    /// milliseconds: the rest was the layer's GPU work completing behind the
+    /// routing pull, which was simply the first blocking point that came after
+    /// it. Splitting ``gpuWait`` out fixed the arithmetic; these sentences are
+    /// what stop the reader re-making the same inference from a bare word.
+    private static let descriptions: [String: String] = [
+        unattributed:
+            "The part of the pass no bracket names yet — mostly CPU expressing "
+            + "MLX graphs between submissions.",
+        deterministicRead:
+            "Blocked reading dense weights from storage.",
+        stagerWait:
+            "Blocked because the background stager had not finished the bytes "
+            + "this layer needed.",
+        stagedRead:
+            "The background stager's own read time. It overlaps compute, so it "
+            + "sits beside the pass rather than inside it.",
+        expertIOWait:
+            "Blocked waiting for a routed expert's tile to arrive from storage.",
+        expertGatherCompute:
+            "Blocked in the gather's own eval — this is a wait for the GPU too, "
+            + "kept separate so the expert phase stays comparable across runs.",
+        expertOther:
+            "The gather's remainder: building the expression, adopting tiles, "
+            + "slot bookkeeping.",
+        attentionBarrier:
+            "The mid-layer barrier that lets attention weights be released "
+            + "before the MLP half is widened.",
+        layerTotal:
+            "The layer loop's own total. It contains other terms and is shown "
+            + "for scale, not summed.",
+        tileDigest: "Recomputing a tile's digest before trusting its bytes.",
+        outputHeadRead: "Reading a window of the output head's rows.",
+        outputHeadCompute:
+            "The output head's matmul, less the wait for it to finish.",
+        expertBackendLifecycle:
+            "Building and tearing down a layer's expert backend.",
+        layerArtifactSetup:
+            "One layer's setup, less the reads, digests and GPU waits inside it.",
+        tileAdoption: "Turning a read tile into an operand.",
+        activationScaleSync: "Choosing the FP8/FP4 activation scales.",
+        finitenessSweep:
+            "Guard-only host checks that validate and compute nothing.",
+        routingSelect:
+            "The router's own work: the score sort on the host and the reupload. "
+            + "The wait for the scores to arrive is counted under "
+            + "\"Waiting for the GPU\".",
+        sparseAttention:
+            "Expressing the per-head sparse attention graph. It forces nothing, "
+            + "so the arithmetic lands wherever the next wait is.",
+        lightningIndexer:
+            "The indexer's own top-k on the host. The wait for its scores is "
+            + "counted under \"Waiting for the GPU\".",
+        gpuWait:
+            "Stopped inside a blocking eval while the GPU finished work already "
+            + "submitted. This is the queue draining, not any one operation's "
+            + "arithmetic.",
+        gpuSubmit:
+            "Handing work to the GPU without waiting for it: walking the graph, "
+            + "encoding kernels, committing the command buffer.",
+        reclaim: "Returning pages at a boundary.",
+    ]
+
+    /// A sentence for a term, or nil when this build does not know the term.
+    public static func description(for name: String) -> String? {
+        descriptions[name]
+    }
 
     /// A readable label for any term name, known or not.
     ///

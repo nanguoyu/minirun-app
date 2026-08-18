@@ -501,6 +501,9 @@ final class DeepSeekV4RunEngine {
     private var tokenIDs: [Int] = []
     private var passSeconds: [Double] = []
     private var lastLogits: [Float] = []
+    /// The opt-in per-position logits sink, or nil — which is what it is unless
+    /// this process was started with `MINIRUN_V4_DUMP_LOGITS`.
+    private let logitsDump = DeepSeekV4LogitsDump.shared
     private var workload: (any DeepSeekV4RunWorkload)?
     private var environment: EnvironmentReport?
     private var sourceRepository = ""
@@ -830,6 +833,13 @@ final class DeepSeekV4RunEngine {
         recordPinnedServedSplit(prefill: prefill)
         tokenIDs.append(step.tokenID)
         lastLogits = step.logits
+        // Off unless `MINIRUN_V4_DUMP_LOGITS` named a directory. The run
+        // summary carries one digest of the last pass; an arm that has to say
+        // *how far apart* two paths' logits are needs every position's vector,
+        // and this is the only place in the run that holds one.
+        logitsDump?.record(
+            position: tokenIDs.count - 1, logits: step.logits, tokenID: step.tokenID,
+            isPrefillToken: prefill)
         continuation.yield(
             .token(
                 TokenEvent(
@@ -1144,14 +1154,12 @@ final class DeepSeekV4RunEngine {
             ThermalTransition(state: resolved, atSeconds: seconds, phase: phase))
     }
 
-    private static func logitsDigest(_ logits: [Float]) -> String {
-        var data = Data(capacity: logits.count * MemoryLayout<UInt32>.size)
-        for value in logits {
-            withUnsafeBytes(of: value.bitPattern.littleEndian) {
-                data.append(contentsOf: $0)
-            }
-        }
-        return SHA256.hexString(SHA256.hash(data))
+    /// The published gate's digest: SHA-256 over the float32 bit patterns,
+    /// little-endian, in vocabulary order. Shares its byte packing with
+    /// ``DeepSeekV4LogitsDump/rawBytes(_:)`` so that a dumped vector and the
+    /// digest of the same pass cannot describe different bytes.
+    static func logitsDigest(_ logits: [Float]) -> String {
+        SHA256.hexString(SHA256.hash(DeepSeekV4LogitsDump.rawBytes(logits)))
     }
 
     private static func isCancellation(_ error: Error) -> Bool {

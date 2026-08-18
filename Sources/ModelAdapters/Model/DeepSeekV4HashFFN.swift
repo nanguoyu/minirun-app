@@ -80,6 +80,11 @@ enum DeepSeekV4MoEFFN {
             normalizeSelectedWeights: geometry.normalizeRoutingWeights,
             routingScale: geometry.routingScale,
             phaseAccounting: phaseAccounting)
+        // Off unless an arm names a dump path. The ids are already on the host
+        // at this point — the pager is about to be handed the same array — so
+        // recording them adds no sync and no arithmetic (ADR 0017, `u`).
+        DeepSeekV4RoutingTrace.shared?.record(
+            layer: geometry.layer, ids: routing.ids)
         try cancellationCheck()
         let routed = try DeepSeekV4RoutedExperts.forward(
             input,
@@ -105,8 +110,9 @@ enum DeepSeekV4MoEFFN {
         // that submits the routed and shared expert arithmetic together.
         // Deferred — it bounds the graph, and the next thing the decode thread
         // does is build the next layer, not read a number out of this one.
-        phaseAccounting?.recordAsyncEval(.ffnResidual)
-        MLX.asyncEval([residual])
+        submittingToGPU(phaseAccounting, .ffnResidual) {
+            MLX.asyncEval([residual])
+        }
         try cancellationCheck()
         return Result(residual: residual, routing: routing)
     }
@@ -175,10 +181,15 @@ enum DeepSeekV4MoEFFN {
                     "learned route correction bias does not match the MoE geometry")
             }
             if diagnostics.validateFiniteness {
-                phaseAccounting?.recordEval(.finitenessSweep)
                 guard measuringPhase(
-                    phaseAccounting?.recordFinitenessSweep(nanoseconds:),
-                    { isFinite(correctionBias).all().item(Bool.self) })
+                    phaseAccounting,
+                    excludingGPUBoundaryFrom: phaseAccounting?
+                        .recordFinitenessSweep(nanoseconds:),
+                    {
+                        waitingForGPU(phaseAccounting, .finitenessSweep) {
+                            isFinite(correctionBias).all().item(Bool.self)
+                        }
+                    })
                 else {
                     throw DeepSeekV4Error.configuration(
                         "learned route correction bias does not match the MoE geometry")
