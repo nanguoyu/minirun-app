@@ -38,7 +38,7 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 
 | 模型 | 磁盘占用 | Mac（M1 Pro，32 GB） | iPhone 16 Pro | 状态 |
 | --- | ---: | --- | --- | --- |
-| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731)，284B MoE | 167 GB | 约 1.5 秒/token，预算 10.7 GB；2 GB 也能跑 | 约 15 秒/token，预算 3.8 GB；2 GB 也能跑 | 可对话 |
+| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731)，284B MoE | 167 GB | 约 1.7 秒/token，预算 10.7 GB；2 GB 也能跑 | 约 15 秒/token，预算 3.8 GB；2 GB 也能跑 | 可对话 |
 | [Kimi K3](https://minirun.dev/models/kimi-k3)，2.8T MoE | 1.56 TB | 约 70 秒/token，预算 8 GB | 约 220 秒/token，预算 5.8 GB，每轮 2 个 token | 可对话 |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3)，音频与视频生成 | 64 GB | 下载、验证、存储 | 下载、验证、存储 | 容器就绪 |
 | Qwen3.8-27B | — | — | — | 即将推出 |

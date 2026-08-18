@@ -58,7 +58,7 @@ powered dock — and change with the drive, cable and budget.
 
 | Model | On disk | Mac (M1 Pro, 32 GB) | iPhone 16 Pro | Status |
 | --- | ---: | --- | --- | --- |
-| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731) — 284 B MoE | 167 GB | ≈ 1.5 s / token, 10.7 GB budget; runs at 2 GB | ≈ 15 s / token, 3.8 GB budget; runs at 2 GB | Chat ready |
+| [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731) — 284 B MoE | 167 GB | ≈ 1.7 s / token, 10.7 GB budget; runs at 2 GB | ≈ 15 s / token, 3.8 GB budget; runs at 2 GB | Chat ready |
 | [Kimi K3](https://minirun.dev/models/kimi-k3) — 2.8 T MoE | 1.56 TB | ≈ 70 s / token, 8 GB budget | ≈ 220 s / token, 5.8 GB budget, 2-token replies | Chat ready |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3) — audio & video generation | 64 GB | download, verify and store | download, verify and store | Container ready |
 | Qwen3.8-27B | — | — | — | Coming soon |
