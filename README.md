@@ -11,6 +11,7 @@ Weights stream from your SSD through a memory budget you set. Free, local, on Ma
 
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
+  <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone on TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
   <a href="CHANGELOG.md"><img alt="Version 0.4" src="https://img.shields.io/badge/version-0.4-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
@@ -94,7 +95,14 @@ powered dock — and change with the drive, cable and budget.
 drag Minirun to Applications, open it. The app is signed and notarized, and
 checks for updates itself (Sparkle).
 
-**iPhone.** Build it from this repository and install it with Xcode:
+**iPhone.** Install [TestFlight](https://apps.apple.com/app/testflight/id899247664)
+from the App Store, then open the public link on the phone:
+[testflight.apple.com/join/QuYTybjV](https://testflight.apple.com/join/QuYTybjV).
+iPhone 15 Pro or later, iOS 18 or later. Builds expire after 90 days;
+TestFlight updates them.
+
+<details>
+<summary>Or build the iPhone app yourself with Xcode</summary>
 
 1. Open `Apps/Minirun/Minirun.xcodeproj`, select the `Minirun-iOS` scheme and
    your iPhone.
@@ -112,7 +120,7 @@ checks for updates itself (Sparkle).
      -allowProvisioningUpdates
    ```
 
-TestFlight is coming; until then this is the iPhone route.
+</details>
 
 ## Quick start
 

@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="下载 Mac 版" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
+  <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone 版 TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
   <a href="CHANGELOG.md"><img alt="版本 0.4" src="https://img.shields.io/badge/version-0.4-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
@@ -68,7 +69,10 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 
 **Mac。** 下载 [Minirun.dmg](https://downloads.minirun.dev/Minirun.dmg)，把 Minirun 拖进"应用程序"，打开即可。应用已签名并经 Apple 公证，通过 Sparkle 自动检查更新。
 
-**iPhone。** 从本仓库用 Xcode 构建并安装：
+**iPhone。** 先从 App Store 安装 [TestFlight](https://apps.apple.com/app/testflight/id899247664)，然后在手机上打开公开链接：[testflight.apple.com/join/QuYTybjV](https://testflight.apple.com/join/QuYTybjV)。需要 iPhone 15 Pro 或更新、iOS 18 或更新。TestFlight 构建 90 天过期，由 TestFlight 自动更新。
+
+<details>
+<summary>或者自己用 Xcode 构建 iPhone 版</summary>
 
 1. 打开 `Apps/Minirun/Minirun.xcodeproj`，选择 `Minirun-iOS` scheme 和你的 iPhone。
 2. 在 *Signing & Capabilities* 里选择你的 Apple 开发者团队，并把 bundle identifier 改成你自己的（免费的个人团队也可以，只是应用每七天需要重新签名一次）。
@@ -82,7 +86,7 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
      -allowProvisioningUpdates
    ```
 
-TestFlight 在准备中；在此之前，iPhone 版走这条路。
+</details>
 
 ## 快速开始
 
