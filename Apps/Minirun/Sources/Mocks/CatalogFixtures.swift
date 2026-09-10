@@ -290,6 +290,47 @@ enum CatalogFixtures {
             computeSecondsPerToken: 0, isMeasuredHere: false),
         architectureSubtitle: "DeepSeek V4 Flash MoE")
 
+    static let deepseekV41Flash = CatalogEntry(
+        descriptor: ModelDescriptor(
+            id: .deepseekV41Flash,
+            displayName: "DeepSeek V4.1 Flash",
+            architecture: .deepseekV41FlashMoE,
+            layout: .v41FlashUnitBundle,
+            source: .huggingFaceRepo(
+                HuggingFaceRepoRef(
+                    repoID: "nanguoyu/DeepSeek-V4.1-Flash-minirun",
+                    revision: "fbf8d74eae864a622d2773d62085b4a0bc99344e")),
+            payloadBytes: 517_260_264_264,
+            metadataBytes: 8_854_542,
+            payloadFileCount: 557,
+            metadataFileCount: 67,
+            largestFileBytes: 8_192_016_384,
+            minimumBudgetBytes: nil,
+            runner: .none,
+            licenseName: "MIT License",
+            licenseAcknowledgementRequired: true,
+            notes: [
+                "Twenty-six of this repo's payload files, and 210 GB of its total, are the "
+                    + "two conditional-memory tables: slices of a 384-million-row table "
+                    + "stored as 4 KiB row pages.",
+                "This build ships no runner for it.",
+            ]),
+        index: ArtifactIndexSummary(
+            layers: nil, globals: 1, files: 557, bytes: 517_260_264_264,
+            sourceRepo: "nanguoyu/DeepSeek-V4.1-Flash-minirun",
+            sourceRevision: "fbf8d74eae864a622d2773d62085b4a0bc99344e"),
+        memory: MemoryProfile(
+            census: unknownGeometryCensus,
+            expertPoolBytes: 0,
+            workingSetReserveBytes: workingSetReserve,
+            requiredMinimumBudgetBytes: nil,
+            onRecordMinimumBudgetBytes: nil,
+            provenance: .declaredByIndex),
+        terms: WorkloadTerms(
+            deterministicBytesPerToken: 0, expertBytesPerToken: 0,
+            computeSecondsPerToken: 0, isMeasuredHere: false),
+        architectureSubtitle: "DeepSeek V4.1 Flash MoE")
+
     static let minimaxH3 = CatalogEntry(
         descriptor: ModelDescriptor(
             id: .minimaxH3,
@@ -331,12 +372,16 @@ enum CatalogFixtures {
             computeSecondsPerToken: 0, isMeasuredHere: false),
         architectureSubtitle: "MiniMax H3 video DiT")
 
-    static let all: [CatalogEntry] = [kimiK3, deepseekV4Flash, minimaxH3]
+    static let all: [CatalogEntry] = [
+        kimiK3, deepseekV4Flash, deepseekV41Flash, minimaxH3,
+    ]
 
     /// The DEBUG visual-review catalogue follows the Models product policy: it
     /// shows every owned HF Minirun container, while the chat picker separately
     /// admits only verified artifacts with a registered runtime.
-    static let productPreview: [CatalogEntry] = [kimiK3, deepseekV4Flash, minimaxH3]
+    static let productPreview: [CatalogEntry] = [
+        kimiK3, deepseekV4Flash, deepseekV41Flash, minimaxH3,
+    ]
 
     static var snapshot: ModelCatalogSnapshot {
         ModelCatalogSnapshot(

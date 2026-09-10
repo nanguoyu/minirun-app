@@ -256,6 +256,7 @@ enum AppCatalogAdapter {
         switch architecture {
         case .kimiK3MoE: return "Kimi K3 MoE"
         case .deepseekV4FlashMoE: return "DeepSeek V4 Flash MoE"
+        case .deepseekV41FlashMoE: return "DeepSeek V4.1 Flash MoE"
         case .minimaxH3Video: return "MiniMax H3 video DiT"
         // `qwen3MoE` survives in the kit only so a catalogue cached by an older
         // build still decodes. This build publishes no such model and must not

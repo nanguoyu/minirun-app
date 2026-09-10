@@ -1,0 +1,372 @@
+{
+  "source_repo": "deepseek-ai/DeepSeek-V4.1-Flash",
+  "source_revision": "df42c109f1defefcbfcedbe7d905718a12266e40",
+  "relationship": "byte-preserving repack",
+  "units": [
+    {
+      "unit": "layers00",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers01",
+      "files": 26,
+      "bytes": 112406784984
+    },
+    {
+      "unit": "layers02",
+      "files": 13,
+      "bytes": 7405957336
+    },
+    {
+      "unit": "layers03",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers04",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers05",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers06",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers07",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers08",
+      "files": 13,
+      "bytes": 7405957336
+    },
+    {
+      "unit": "layers09",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers10",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers11",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers12",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers13",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers14",
+      "files": 27,
+      "bytes": 112425877720
+    },
+    {
+      "unit": "layers15",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers16",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers17",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers18",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers19",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers20",
+      "files": 13,
+      "bytes": 7400714456
+    },
+    {
+      "unit": "layers21",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers22",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers23",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers24",
+      "files": 13,
+      "bytes": 7395339224
+    },
+    {
+      "unit": "layers25",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers26",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers27",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers28",
+      "files": 13,
+      "bytes": 7395339224
+    },
+    {
+      "unit": "layers29",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers30",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers31",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers32",
+      "files": 13,
+      "bytes": 7395339224
+    },
+    {
+      "unit": "layers33",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers34",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers35",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers36",
+      "files": 13,
+      "bytes": 7395339224
+    },
+    {
+      "unit": "layers37",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers38",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "layers39",
+      "files": 12,
+      "bytes": 7389735896
+    },
+    {
+      "unit": "mtp00",
+      "files": 13,
+      "bytes": 2652900312
+    },
+    {
+      "unit": "mtp01",
+      "files": 12,
+      "bytes": 2574148568
+    },
+    {
+      "unit": "mtp02",
+      "files": 12,
+      "bytes": 2706552280
+    },
+    {
+      "unit": "global00",
+      "files": 4,
+      "bytes": 3618201600
+    }
+  ],
+  "total_bytes": 517260264264,
+  "configuration": {
+    "file": "config.json",
+    "bytes": 3311,
+    "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879",
+    "source_repo": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "source_revision": "df42c109f1defefcbfcedbe7d905718a12266e40"
+  },
+  "tokenizer": {
+    "file": "tokenizer.json",
+    "bytes": 6367257,
+    "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+    "license": "LICENSE",
+    "source_repo": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "source_revision": "df42c109f1defefcbfcedbe7d905718a12266e40"
+  },
+  "arguments": {
+    "file": "inference-config.json",
+    "bytes": 1982,
+    "sha256": "2e84f45cf1dac8c7fcbb200e96667d4b913275690668ed496f24c7747207a809",
+    "source_repo": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "source_revision": "df42c109f1defefcbfcedbe7d905718a12266e40"
+  },
+  "source_files": [
+    {
+      "file": "DeepSeek_V41_Tech_Report.pdf",
+      "source_path": "DeepSeek_V41_Tech_Report.pdf",
+      "bytes": 1809802,
+      "sha256": "ba68e2e40408125ae6d2f63a9a241b61c73910691c74ec1a2a7023c851eac08d"
+    },
+    {
+      "file": "LICENSE",
+      "source_path": "LICENSE",
+      "bytes": 1084,
+      "sha256": "f2c6c602815669d292889e5be8c802f2ed950653b77999b1584e8e6aed25d040"
+    },
+    {
+      "file": "config.json",
+      "source_path": "config.json",
+      "bytes": 3311,
+      "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879"
+    },
+    {
+      "file": "encoding-README.md",
+      "source_path": "encoding/README.md",
+      "bytes": 10920,
+      "sha256": "7486920382642c8f90b2786a6ef7e271a753d89e8d5a67f7bcf4ffd7af57229e"
+    },
+    {
+      "file": "encoding-test_input_1.json",
+      "source_path": "encoding/tests/test_input_1.json",
+      "bytes": 2761,
+      "sha256": "6a5a86694e47169c8f0c9243a7e24cc5db05447be0d3d3a9891034e913c518de"
+    },
+    {
+      "file": "encoding-test_input_2.json",
+      "source_path": "encoding/tests/test_input_2.json",
+      "bytes": 527,
+      "sha256": "fd985cda88e8640b8e2404d8e659f7006cad204eb41f73c9e6662b1f218c01aa"
+    },
+    {
+      "file": "encoding-test_input_3.json",
+      "source_path": "encoding/tests/test_input_3.json",
+      "bytes": 2554,
+      "sha256": "4207613f15c79b95ad92074bdb8b2b81c5ce9cfdf15b7a67f58ded6bb3ec4fa5"
+    },
+    {
+      "file": "encoding-test_input_4.json",
+      "source_path": "encoding/tests/test_input_4.json",
+      "bytes": 712,
+      "sha256": "4c3890a7bc042ec6396d98d024a39a73cdcffbe1d0253e852da0c35e65296f3e"
+    },
+    {
+      "file": "encoding-test_input_5.json",
+      "source_path": "encoding/tests/test_input_5.json",
+      "bytes": 1143,
+      "sha256": "88289b0aac8d650aa55c4ffeb392818fff3a0ac83c2293ddfd90546804d5e5c4"
+    },
+    {
+      "file": "encoding-test_output_1.txt",
+      "source_path": "encoding/tests/test_output_1.txt",
+      "bytes": 2476,
+      "sha256": "91f79aa955717b414a82aabfb38bcd83ab5a998bd47db89d2a26338e8d3de550"
+    },
+    {
+      "file": "encoding-test_output_2.txt",
+      "source_path": "encoding/tests/test_output_2.txt",
+      "bytes": 294,
+      "sha256": "9fa162587b73ab9b315be5c88d433f9e0e681b4b36926952f289099ed9bc1dab"
+    },
+    {
+      "file": "encoding-test_output_3.txt",
+      "source_path": "encoding/tests/test_output_3.txt",
+      "bytes": 2481,
+      "sha256": "cf2b801d0738c88abb691bf4a096000c0e0737faab8a54a4ba5243c5513a3711"
+    },
+    {
+      "file": "encoding-test_output_4.txt",
+      "source_path": "encoding/tests/test_output_4.txt",
+      "bytes": 574,
+      "sha256": "94433b68370dcc69fa61efc5011b5d0e28685e4716fee1ee77fbbfc0c9935b54"
+    },
+    {
+      "file": "encoding-test_output_5.txt",
+      "source_path": "encoding/tests/test_output_5.txt",
+      "bytes": 408,
+      "sha256": "4d673091746553d1cb2e40a3fc01dc09a7c53c40627096a3e49c97a269a81f64"
+    },
+    {
+      "file": "encoding.py",
+      "source_path": "encoding/encoding.py",
+      "bytes": 35310,
+      "sha256": "b4bd8a06f94a06a61564156c7a543d649ed86ecdd72a4dfb94b064e16d9c572f"
+    },
+    {
+      "file": "inference-config.json",
+      "source_path": "inference/config.json",
+      "bytes": 1982,
+      "sha256": "2e84f45cf1dac8c7fcbb200e96667d4b913275690668ed496f24c7747207a809"
+    },
+    {
+      "file": "source-README.md",
+      "source_path": "README.md",
+      "bytes": 13110,
+      "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251"
+    },
+    {
+      "file": "test_encoding.py",
+      "source_path": "encoding/test_encoding.py",
+      "bytes": 14266,
+      "sha256": "faaad79bfef97ec11265d54c7ff6198280278f671617e9d3d664b9c7ef0de334"
+    },
+    {
+      "file": "tokenizer.json",
+      "source_path": "tokenizer.json",
+      "bytes": 6367257,
+      "sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b"
+    },
+    {
+      "file": "tokenizer_config.json",
+      "source_path": "tokenizer_config.json",
+      "bytes": 801,
+      "sha256": "6ac8c8dc065ed118161d02dd532749ae3f52c243deac27872134fae2f50d8547"
+    }
+  ]
+}

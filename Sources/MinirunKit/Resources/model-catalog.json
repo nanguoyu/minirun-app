@@ -30,6 +30,33 @@
       ]
     },
     {
+      "id" : "deepseek-v41-flash",
+      "displayName" : "DeepSeek V4.1 Flash",
+      "architecture" : "deepseekV41FlashMoE",
+      "layout" : "v41FlashUnitBundle",
+      "source" : {
+        "kind" : "huggingFaceRepo",
+        "repo" : {
+          "repoId" : "nanguoyu/DeepSeek-V4.1-Flash-minirun",
+          "revision" : "fbf8d74eae864a622d2773d62085b4a0bc99344e"
+        }
+      },
+      "payloadBytes" : 517260264264,
+      "metadataBytes" : 8854542,
+      "payloadFileCount" : 557,
+      "metadataFileCount" : 67,
+      "largestFileBytes" : 8192016384,
+      "minimumBudgetBytes" : null,
+      "runner" : "none",
+      "licenseName" : "MIT (repository tag license:mit)",
+      "licenseAcknowledgementRequired" : true,
+      "notes" : [
+        "624 files: 557 payload, 67 metadata. The counts and byte totals were walked from the repository tree on 2026-09-10 and match this repo's own index.json exactly.",
+        "26 of the payload files and 210 GB of the total are the two conditional-memory tables, each a slice of a 384-million-row table stored as 4 KiB row pages and addressed by row number from the geometry in its unit's manifest.json.",
+        "This build can fetch and verify the artifact but ships no runner for it."
+      ]
+    },
+    {
       "id" : "kimi-k3",
       "displayName" : "Kimi K3",
       "architecture" : "kimiK3MoE",

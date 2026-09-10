@@ -46,6 +46,18 @@ enum RecordedFixtures {
         expectedPayloadBytes: 166_893_192_184, expectedMetadataBytes: 527_260,
         expectedLargestFileBytes: 1_140_867_072, expectedNonLFSPayloadFiles: 0)
 
+    /// Recorded on 2026-09-10, the day this repository was published, by
+    /// `Tools/v41_flash/record_hf_fixture.py` — which reproduces the three
+    /// folders above byte for byte from the same live endpoints.
+    static let deepseekV41Flash = Repo(
+        folderName: "DeepSeek-V4.1-Flash-minirun",
+        repoID: "nanguoyu/DeepSeek-V4.1-Flash-minirun",
+        revision: "fbf8d74eae864a622d2773d62085b4a0bc99344e",
+        declaredFiles: 557, declaredBytes: 517_260_264_264,
+        expectedPayloadFiles: 557, expectedMetadataFiles: 67,
+        expectedPayloadBytes: 517_260_264_264, expectedMetadataBytes: 8_854_542,
+        expectedLargestFileBytes: 8_192_016_384, expectedNonLFSPayloadFiles: 0)
+
     static let minimaxH3 = Repo(
         folderName: "MiniMax-H3-minirun",
         repoID: "nanguoyu/MiniMax-H3-minirun",
@@ -55,7 +67,7 @@ enum RecordedFixtures {
         expectedPayloadBytes: 63_969_279_450, expectedMetadataBytes: 782_716,
         expectedLargestFileBytes: 5_061_033_024, expectedNonLFSPayloadFiles: 16)
 
-    static let all = [kimiK3, deepseekV4Flash, minimaxH3]
+    static let all = [kimiK3, deepseekV4Flash, deepseekV41Flash, minimaxH3]
 
     static var root: URL {
         guard let url = Bundle.module.url(forResource: "hf", withExtension: nil) else {

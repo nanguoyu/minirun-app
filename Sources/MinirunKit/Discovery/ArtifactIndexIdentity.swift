@@ -297,6 +297,7 @@ public struct ArtifactIdentityMatcher: Sendable {
     public static let upstreamRepositories: [String: ModelID] = [
         "moonshotai/kimi-k3": .kimiK3,
         "deepseek-ai/deepseek-v4-flash-0731": .deepseekV4Flash,
+        "deepseek-ai/deepseek-v4.1-flash": .deepseekV41Flash,
         // H3 is assembled from five upstreams. Any one of them identifies it;
         // the DiT repo is the one that carries the weights a run reads.
         "pipenetwork/minimax-h3-mlx-8bit": .minimaxH3,

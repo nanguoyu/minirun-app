@@ -18,6 +18,7 @@ final class CatalogNamingTests: XCTestCase {
     private static let expected: [ModelID: String] = [
         .kimiK3: "Kimi K3",
         .deepseekV4Flash: "DeepSeek V4 Flash",
+        .deepseekV41Flash: "DeepSeek V4.1 Flash",
         .minimaxH3: "MiniMax H3",
     ]
 
@@ -423,6 +424,7 @@ final class CatalogNamingTests: XCTestCase {
             models: [
                 CatalogFixtures.kimiK3.descriptor,
                 CatalogFixtures.deepseekV4Flash.descriptor,
+                CatalogFixtures.deepseekV41Flash.descriptor,
                 CatalogFixtures.minimaxH3.descriptor,
                 locallyBuiltDescriptor(),
                 future,
@@ -432,7 +434,7 @@ final class CatalogNamingTests: XCTestCase {
 
         XCTAssertEqual(
             product.models.map(\.id),
-            [.kimiK3, .deepseekV4Flash, .minimaxH3, futureID])
+            [.kimiK3, .deepseekV4Flash, .deepseekV41Flash, .minimaxH3, futureID])
         XCTAssertNotNil(product.descriptor(.deepseekV4Flash))
         XCTAssertNotNil(product.descriptor(.minimaxH3))
         XCTAssertNotNil(product.descriptor(futureID))
@@ -444,7 +446,8 @@ final class CatalogNamingTests: XCTestCase {
             let model = AppModel.preview()
 
             XCTAssertEqual(
-                model.entries.map(\.id), [.kimiK3, .deepseekV4Flash, .minimaxH3])
+                model.entries.map(\.id),
+                [.kimiK3, .deepseekV4Flash, .deepseekV41Flash, .minimaxH3])
             XCTAssertNotNil(model.entry(.minimaxH3))
             XCTAssertNil(model.capabilities(for: .minimaxH3))
         }
@@ -522,7 +525,7 @@ final class CatalogNamingTests: XCTestCase {
             downloadServices: .preview(entries: entries),
             seedRecordedRuns: false, startDiscovery: false)
 
-        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(entries.count, 4)
         XCTAssertEqual(CatalogFixtures.kimiK3.descriptor.runner, .decodeRunner)
         for entry in entries {
             let fitness = model.effectiveProductFitness(for: entry)
@@ -666,7 +669,7 @@ final class CatalogNamingTests: XCTestCase {
         XCTAssertEqual(source.listCount, 1)
         XCTAssertEqual(source.fetchCount, 0)
         XCTAssertEqual(model.publishedModelsOrigin, .live)
-        XCTAssertEqual(model.publishedModelsForPresentation.count, 3)
+        XCTAssertEqual(model.publishedModelsForPresentation.count, 4)
         XCTAssertEqual(model.snapshot.origin, .cached)
     }
 

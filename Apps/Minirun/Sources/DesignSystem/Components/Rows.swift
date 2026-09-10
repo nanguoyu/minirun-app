@@ -88,6 +88,7 @@ enum ModelPublisherIdentity: Equatable {
     ) -> ModelPublisherIdentity {
         if modelID == .kimiK3 { return .kimi }
         if modelID == .deepseekV4Flash { return .deepSeek }
+        if modelID == .deepseekV41Flash { return .deepSeek }
         if modelID == .minimaxH3 { return .miniMax }
 
         let tokens = [modelID.rawValue, displayName, repositoryID ?? ""]

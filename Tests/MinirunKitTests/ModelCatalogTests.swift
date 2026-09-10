@@ -11,9 +11,10 @@ final class ModelCatalogTests: XCTestCase {
         let snapshot = ModelCatalog.bundled
         XCTAssertEqual(snapshot.schemaVersion, ModelCatalogSnapshot.currentSchemaVersion)
         XCTAssertEqual(snapshot.origin, .bundled)
-        XCTAssertEqual(snapshot.models.count, 3)
+        XCTAssertEqual(snapshot.models.count, 4)
         XCTAssertNotNil(snapshot.descriptor(.kimiK3))
         XCTAssertNotNil(snapshot.descriptor(.deepseekV4Flash))
+        XCTAssertNotNil(snapshot.descriptor(.deepseekV41Flash))
         XCTAssertNotNil(snapshot.descriptor(.minimaxH3))
     }
 
@@ -47,6 +48,7 @@ final class ModelCatalogTests: XCTestCase {
         let pairs: [(RecordedFixtures.Repo, ModelID)] = [
             (RecordedFixtures.kimiK3, .kimiK3),
             (RecordedFixtures.deepseekV4Flash, .deepseekV4Flash),
+            (RecordedFixtures.deepseekV41Flash, .deepseekV41Flash),
             (RecordedFixtures.minimaxH3, .minimaxH3),
         ]
         for (fixture, id) in pairs {
@@ -258,7 +260,7 @@ final class ModelCatalogTests: XCTestCase {
         for (repo, id) in bundled {
             XCTAssertEqual(HuggingFaceCatalogSource.recognizedRepos[repo.repoID], id)
         }
-        XCTAssertEqual(bundled.count, 3)
+        XCTAssertEqual(bundled.count, 4)
     }
 
     func testKnownRepositoryAtANewRevisionKeepsItsFormatIdentityButPinsTheNewTree() async throws {

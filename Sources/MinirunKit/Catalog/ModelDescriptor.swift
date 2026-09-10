@@ -11,6 +11,7 @@ public struct ModelID: RawRepresentable, Hashable, Codable, Sendable, CustomStri
 
     public static let kimiK3 = ModelID("kimi-k3")
     public static let deepseekV4Flash = ModelID("deepseek-v4-flash")
+    public static let deepseekV41Flash = ModelID("deepseek-v41-flash")
     public static let minimaxH3 = ModelID("minimax-h3")
 
     /// Stable identity for a repository discovered after this build shipped.
@@ -27,6 +28,10 @@ public struct ModelID: RawRepresentable, Hashable, Codable, Sendable, CustomStri
 public enum ModelArchitecture: String, Codable, Sendable, CaseIterable {
     case kimiK3MoE
     case deepseekV4FlashMoE
+    /// V4.1's MoE stack plus two conditional-memory tables read by row, which
+    /// is a different thing to page than a matrix and so a different
+    /// architecture to this catalog, not a version of the one above.
+    case deepseekV41FlashMoE
     /// Retained only so a catalogue cached by an older build still decodes. No
     /// model of this architecture is published or offered by this build.
     case qwen3MoE
@@ -47,6 +52,10 @@ public enum ArtifactLayout: String, Codable, Sendable, CaseIterable {
     case k3FlagshipLayerStreams
     /// `layersNN/`, `mtpNN/`, `global00/`; `.fp8tile`, `.mxfp4tile`, `.bin`.
     case v4FlashUnitBundle
+    /// The same unit shape plus `.engrampage`: a conditional-memory table
+    /// split into parts of fixed 4 KiB row pages, addressed by row number
+    /// from the geometry in each unit's `manifest.json`.
+    case v41FlashUnitBundle
     /// `dit-block-NN/`, `vae-*`, `adaln-cache/`; `.h3tile`, `.qstream`.
     case h3UnitBundle
     /// A locally built container set. Retained only so a catalogue cached by an

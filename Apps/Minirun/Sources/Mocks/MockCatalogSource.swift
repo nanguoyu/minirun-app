@@ -170,6 +170,14 @@ enum PlanBuilder {
             return index % 3 == 0
                 ? "\(unit)/\(unit)-w\(index).fp8tile"
                 : "\(unit)/\(unit)-w\(index).mxfp4tile"
+        case .v41FlashUnitBundle:
+            // Same unit shape, plus the row-page parts of the two
+            // conditional-memory tables.
+            switch index % 3 {
+            case 0: return "\(unit)/\(unit)-w\(index).fp8tile"
+            case 1: return "\(unit)/\(unit)-w\(index).mxfp4tile"
+            default: return "\(unit)/\(unit)-engram-p\(index).engrampage"
+            }
         case .h3UnitBundle:
             return index % 5 == 0
                 ? "\(unit)/\(unit)-\(index).qstream"
@@ -183,7 +191,7 @@ enum PlanBuilder {
         switch layout {
         case .k3FlagshipLayerStreams:
             return String(format: "layer%02d", index / 4)
-        case .v4FlashUnitBundle:
+        case .v4FlashUnitBundle, .v41FlashUnitBundle:
             return String(format: "layers%02d", index / 12)
         case .h3UnitBundle:
             return String(format: "dit-block-%02d", index / 16)
@@ -200,7 +208,7 @@ enum PlanBuilder {
         switch layout {
         case .k3FlagshipLayerStreams:
             return String(format: "layer%02d", index)
-        case .v4FlashUnitBundle:
+        case .v4FlashUnitBundle, .v41FlashUnitBundle:
             return String(format: "layers%02d", index)
         case .h3UnitBundle:
             return String(format: "dit-block-%02d", index)

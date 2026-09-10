@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- DeepSeek V4.1 Flash is in the model list: 517 GB, downloadable and
+  verifiable, with no chat support yet — the app says so rather than
+  offering a run it cannot do.
+
 ## 0.4 (2026081801) — 2026-08-18
 
 - DeepSeek V4 Flash decodes about a third faster on Mac; the sparse-attention

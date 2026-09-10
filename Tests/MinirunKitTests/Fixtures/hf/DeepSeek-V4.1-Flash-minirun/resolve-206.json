@@ -1,0 +1,77 @@
+{
+  "firstSixteenBytesHex": "4d4e524e54494c310300000000400000",
+  "path": "layers00/layers00-attn_wkv_weight.fp8tile",
+  "treeEntry": {
+    "type": "file",
+    "oid": "19a56008deb38eb29f53f199720529359c0031e2",
+    "size": 2654208,
+    "lfs": {
+      "oid": "197a997d9a0f6b59028aaedeae6fa0fc615d484374aec872d8307e2f2d545144",
+      "size": 2654208,
+      "pointerSize": 132
+    },
+    "xetHash": "81ac56c599d0e8d608b59bf6a3835623259164d0418ab5b759ff0a60243563a5",
+    "path": "layers00/layers00-attn_wkv_weight.fp8tile",
+    "lastCommit": {
+      "id": "fbf8d74eae864a622d2773d62085b4a0bc99344e",
+      "title": "Publish complete DeepSeek-V4.1-Flash release",
+      "date": "2026-09-10T10:10:19.000Z"
+    }
+  },
+  "responses": [
+    {
+      "status": 302,
+      "headers": {
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": "1052",
+        "connection": "close",
+        "date": "Thu, 10 Sep 2026 10:18:32 GMT",
+        "location": "https://us.aws.cdn.hf.co/xet-bridge-us/6aa279ab8a4585bede7913da/81ac56c599d0e8d608b59bf6a3835623259164d0418ab5b759ff0a60243563a5?X-Xet-Cas-Uid=public&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27layers00-attn_wkv_weight.fp8tile%3B+filename%3D%22layers00-attn_wkv_weight.fp8tile%22%3B&user_id=public&Expires=1789039112&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly91cy5hd3MuY2RuLmhmLmNvL3hldC1icmlkZ2UtdXMvNmFhMjc5YWI4YTQ1ODViZWRlNzkxM2RhLzgxYWM1NmM1OTlkMGU4ZDYwOGI1OWJmNmEzODM1NjIzMjU5MTY0ZDA0MThhYjViNzU5ZmYwYTYwMjQzNTYzYTVcXD9YLVhldC1DYXMtVWlkPXB1YmxpYyZyZXNwb25zZS1jb250ZW50LWRpc3Bvc2l0aW9uPWlubGluZSUzQitmaWxlbmFtZSUyQSUzRFVURi04JTI3JTI3bGF5ZXJzMDAtYXR0bl93a3Zfd2VpZ2h0LmZwOHRpbGUlM0IrZmlsZW5hbWUlM0QlMjJsYXllcnMwMC1hdHRuX3drdl93ZWlnaHQuZnA4dGlsZSUyMiUzQiZ1c2VyX2lkPXB1YmxpYyIsIkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiRXBvY2hUaW1lIjoxNzg5MDM5MTEyfX19XX0_&Signature=MEUCIF03xCNnnPa1gitYMX4IeqG56d62mSNLkfzU1-aIEhHsAiEAuzuLbKIO1EH8E8c8eyRfBBV4Ldm0cjnoSTvl2%7Euf1ZQ_&Key-Pair-Id=01KXEF4KZ1B6FV465MAWR4M21F",
+        "x-powered-by": "huggingface-moon",
+        "x-request-id": "Root=1-6aa283f8-74fc868a171ad78138f4d45b",
+        "ratelimit": "\"resolvers\";r=2997;t=55",
+        "ratelimit-policy": "\"fixed window\";\"resolvers\";q=3000;w=300",
+        "cross-origin-opener-policy": "same-origin",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "access-control-max-age": "86400",
+        "access-control-allow-origin": "https://huggingface.co",
+        "vary": "Origin, Accept",
+        "access-control-expose-headers": "X-Repo-Commit,X-Request-Id,X-Error-Code,X-Error-Message,X-Total-Count,ETag,Link,Accept-Ranges,Content-Range,X-Linked-Size,X-Linked-ETag,X-Xet-Hash",
+        "x-repo-commit": "fbf8d74eae864a622d2773d62085b4a0bc99344e",
+        "accept-ranges": "bytes",
+        "x-hf-warning": "unauthenticated; Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.",
+        "x-linked-size": "2654208",
+        "x-linked-etag": "\"197a997d9a0f6b59028aaedeae6fa0fc615d484374aec872d8307e2f2d545144\"",
+        "cache-control": "no-store",
+        "x-xet-hash": "81ac56c599d0e8d608b59bf6a3835623259164d0418ab5b759ff0a60243563a5",
+        "link": "<https://huggingface.co/api/models/nanguoyu/DeepSeek-V4.1-Flash-minirun/xet-read-token/fbf8d74eae864a622d2773d62085b4a0bc99344e>; rel=\"xet-auth\", <https://cas-server.xethub.hf.co/v1/reconstructions/81ac56c599d0e8d608b59bf6a3835623259164d0418ab5b759ff0a60243563a5>; rel=\"xet-reconstruction-info\"",
+        "x-cache": "Miss from cloudfront",
+        "via": "1.1 4593b0cdf0749eff96c25bb0d7e1bc84.cloudfront.net (CloudFront)",
+        "x-amz-cf-pop": "VIE50-P4",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "x-amz-cf-id": "eLymwH4PE4ZSJRwCCV1WLAKi5SopD8Q0hg7M0YJGUOOnbYnkgLZF9w==",
+        "strict-transport-security": "max-age=31536000"
+      }
+    },
+    {
+      "status": 206,
+      "headers": {
+        "content-type": "application/octet-stream",
+        "accept-ranges": "bytes",
+        "content-disposition": "inline; filename*=UTF-8''layers00-attn_wkv_weight.fp8tile; filename=\"layers00-attn_wkv_weight.fp8tile\";",
+        "etag": "\"81ac56c599d0e8d608b59bf6a3835623259164d0418ab5b759ff0a60243563a5\"",
+        "access-control-allow-headers": "Content-Range, Content-Type, Content-Disposition, ETag",
+        "access-control-expose-headers": "*",
+        "content-length": "16",
+        "content-range": "bytes 0-15/2654208",
+        "vary": "origin, access-control-request-method, access-control-request-headers",
+        "access-control-allow-origin": "*",
+        "x-request-id": "01M25D70BQ0PYMFCCDTCS0EAJM",
+        "x-hf-cdn-pop": "aws-eu-west-3",
+        "date": "Thu, 10 Sep 2026 10:18:32 GMT",
+        "alt-svc": "h3=\":443\";ma=60;",
+        "connection": "close"
+      }
+    }
+  ]
+}

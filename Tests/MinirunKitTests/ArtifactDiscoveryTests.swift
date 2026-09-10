@@ -52,6 +52,22 @@ final class ArtifactDiscoveryTests: XCTestCase {
         }
         """
 
+    /// V4.1 shares V4's shape and differs only in the upstream it names — which
+    /// is the whole reason the upstream table exists. A matcher that keyed on
+    /// the shape would call this one V4-Flash-0731 and be wrong about 517 GB.
+    static let v41Index = """
+        {
+          "source_repo": "deepseek-ai/DeepSeek-V4.1-Flash",
+          "source_revision": "df42c109f1defefcbfcedbe7d905718a12266e40",
+          "relationship": "byte-preserving repack",
+          "units": [
+            { "unit": "layers00", "files": 13, "bytes": 7444316160 },
+            { "unit": "layers01", "files": 26, "bytes": 111000000000 }
+          ],
+          "total_bytes": 517260264264
+        }
+        """
+
     /// H3's shape: no `source_repo` at all — a map of five upstreams instead.
     static let h3Index = """
         {
@@ -240,6 +256,23 @@ final class ArtifactDiscoveryTests: XCTestCase {
             .deepseekV4Flash)
     }
 
+    func testV41IsIdentifiedByItsUpstreamRatherThanByItsShape() throws {
+        let identity = ArtifactIndexIdentity.parse(Data(Self.v41Index.utf8))
+        XCTAssertEqual(identity.shape, .singleSourceUnits)
+        XCTAssertEqual(identity.repositories.map(\.repoID), ["deepseek-ai/DeepSeek-V4.1-Flash"])
+        XCTAssertEqual(identity.declaredBytes, 517_260_264_264)
+        XCTAssertEqual(
+            ArtifactIdentityMatcher(catalog: ModelCatalog.bundled).match(identity),
+            .deepseekV41Flash)
+        // The two DeepSeek artifacts share a shape and must not be confused for
+        // one another.
+        let v4 = ArtifactIndexIdentity.parse(Data(Self.v4Index.utf8))
+        XCTAssertEqual(v4.shape, identity.shape)
+        XCTAssertEqual(
+            ArtifactIdentityMatcher(catalog: ModelCatalog.bundled).match(v4),
+            .deepseekV4Flash)
+    }
+
     func testTheMultiSourceShapeKeepsEveryUpstreamAndStillIdentifies() throws {
         let identity = ArtifactIndexIdentity.parse(Data(Self.h3Index.utf8))
         XCTAssertEqual(identity.shape, .multiSourceUnits)
@@ -275,17 +308,18 @@ final class ArtifactDiscoveryTests: XCTestCase {
 
     // MARK: - Scanning a location
 
-    func testTheThreeRealShapesAreAllFoundUnderOneLocation() throws {
+    func testEveryRealShapeIsFoundUnderOneLocation() throws {
         try makeArtifact(named: "k3-artifact", index: Self.k3Index)
         try makeArtifact(named: "v4-artifact", index: Self.v4Index)
+        try makeArtifact(named: "v41-artifact", index: Self.v41Index)
         try makeArtifact(named: "h3-artifact", index: Self.h3Index)
 
         let scan = locator().scan(root)
         XCTAssertTrue(scan.isMounted)
-        XCTAssertEqual(scan.artifacts.count, 3)
+        XCTAssertEqual(scan.artifacts.count, 4)
         XCTAssertEqual(
             Set(scan.artifacts.compactMap(\.model)),
-            [.kimiK3, .deepseekV4Flash, .minimaxH3])
+            [.kimiK3, .deepseekV4Flash, .deepseekV41Flash, .minimaxH3])
         XCTAssertTrue(scan.unreadable.isEmpty)
     }
 

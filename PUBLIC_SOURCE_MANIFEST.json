@@ -262,7 +262,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/Rows.swift",
-      "sha256": "419714714fed75cab27f7f6a4ba89f5ed927363a534c87aa52f0d88256bd4ead"
+      "sha256": "ce4633adac1b2de8e259bd8aa49f319bd44d0c7f47bb714f110503437c8af6eb"
     },
     {
       "kind": "file",
@@ -292,13 +292,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Mocks/CatalogFixtures.swift",
-      "sha256": "87cea51828f6b4239e3b3413a7f3649da71d7a1f5348b673686a82f3b9194c37"
+      "sha256": "c1c872898a8b8b838705a3c75c4e6302065e8cffeebcc65f0c50d3a4a49f1623"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Mocks/MockCatalogSource.swift",
-      "sha256": "9a390013747f76f26270561807fc33a6268b35029d179cb6a6073a3f21f4c5ed"
+      "sha256": "582f06d884ad289379d72f3426405a0d03e009d74424c39db541dbd047371f3b"
     },
     {
       "kind": "file",
@@ -322,7 +322,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/AppModel.swift",
-      "sha256": "957613c1271e5d6ef7dd19cd1fe285ec0689844ea833cbf5462fa4d6c38b9db8"
+      "sha256": "9779b5bf09195578500e0f25d012c585c222859e642c124d5e0dc104637c7ae9"
     },
     {
       "kind": "file",
@@ -538,7 +538,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/CatalogNamingTests.swift",
-      "sha256": "bed5e7508621e30ea86b39d069e75f961baf5a810ecf2fdddec5b9d5a1a9e9b7"
+      "sha256": "ce9a48b012e0293077dc2cf4b93ad17f7364afaff32d88ca690fa036b1803149"
     },
     {
       "kind": "file",
@@ -622,7 +622,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "CHANGELOG.md",
-      "sha256": "129faa273b50c2eb88e8aa86680645af920350a4355a4a43cafccf0ac573cdc5"
+      "sha256": "464e3920430a593c5bc41d78fb01016fd55e9ecf0dde66a2fb19fa835969dfdf"
     },
     {
       "kind": "file",
@@ -670,13 +670,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "c0d8ff0c9ac8f43c8b0277c795344bee0ce53859cd444a6b6bcda8f9e729debf"
+      "sha256": "3141858081991cbeaef3da96662e6cc2aed9605bff1199b51384185bb71f04db"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "README.zh-CN.md",
-      "sha256": "e1de047e8a78629d04fd1529758daad3d73a80a7401a78a824f137db3fe036a4"
+      "sha256": "5de875b32a134d89221c6f06ec1439e7c85d31b00839107d64c018ef94f8669b"
     },
     {
       "kind": "file",
@@ -832,13 +832,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunKit/Catalog/ModelDescriptor.swift",
-      "sha256": "6f388de2e3725ff8bd5f11fcb1e9e7b12c2384a67b636400f832b94d2625f496"
+      "sha256": "9c5593bbec90fce7ed3629dcad061704393898442f32db8ee34d2f28fefbbf6b"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunKit/Discovery/ArtifactIndexIdentity.swift",
-      "sha256": "bed0f2943a2054e1f034782feac9f4419afad1f9cc11701021edece3676396ce"
+      "sha256": "219b0298ea5ed4c01e88a2690fde1d8773af420c3b687bf256c800d15109fcc8"
     },
     {
       "kind": "file",
@@ -952,7 +952,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunKit/Resources/model-catalog.json",
-      "sha256": "ec56f876e1653a2971f3d4bddbb2131e94be62aa39b25679841ee0dd2c682f3d"
+      "sha256": "f334f2e5527587ba4172f1804a4642e97f52eabdfd13a5c4d0ba6715775365d8"
     },
     {
       "kind": "file",
@@ -1738,7 +1738,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunKitTests/ArtifactDiscoveryTests.swift",
-      "sha256": "6f7daa3967138c5ea18dc25f0e9eded549458121b38cec95df5c5a96fa8c78be"
+      "sha256": "33d77be32545c0e2ff221cd0020144401bafaf937d9cb0176373028717d22fa4"
     },
     {
       "kind": "file",
@@ -1889,6 +1889,102 @@
       "mode": "0644",
       "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4-Flash-0731-minirun/tree-page-14.json",
       "sha256": "0136d03082bd2db13af590779c07da5412f747e55d319db1df29fc362e8c5530"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/index.json",
+      "sha256": "c697664bd7bcc92e70f71c3f5c41dba84edfa6bf90975042f06505506dbeb37b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/resolve-206.json",
+      "sha256": "1043166a23fc1dc9b9b91a96994d91588e551a2fbc5f58c77ee2f8554af7f94b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-01.json",
+      "sha256": "e0020add093aa178dfad69fdf98dd1099a5de6ab476d615294ce2e0f27a767b2"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-02.json",
+      "sha256": "ac890adb816d35017ecd565845efdd86c631a58dabf795a1c5a02da209c55471"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-03.json",
+      "sha256": "0323230cea7d79ea81f97f643072ed1fcc1818eced516500dd7d70a5e0c9de47"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-04.json",
+      "sha256": "cbbae5af0e4494a1a30e3790f335ff237a10590f62aac6d3e3112c8ed0b7e6be"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-05.json",
+      "sha256": "2396acf5b0e2e0e1bc739a7118c384570bc3503deee04346f3002ded94b8d84f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-06.json",
+      "sha256": "fd91c51907b71b7543ffb979479eb1a2ab6ad746fa100764baf62ca136caf8f4"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-07.json",
+      "sha256": "faa167c9293ffb27d6ad5233aab0d695b2840cfbabf81854dd81aec66ffd0920"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-08.json",
+      "sha256": "dd921f5f5579ad11b45fc561479542222a68279cc7f7d15c3a70fd44044d3f3c"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-09.json",
+      "sha256": "587b813786b38535ef8cae557cf808cbfc5930b5a93a339e18abad67b94ad45b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-10.json",
+      "sha256": "9437b393b0ac72cb73e8c62d5f2ddabd36203dcf9d2fe91717092b0817033329"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-11.json",
+      "sha256": "adb678969e816d3f7435dcb4ab25ef9ad1cb1530a36082cae9b7222ecf585c74"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-12.json",
+      "sha256": "351c26a39944b43cb6628062deefac2f8303df291d8259596b716b39fe2746ab"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-13.json",
+      "sha256": "44194203a4b909955daff258dfab13ac5b7af6e20c730c1effec7eecefb37372"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunKitTests/Fixtures/hf/DeepSeek-V4.1-Flash-minirun/tree-page-14.json",
+      "sha256": "274b471aa53aa2d2d7f605d9624ab1c20b22f8d022c08518339bbdd5a37ee8e4"
     },
     {
       "kind": "file",
@@ -2146,7 +2242,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunKitTests/ModelCatalogTests.swift",
-      "sha256": "7a85094cccb248a46c1e8cc054e85dbff9de22d55584b1ee303b2f3c466a3661"
+      "sha256": "c484c58fcc38000f6807b8179d0deb2e2bda1c6f3c6b0a9b13bee6891d23d1fa"
     },
     {
       "kind": "file",
@@ -2194,7 +2290,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunKitTests/Support/RecordedFixtures.swift",
-      "sha256": "d04b1aebd28325e1cf03945bb87a0f3b36233a1d7cfda03f8f5da696b00e35e9"
+      "sha256": "968775d9fd28a7a4bf78a8e1ffc09de09ba7db3137f070b466a78d65a010c57e"
     },
     {
       "kind": "file",
