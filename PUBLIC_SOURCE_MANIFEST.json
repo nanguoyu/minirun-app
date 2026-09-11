@@ -1995,6 +1995,18 @@
     {
       "kind": "file",
       "mode": "0644",
+      "path": "Tests/Fixtures/deepseek-v41/config.json",
+      "sha256": "8be45ce0476004a3f529fd896115a4a2e800a129ad2d3ec05b16050f52e21879"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/Fixtures/deepseek-v41/inference-config.json",
+      "sha256": "2e84f45cf1dac8c7fcbb200e96667d4b913275690668ed496f24c7747207a809"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
       "path": "Tests/Fixtures/k3-flagship/flagship-config/config.json",
       "sha256": "9710e121a58d03ac92c8d6da287a19541994319afbbe6d6202af001ffd379213"
     },
