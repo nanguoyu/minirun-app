@@ -66,6 +66,30 @@ private extension AppAppearance {
     }
 }
 
+/// A modal that can route into a chat has to get out of the way when it does.
+///
+/// **Find Models** presents a model page inside its own sheet, and that page's
+/// **New chat** moves the App's destination behind the sheet: the conversation
+/// opens with the browser still covering it, which from the operator's side is
+/// a button that did nothing. A conversation destination is a place the whole
+/// App goes, so a modal standing over it dismisses itself.
+struct DismissesWhenAChatOpens: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+
+    func body(content: Content) -> some View {
+        content.onChange(of: model.destination) { _, destination in
+            if case .conversation = destination { dismiss() }
+        }
+    }
+}
+
+extension View {
+    func mrDismissesWhenAChatOpens() -> some View {
+        modifier(DismissesWhenAChatOpens())
+    }
+}
+
 /// The review fixture is intentionally incapable of touching real bookmarks.
 /// That safety boundary must be visible when somebody operates the window,
 /// rather than existing only in a launch argument they did not type.
@@ -605,6 +629,10 @@ private struct LaunchRefusalView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                    // `Inspector` is the engineering word for this column and
+                    // the only name the hidden label would have offered. What a
+                    // reader needs to hear is what the control chooses between.
+                    .accessibilityLabel("what this panel shows")
                 }
                 .padding(.horizontal, MRSpace.s3)
                 .padding(.vertical, MRSpace.s2)
@@ -961,6 +989,14 @@ private struct LaunchRefusalView: View {
                             .toolbar(.hidden, for: .tabBar)
                     }
             }
+            .task(id: model.conversationNavigationActivationID) {
+                // Same order as Settings: let this lazily created stack finish
+                // its empty initialization write, then acknowledge the route
+                // the App asked for. Without it a New chat tapped in the
+                // Settings tab created the chat and stayed where it was.
+                await Task.yield()
+                model.activatePendingConversationNavigation()
+            }
         }
 
         private var path: Binding<[UUID]> {
@@ -1018,6 +1054,14 @@ private struct LaunchRefusalView: View {
                         IOSChatHome()
                     }
                 }
+            }
+            .task(id: model.conversationNavigationActivationID) {
+                // iPad reads the destination directly, but the pending route
+                // must still be acknowledged here: a scene that changes width
+                // class would otherwise carry an unacknowledged intent into the
+                // compact stack and ignore the next Back.
+                await Task.yield()
+                model.activatePendingConversationNavigation()
             }
         }
     }

@@ -35,14 +35,22 @@ final class IOSProductPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
     }
 
-    func testModelAndDownloadEvidenceUseCompactCardsOnIOS() throws {
+    /// A phone does not get a desktop table.
+    ///
+    /// Run receipts still fork on the platform: a six-column table is a
+    /// desktop object. The file list no longer does — one `MRListRow` asks the
+    /// container how wide it is and stacks below 460 points, which is the same
+    /// answer on a phone and on a Mac window dragged narrow, and is the
+    /// arrangement `#if os(iOS)` could never produce.
+    func testModelAndDownloadEvidenceStayCompactOnIOS() throws {
         let modelDetail = try screen("ModelDetailView.swift")
         let downloadDetail = try screen("DownloadDetailView.swift")
 
         XCTAssertTrue(modelDetail.contains("compactHistoryCard"))
         XCTAssertTrue(modelDetail.contains("desktopHistoryTable(records)"))
-        XCTAssertTrue(downloadDetail.contains("compactFileCard"))
-        XCTAssertTrue(downloadDetail.contains("desktopFileRow(file)"))
+        XCTAssertTrue(downloadDetail.contains("MRListRow(minimumWideWidth: 460"))
+        XCTAssertFalse(downloadDetail.contains("#if os(macOS)\n        private func"))
+        XCTAssertFalse(downloadDetail.contains("mrCard("))
     }
 
     func testRemovingStorageAccessExplainsTheImpactBeforeActing() throws {
@@ -122,18 +130,31 @@ final class IOSProductPresentationTests: XCTestCase {
         XCTAssertNil(loading.primary)
     }
 
-    func testAboutUsesFullWidthProductLinkRowsInsteadOfStandaloneButtons() throws {
+    /// About is a product page now, so its three links are text links in a
+    /// definition list rather than three 60-point rows with tinted icons. The
+    /// rule that produced those rows still holds in its new shape: a link is
+    /// never a lone bordered button, and it is never a SwiftUI `Link`, which
+    /// is AppKit-backed on macOS and draws as an unrenderable placeholder in
+    /// the `ImageRenderer` this page is reviewed with.
+    func testAboutStatesItsLinksAsTextLinksAndItsBuildAsTwoFigures() throws {
         let source = try screen("AboutView.swift")
 
         XCTAssertEqual(AboutPresentation.linksTitle, "Links")
         XCTAssertEqual(AboutPresentation.websiteTitle, "Website")
         XCTAssertEqual(AboutPresentation.privacyTitle, "Privacy Policy")
         XCTAssertEqual(AboutPresentation.termsTitle, "Terms of Service")
-        XCTAssertTrue(source.contains("SectionHeader(title: AboutPresentation.linksTitle)"))
-        XCTAssertTrue(source.contains("linkRow("))
-        XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(source.contains(".buttonStyle(.plain)"))
+        XCTAssertEqual(AboutPresentation.buildTitle, "This build")
+        XCTAssertTrue(source.contains("MRPageSection(title: AboutPresentation.linksTitle)"))
+        XCTAssertTrue(source.contains("linkFact("))
+        XCTAssertTrue(source.contains(".mrTextLink()"))
+        XCTAssertFalse(source.contains("Link(destination:"))
         XCTAssertFalse(source.contains(".buttonStyle(.bordered)"))
+        XCTAssertFalse(source.contains(".buttonStyle(.borderedProminent)"))
+        // The attribution the bundled publisher marks carry a licence
+        // obligation for is prose on the page, not a notice file nothing opens.
+        XCTAssertTrue(AboutPresentation.iconsNotice.contains("Lobe Icons"))
+        XCTAssertTrue(AboutPresentation.iconsNotice.contains("MIT"))
+        XCTAssertEqual(AboutPresentation.iconsSourceURL.host, "github.com")
     }
 
     /// ADR 0011 admits two output tokens on iPhone and sixty-four on the Mac.
@@ -236,6 +257,100 @@ final class IOSProductPresentationTests: XCTestCase {
             }
         }
     #endif
+
+    /// One navigation-bar rule, checked across every screen at once.
+    ///
+    /// iOS 26 sizes each bar item's glass capsule from the item's content, so a
+    /// product page control inside one — its filled shape, its border, its
+    /// 44-point minimum — measures a second control inside the system's and
+    /// pushes the capsule past the bar's trailing inset. Storage's Rescan was
+    /// half off the right edge of an iPhone 16 Pro because of it. The rule and
+    /// its reasoning live on `MRControlPlacement`; this test is what keeps the
+    /// next screen from re-deciding it.
+    func testNavigationBarItemsCarryNoProductControlShape() throws {
+        let forbidden = [
+            ".mrOutlineAction()", ".mrFilledAction()", "frame(minWidth:", "frame(width:",
+            "minHeight: 44", "minimumIOSTouchTarget",
+        ]
+        var inspected = 0
+        for (name, source) in try screenSources() {
+            for block in Self.blocks(after: ".toolbar {", in: source) {
+                inspected += 1
+                for token in forbidden {
+                    XCTAssertFalse(
+                        block.contains(token),
+                        "\(name): a navigation-bar item must not bring \(token) — the bar "
+                            + "owns the capsule, the padding and the target. See "
+                            + "MRControlPlacement.")
+                }
+            }
+        }
+        XCTAssertGreaterThan(inspected, 4, "the scan must actually find the toolbars")
+
+        // The conversation's own bar item is reached through a property, so the
+        // block scan cannot see it. It is the second instance of the same rule.
+        let conversation = try screen("ConversationView.swift")
+        let menu = try XCTUnwrap(
+            Self.blocks(after: "private var panelMenu: some View {", in: conversation).first)
+        XCTAssertFalse(
+            menu.contains(".frame("),
+            "the ellipsis menu is a bar item: the capsule is its target, not a hand-set frame")
+
+        let storage = try screen("StorageSettingsView.swift")
+        XCTAssertTrue(storage.contains("StorageRefreshButton(placement: .navigationBar)"))
+        XCTAssertTrue(storage.contains(".mrOutlineAction(placement)"))
+    }
+
+    /// A modal that routes into a chat gets out of the way when it does.
+    func testFindModelsDismissesItselfWhenItOpensAChat() throws {
+        let source = try screen("ModelCatalogView.swift")
+        XCTAssertTrue(source.contains(".mrDismissesWhenAChatOpens()"))
+        XCTAssertTrue(
+            try screen("RootView.swift").contains("struct DismissesWhenAChatOpens"))
+    }
+
+    /// The Chats stack acknowledges a programmatic route the same way the
+    /// Settings stack already did.
+    func testChatsStackAcknowledgesAProgrammaticRoute() throws {
+        let source = try screen("RootView.swift")
+        XCTAssertTrue(source.contains("model.conversationNavigationActivationID"))
+        XCTAssertTrue(source.contains("model.activatePendingConversationNavigation()"))
+        XCTAssertEqual(
+            source.components(separatedBy: "activatePendingConversationNavigation()").count - 1,
+            2,
+            "both the compact stack and the regular-width split acknowledge the route")
+    }
+
+    /// Every `Sources/Screens` file, by name.
+    private func screenSources() throws -> [(String, String)] {
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Screens", isDirectory: true)
+        let names = try FileManager.default
+            .contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasSuffix(".swift") }
+            .sorted()
+        return try names.map { ($0, try screen($0)) }
+    }
+
+    /// Every brace-balanced block introduced by `marker`.
+    private static func blocks(after marker: String, in source: String) -> [String] {
+        var blocks: [String] = []
+        var search = source.startIndex..<source.endIndex
+        while let found = source.range(of: marker, range: search) {
+            var depth = 1
+            var index = found.upperBound
+            while index < source.endIndex, depth > 0 {
+                if source[index] == "{" { depth += 1 }
+                if source[index] == "}" { depth -= 1 }
+                index = source.index(after: index)
+            }
+            blocks.append(String(source[found.upperBound..<index]))
+            search = index..<source.endIndex
+        }
+        return blocks
+    }
 
     private func screen(_ name: String) throws -> String {
         try projectFile("Sources/Screens/\(name)")

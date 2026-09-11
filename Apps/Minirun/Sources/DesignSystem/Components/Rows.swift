@@ -57,16 +57,156 @@ enum ModelRowLeadingState: Equatable {
 }
 
 enum ModelRowPresentation {
-    static func trailingArgument(
+    /// The third line under a model's name: what this build can do with it, and
+    /// what it last cost here.
+    ///
+    /// It replaced three `StatusChip` pills. A pill is a shape that says
+    /// "badge", and three of them on a row made the catalog look like a
+    /// storefront with sale stickers; the same three facts are one quiet
+    /// sentence, and most rows still have nothing to say here at all.
+    ///
+    /// A model with no runner in this build gets no run time, because it has
+    /// never run here — *container only* is the whole of what it is.
+    static func note(
         fitness: PlatformFitness, lastRunSecondsPerToken: Double? = nil
     ) -> String? {
-        if fitness.verdict == .noRunner {
-            return "Storage and verification only"
+        var terms: [String] = []
+        switch fitness.verdict {
+        case .noRunner: terms.append("Container only")
+        case .refused: terms.append("Won't run on this device")
+        case .runnableWithCaveats: terms.append("Runs with limits")
+        case .runnable: break
         }
-        if let seconds = lastRunSecondsPerToken, seconds.isFinite, seconds > 0 {
-            return "Last run \(MRFormat.clock(seconds))/token"
+        if fitness.verdict != .noRunner,
+            let seconds = lastRunSecondsPerToken, seconds.isFinite, seconds > 0
+        {
+            terms.append("Last run \(MRFormat.clock(seconds))/token")
         }
-        return nil
+        return terms.isEmpty ? nil : terms.joined(separator: " · ")
+    }
+}
+
+/// What a list row knows about the folder a copy was found in: what to call it,
+/// and whether it is plugged in right now.
+///
+/// A row that knows only the name says "Ready on K3NVME" about a drive in a
+/// drawer, which is the exact claim the model page was rebuilt to stop making.
+struct ModelRowLocation: Equatable {
+    let name: String
+    let isMounted: Bool
+}
+
+/// One short sentence for one row of the models list, and the colour of the dot
+/// beside it.
+///
+/// Same order of authority as the model page — a transfer in motion speaks
+/// first, and then **the disk speaks last** — in the words a 230-point column
+/// has room for. The page says *Ready on K3NVME · every file matches its
+/// published digest*; the row says *Ready on K3NVME*, and the page is one tap
+/// away for the rest.
+enum ModelListStatusPresentation {
+    static func resolve(
+        state: DownloadState,
+        installations: [DiscoveredArtifact],
+        locations: [String: ModelRowLocation],
+        hasStorageLocation: Bool
+    ) -> ModelPageStatus {
+        switch state {
+        case .notStarted, .awaitingDestination:
+            break
+        case .cancelled, .ready:
+            if installations.isEmpty, let transfer = transfer(state) { return transfer }
+        default:
+            if let transfer = transfer(state) { return transfer }
+        }
+
+        guard let described = described(installations, locations: locations) else {
+            // Nothing found, and with no folder registered nothing has been
+            // looked at either. "Not on this device" would be a guess wearing
+            // a state's clothes.
+            return ModelPageStatus(
+                tone: .idle,
+                sentence: hasStorageLocation
+                    ? "Not on this device" : "No folder added to look in")
+        }
+        let place = locations[described.locationPath]?.name
+            ?? URL(fileURLWithPath: described.locationPath).lastPathComponent
+        let copies = installations.count > 1 ? " · \(installations.count) copies" : ""
+        guard locations[described.locationPath]?.isMounted == true else {
+            return ModelPageStatus(
+                tone: .attention, sentence: "\(place) is not connected" + copies)
+        }
+        guard described.isComplete != false else {
+            return ModelPageStatus(
+                tone: .attention, sentence: "On \(place) · files are missing" + copies)
+        }
+        switch described.verification {
+        case .fullyVerified:
+            return ModelPageStatus(tone: .ready, sentence: "Ready on \(place)" + copies)
+        case .spotChecked:
+            return ModelPageStatus(
+                tone: .attention, sentence: "On \(place) · a sample matched" + copies)
+        case .unverified:
+            return ModelPageStatus(
+                tone: .attention, sentence: "On \(place) · not verified" + copies)
+        }
+    }
+
+    /// The copy a row speaks about: the best one that is plugged in, and
+    /// otherwise the best one anywhere. Better means complete before
+    /// incomplete, then verified before sampled before unread, then larger.
+    static func described(
+        _ installations: [DiscoveredArtifact], locations: [String: ModelRowLocation]
+    ) -> DiscoveredArtifact? {
+        let mounted = installations.filter { locations[$0.locationPath]?.isMounted == true }
+        return (mounted.isEmpty ? installations : mounted).max { first, second in
+            rank(first) < rank(second)
+        }
+    }
+
+    private static func rank(_ artifact: DiscoveredArtifact) -> (Int, Int, UInt64) {
+        let complete = artifact.isComplete == false ? 0 : 1
+        let checked: Int
+        switch artifact.verification {
+        case .unverified: checked = 0
+        case .spotChecked: checked = 1
+        case .fullyVerified: checked = 2
+        }
+        return (complete, checked, artifact.bytesOnDisk)
+    }
+
+    /// The transfer half, in row-sized words. The model page's own sentences
+    /// name the drive and the time left; a row states the position and stops.
+    private static func transfer(_ state: DownloadState) -> ModelPageStatus? {
+        func of(_ progress: ProgressSnapshot) -> String {
+            "\(MRFormat.bytesDecimal(progress.verifiedBytes)) of "
+                + MRFormat.bytesDecimal(progress.totalBytes)
+        }
+        switch state {
+        case .resolvingIndex:
+            return ModelPageStatus(tone: .moving, sentence: "Preparing the transfer")
+        case .active(let progress):
+            return ModelPageStatus(tone: .moving, sentence: "Downloading · \(of(progress))")
+        case .paused(let progress):
+            return ModelPageStatus(tone: .attention, sentence: "Paused · \(of(progress))")
+        case .verifying:
+            return ModelPageStatus(tone: .moving, sentence: "Checking downloaded files")
+        case .interrupted(_, let reason):
+            return ModelPageStatus(
+                tone: .attention, sentence: "Interrupted — \(reason.sentence)")
+        case .incomplete(let files, _):
+            return ModelPageStatus(
+                tone: .attention,
+                sentence: "\(files) file\(files == 1 ? "" : "s") did not verify")
+        case .failed:
+            return ModelPageStatus(tone: .attention, sentence: "The transfer failed")
+        case .cancelled:
+            return ModelPageStatus(tone: .idle, sentence: "Cancelled")
+        case .ready:
+            return ModelPageStatus(tone: .ready, sentence: "Downloaded and checked")
+        case .notStarted, .awaitingDestination:
+            return nil
+        }
     }
 }
 
@@ -137,6 +277,10 @@ struct ModelPublisherMark: View {
     let identity: ModelPublisherIdentity
     let fallbackSystemName: String
     let fallbackColor: Color
+    /// A row's mark is 28 points. A product page's header wants the same mark
+    /// at 40 inside its 64-point tile, and one component draws both rather
+    /// than two components disagreeing about which logo a publisher has.
+    var size: CGFloat = 28
 
     var body: some View {
         Group {
@@ -145,247 +289,124 @@ struct ModelPublisherMark: View {
                     .resizable()
                     .renderingMode(.original)
                     .scaledToFit()
-                    .padding(2)
+                    .padding(size * 0.07)
             } else {
                 Image(systemName: fallbackSystemName)
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: size * 0.6, weight: .medium))
                     .foregroundStyle(fallbackColor)
             }
         }
-        .frame(width: 28, height: 28)
+        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 }
 
-/// One catalog row. Rows, not cards — the catalog is a list of facts.
+/// One row of the models list.
 ///
-/// The trailing bottom line is the catalog's whole argument and is never cut:
-/// what the model needs, and what it would cost here.
+/// Rows and hairlines: a publisher's mark, the model's name, one line saying
+/// what it is, and — in the trailing column — a dot with the sentence that
+/// says where this one stands, over its size.
+///
+/// It used to carry up to five `StatusChip` pills: one per discovered copy,
+/// plus one for compatibility, plus one when no folder had been added. Every
+/// pill was the same shape, so a verified 517 GB copy on a plugged-in drive
+/// and a device that cannot run the model read as the same kind of badge. The
+/// facts did not change; they became one sentence and one dot, and where a
+/// model has two copies the sentence says so and the page holds the details.
 struct ModelRow: View {
     let entry: CatalogEntry
     let state: DownloadState
     let fitness: PlatformFitness
-    /// Contextual action or evidence supplied by the owning surface. Local
-    /// inventory uses an actual last-run time; the remote browser uses a clear
-    /// Open/Download action. Nil leaves the row deliberately quiet.
-    let trailingText: String?
-    /// Every place on this machine the model was actually found. One pill each,
-    /// because two copies on two drives is a fact worth seeing and a single
-    /// "installed" badge hides it.
+    /// The quiet third line: what this build can do with the model, and what it
+    /// last cost. Nil leaves the row deliberately quiet.
+    let note: String?
+    /// Every place on this machine the model was actually found. The row states
+    /// one of them and says how many there are; per-copy bytes, paths and
+    /// verification live on the model page, which is one tap away.
     var installations: [DiscoveredArtifact] = []
-    /// Volume display name by location path, so a pill can say "On K3NVME"
-    /// rather than repeating a mount path.
-    var locationNames: [String: String] = [:]
+    /// What each location is called and whether it is plugged in, by path.
+    var locations: [String: ModelRowLocation] = [:]
     /// Whether the app has been granted any folder to scan at all.
     ///
-    /// False changes what this row is entitled to claim. A cloud glyph means
-    /// "published, not fetched"; with no registered folder the app has not
-    /// looked at a single byte of anybody's disk, and saying "not downloaded"
-    /// there is a guess wearing a state's clothes.
+    /// False changes what this row is entitled to claim. With no registered
+    /// folder the app has not looked at a single byte of anybody's disk, and
+    /// saying "not on this device" there is a guess wearing a state's clothes.
     var hasStorageLocation = true
 
-    #if os(iOS)
-        @Environment(\.horizontalSizeClass) private var sizeClass
-        private var isNarrow: Bool { sizeClass == .compact }
-    #else
-        private var isNarrow: Bool { false }
-    #endif
-
     private var isDimmed: Bool { fitness.verdict == .refused }
+
     private var leadingState: ModelRowLeadingState {
         .resolve(
             installations: installations, hasStorageLocation: hasStorageLocation,
             downloadState: state)
     }
 
+    private var status: ModelPageStatus {
+        ModelListStatusPresentation.resolve(
+            state: state, installations: installations,
+            locations: locations, hasStorageLocation: hasStorageLocation)
+    }
+
+    /// The copy whose measured bytes the row prints, when there is one.
+    private var describedArtifact: DiscoveredArtifact? {
+        ModelListStatusPresentation.described(installations, locations: locations)
+    }
+
     var body: some View {
-        Group {
-            #if os(macOS)
-                ViewThatFits(in: .horizontal) {
-                    wide
-                    narrow
-                }
-            #else
-                if isNarrow { narrow } else { wide }
-            #endif
+        MRListRow {
+            MRRowIdentity(
+                title: entry.descriptor.displayName,
+                subtitle: ModelPurposePresentation.line(for: entry.descriptor),
+                note: note,
+                noteColor: isDimmed ? MRColor.caution : MRColor.tertiary
+            ) {
+                mark
+            }
+        } trailing: {
+            MRRowStatus(tone: status.tone, sentence: status.sentence)
+            size
         }
-        .padding(.vertical, MRSpace.s2)
         .opacity(isDimmed ? 0.62 : 1)
-        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(entry.descriptor.displayName)
         .accessibilityValue(spoken)
     }
 
-    /// Two columns: identity on the left, the argument on the right.
-    private var wide: some View {
-        HStack(alignment: .top, spacing: MRSpace.s3) {
-            glyph
-            identity
-            Spacer(minLength: MRSpace.s3)
-            if let trailingText {
-                VStack(alignment: .trailing, spacing: MRSpace.s1) {
-                    Text(trailingText)
-                        .font(MRType.micro)
-                        .foregroundStyle(MRColor.tertiary)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-            }
-        }
-    }
-
-    /// One column on a phone. The argument wraps onto its own line rather than
-    /// squeezing the model's name into a vertical alphabet — it is the row's
-    /// whole point and must not be cut.
-    private var narrow: some View {
-        VStack(alignment: .leading, spacing: MRSpace.s2) {
-            HStack(alignment: .top, spacing: MRSpace.s3) {
-                glyph
-                identity
-                Spacer(minLength: MRSpace.s2)
-            }
-            if let trailingText {
-                Text(trailingText)
-                    .font(MRType.micro)
-                    .foregroundStyle(MRColor.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private var glyph: some View {
+    private var mark: some View {
         ModelPublisherMark(
             identity: .resolve(
                 modelID: entry.id,
                 displayName: entry.descriptor.displayName,
                 repositoryID: entry.descriptor.source.repo?.repoID),
             fallbackSystemName: leadingState.glyphName,
-            fallbackColor: glyphColor)
+            fallbackColor: MRColor.tertiary,
+            size: 32)
     }
 
-    /// Nothing is known about this model's presence, and the reason is that
-    /// nowhere has been registered to look.
-    private var isUnknownForWantOfALocation: Bool {
-        leadingState == .locationUnknown
-    }
-
-    private var identity: some View {
-        VStack(alignment: .leading, spacing: MRSpace.s1) {
-            Text(entry.descriptor.displayName)
-                .font(MRType.headline)
-                .foregroundStyle(MRColor.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            subtitleLine
-            if let transferStatus = state.compactTransferStatus {
-                Text(transferStatus)
-                    .font(MRType.micro)
-                    .foregroundStyle(transferStatusColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if fitness.verdict == .noRunner {
-                StatusChip(text: "Not supported by this version", tone: .neutral)
-            } else if fitness.verdict == .runnableWithCaveats {
-                StatusChip(text: "Runs with limits", tone: .caution)
-            } else if isDimmed {
-                StatusChip(text: "Won't run on this device", tone: .refuse)
-            }
-            installationPills
-        }
-    }
-
-    /// One pill per place the artifact was found: where it is, whether it is
-    /// complete, and how hard anybody has looked at it.
-    ///
-    /// A row states the model size once. Per-copy byte details live in model
-    /// detail; when the count falls short of what the catalog expects, the pill
-    /// says how far short instead of calling a partial download installed.
-    @ViewBuilder private var installationPills: some View {
-        if isUnknownForWantOfALocation {
-            StatusChip(
-                text: "no storage location", tone: .caution,
-                systemImage: "externaldrive.badge.questionmark")
-        }
-        if !installations.isEmpty {
-            FlowRow(spacing: MRSpace.s2) {
-                ForEach(installations) { artifact in
-                    StatusChip(
-                        text: pillText(artifact),
-                        tone: pillTone(artifact),
-                        systemImage: "externaldrive")
-                }
-            }
-        }
-    }
-
-    private func pillText(_ artifact: DiscoveredArtifact) -> String {
-        let place = locationNames[artifact.locationPath] ?? artifact.locationPath
-        var parts = ["On \(place)"]
-        if let missing = artifact.missingFileCount, missing > 0 {
-            parts.append("\(MRFormat.grouped(missing)) files short")
+    /// Measured where a copy has been counted, published otherwise — and the
+    /// type says which, upright versus italic. This is the one number on the
+    /// screen a reader compares between rows, so both faces are tabular.
+    @ViewBuilder private var size: some View {
+        if let artifact = describedArtifact {
+            MRRowQuantity(
+                text: MRFormat.measuredBytes(artifact.bytesOnDisk), provenance: .measured)
         } else {
-            parts.append(artifact.verification.label)
+            MRRowQuantity(
+                text: MRFormat.publishedBytes(entry.descriptor.totalBytes),
+                provenance: .declared)
         }
-        return parts.joined(separator: " · ")
-    }
-
-    private func pillTone(_ artifact: DiscoveredArtifact) -> StatusChip.Tone {
-        if let missing = artifact.missingFileCount, missing > 0 { return .caution }
-        switch artifact.verification {
-        case .unverified: return .neutral
-        case .spotChecked: return .verify
-        case .fullyVerified: return .ok
-        }
-    }
-
-    private var glyphColor: Color {
-        switch leadingState {
-        case .locationUnknown, .scannedIncomplete: return MRColor.caution
-        case .scannedUnverified: return MRColor.tertiary
-        case .scannedSpotChecked: return MRColor.verify
-        case .scannedFullyVerified: return MRColor.ok
-        case .download(let state):
-            switch state {
-            case .ready: return MRColor.ok
-            case .incomplete, .failed: return MRColor.refuse
-            case .verifying: return MRColor.verify
-            case .active, .resolvingIndex: return MRColor.tierPinned
-            default: return MRColor.tertiary
-            }
-        }
-    }
-
-    private var transferStatusColor: Color {
-        switch state {
-        case .failed, .incomplete: return MRColor.refuse
-        case .interrupted: return MRColor.caution
-        case .ready: return MRColor.ok
-        case .verifying: return MRColor.verify
-        case .active, .resolvingIndex: return MRColor.tierPinned
-        default: return MRColor.secondary
-        }
-    }
-
-    /// Published size, and nothing else.
-    ///
-    /// This line used to carry architecture, layer count and file count — three
-    /// facts a person browsing a list of four models cannot act on, and which
-    /// the detail screen already states properly. Repository and tool
-    /// identifiers are source details, not the model's identity.
-    private var subtitleLine: some View {
-        ValueText(
-            text: MRFormat.publishedBytes(entry.descriptor.totalBytes),
-            provenance: .declared, font: MRType.declared)
-    }
-
-    private var subtitle: String {
-        MRFormat.publishedBytes(entry.descriptor.totalBytes)
     }
 
     private var spoken: String {
-        [leadingState.accessibilityLabel, subtitle, trailingText, fitness.reason]
-            .compactMap { $0 }
-            .joined(separator: ". ")
+        [
+            status.sentence,
+            describedArtifact.map { MRFormat.measuredBytes($0.bytesOnDisk) }
+                ?? MRFormat.publishedBytes(entry.descriptor.totalBytes),
+            note,
+            fitness.reason,
+        ]
+        .compactMap { $0 }
+        .joined(separator: ". ")
     }
 }
 
@@ -578,253 +599,163 @@ struct VolumeRow: View {
     }
 }
 
-/// The download card. `paused` and `interrupted` carry the same visual weight
-/// as `active` — a drive unplugged at 900 GB is a Tuesday, not a disaster.
-/// Only `failed` is red.
-struct DownloadCard: View {
-    let modelName: String
-    let state: DownloadState
-    let declaredBytes: UInt64
-    var destinationPath: String? = nil
-    var updatedAt: Date? = nil
-    var operationError: String? = nil
-    var onPause: (() -> Void)? = nil
-    var onResume: (() -> Void)? = nil
-    var onCancel: (() -> Void)? = nil
-    var onVerify: (() -> Void)? = nil
-    var onCancelVerification: (() -> Void)? = nil
-    var onChooseVolume: (() -> Void)? = nil
+/// A navigation affordance that reads as a line of this page rather than a
+/// lone bordered rectangle floating under a card.
+///
+/// `NavigationLink { … } label: { Text(…) }` renders on macOS as a button with
+/// a border, which is what "Download details" used to be: a control shaped like
+/// nothing else on the screen, detached from the card whose details it opens.
+/// The rest of the product spells the same idea as a title and the chevron
+/// every list row uses, so this does too.
+struct DisclosureLink<Destination: View>: View {
+    let title: String
+    @ViewBuilder let destination: () -> Destination
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MRSpace.s3) {
-            header
-            destination
-            switch state {
-            case .notStarted, .awaitingDestination:
-                Text("Nothing transferred yet.")
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: MRSpace.s1) {
+                Text(title)
                     .font(MRType.caption)
                     .foregroundStyle(MRColor.secondary)
-            case .resolvingIndex:
-                ProgressView().controlSize(.small)
-                Text("Resolving the index and walking the tree…")
-                    .font(MRType.caption)
-                    .foregroundStyle(MRColor.secondary)
-            case .active(let progress), .paused(let progress):
-                progressBody(progress)
-            case .interrupted(let progress, let reason):
-                progressBody(progress)
-                interruption(reason, progress)
-            case .verifying(let phase, _):
-                VerificationProgress(phase: phase)
-            case .cancelled(let progress):
-                progressBody(progress)
-                Text("Cancelled. Verified and partial files remain on disk for a new job to reuse.")
-                    .font(MRType.caption)
-                    .foregroundStyle(MRColor.secondary)
-            case .ready(let measured, let fileCount):
-                readyBody(measured: measured, fileCount: fileCount)
-            case .incomplete(let files, let bytes):
-                incompleteBody(files: files, bytes: bytes)
-            case .failed(let error):
-                NamedErrorCard(
-                    headline: "The transfer failed.",
-                    message: "Nothing was lost that had already been verified.",
-                    namedError: error.description)
-            }
-            if let operationError {
-                NamedErrorCard(
-                    headline: "The last action did not finish.",
-                    message: "The transfer state was kept unchanged.",
-                    namedError: operationError,
-                    tone: .caution)
-            }
-            actions
-        }
-        .padding(MRSpace.s4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .mrCard(MRColor.panel, stroke: strokeColor)
-        .accessibilityElement(children: .contain)
-    }
-
-    private var strokeColor: Color {
-        if case .failed = state { return MRColor.refuse.opacity(0.5) }
-        return MRColor.hairline
-    }
-
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(modelName).font(MRType.headline).foregroundStyle(MRColor.primary)
-            Spacer()
-            stateChip
-        }
-    }
-
-    @ViewBuilder private var destination: some View {
-        if destinationPath != nil || updatedAt != nil {
-            HStack(alignment: .firstTextBaseline, spacing: MRSpace.s2) {
-                Image(systemName: "folder")
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(MRColor.tertiary)
                     .accessibilityHidden(true)
-                if let destinationPath {
-                    Text(destinationPath)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
-                Spacer(minLength: MRSpace.s2)
-                if let updatedAt {
-                    Text(MRFormat.timestamp(updatedAt))
-                }
             }
-            .font(MRType.micro)
-            .foregroundStyle(MRColor.tertiary)
+            // Still a 44-pt target; it simply stops looking like a button.
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// What a stopped transfer left on the drive, as a card is entitled to say it.
+///
+/// Every case here comes from a reconciliation that happened, or says that one
+/// has not happened yet. The card never derives this from the progress snapshot
+/// it is holding: that snapshot is a memory of the last event, and after the
+/// operator deletes the directory it is a memory of a drive that has changed.
+enum TransferRemains: Equatable, Sendable {
+    /// The drive has not been looked at yet.
+    case checking
+    /// Nothing was ever written anywhere: there is no destination to examine.
+    case noDestination
+    case driveNotConnected(volume: String)
+    case unreadable(reason: String)
+    case nothingKept
+    case kept(completeFiles: Int, partialFiles: Int, bytes: UInt64)
+
+    static func resolve(_ kept: KeptFiles?, destinationPath: String?) -> TransferRemains {
+        guard let kept else {
+            return destinationPath == nil ? .noDestination : .checking
+        }
+        switch kept.destination {
+        case .volumeNotMounted(let volume):
+            return .driveNotConnected(volume: volume)
+        case .unreadable(let reason):
+            return .unreadable(reason: reason)
+        case .missing:
+            return .nothingKept
+        case .present:
+            guard !kept.isEmpty else { return .nothingKept }
+            return .kept(
+                completeFiles: kept.completeFileCount,
+                partialFiles: kept.partialFileCount, bytes: kept.bytes)
+        }
+    }
+}
+
+/// The sentences a stopped transfer is allowed to print, and the one action it
+/// offers. Separated from the view so the claim can be tested without pixels —
+/// this is exactly the surface that shipped a lie.
+enum TransferRemainsPresentation {
+    static func sentence(_ remains: TransferRemains) -> String {
+        switch remains {
+        case .checking:
+            return "Checking what this transfer left on the drive…"
+        case .noDestination:
+            return "This transfer never reached a drive."
+        case .driveNotConnected:
+            return "The drive this transfer used is not connected."
+        case .unreadable:
+            return "The folder this transfer used could not be read."
+        case .nothingKept:
+            return "Nothing from this transfer is on the drive any more."
+        case .kept(let complete, let partial, let bytes):
+            let size = MRFormat.bytesDecimal(bytes)
+            guard complete > 0 else {
+                return "\(MRFormat.grouped(partial)) partial file"
+                    + "\(partial == 1 ? "" : "s") kept on disk (\(size))."
+            }
+            let kept = "\(MRFormat.grouped(complete)) file\(complete == 1 ? "" : "s") "
+                + "kept on disk (\(size))"
+            guard partial > 0 else { return "\(kept)." }
+            return "\(kept), \(MRFormat.grouped(partial)) partial."
         }
     }
 
-    private var stateChip: StatusChip {
-        switch state {
-        case .notStarted, .awaitingDestination: return StatusChip(text: "not downloaded")
-        case .resolvingIndex: return StatusChip(text: "resolving index")
-        case .active: return StatusChip(text: "transferring", tone: .neutral)
-        case .paused: return StatusChip(text: "paused", tone: .neutral)
-        case .interrupted: return StatusChip(text: "interrupted", tone: .neutral)
-        case .verifying: return StatusChip(text: "verifying", tone: .verify)
-        case .cancelled: return StatusChip(text: "cancelled", tone: .neutral)
-        case .ready: return StatusChip(text: "payload checked", tone: .ok)
-        case .incomplete: return StatusChip(text: "incomplete", tone: .caution)
-        case .failed: return StatusChip(text: "failed", tone: .refuse)
+    /// The named condition, where there is one. Never a second sentence for a
+    /// state that already said everything it knows.
+    static func detail(_ remains: TransferRemains) -> String? {
+        switch remains {
+        case .driveNotConnected(let volume):
+            return volume.isEmpty ? nil : "Reconnect \(volume) to continue this transfer."
+        case .unreadable(let reason):
+            return reason
+        case .checking, .noDestination, .nothingKept, .kept:
+            return nil
         }
     }
 
-    private func progressBody(_ progress: ProgressSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: MRSpace.s2) {
-            ProgressView(value: progress.fraction)
-                .tint(MRColor.tierPinned)
-            HStack {
-                Text(
-                    "\(MRFormat.bytesDecimal(progress.verifiedBytes)) of "
-                        + "\(MRFormat.bytesDecimal(progress.totalBytes))"
-                )
-                .font(MRType.metric)
-                .foregroundStyle(MRColor.primary)
-                .animation(nil, value: progress.verifiedBytes)
-                Spacer()
-                BalanceDot(
-                    balanced: progress.accountsForEveryByte,
-                    failingIdentity:
-                        "verified + fetched + in flight + remaining ≠ plan total")
-            }
-            if let sentence = progress.resumeSentence {
-                Text(sentence)
-                    .font(MRType.micro)
-                    .foregroundStyle(MRColor.tertiary)
-                    .lineLimit(1)
-            }
-            HStack(spacing: MRSpace.s3) {
-                Text(MRFormat.throughput(progress.bytesPerSecond))
-                Text("ETA \(MRFormat.duration(progress.estimatedTimeRemaining))")
-            }
-            .font(MRType.micro)
-            .foregroundStyle(MRColor.secondary)
+    /// A cancelled transfer has no speed and no ETA, so the button is the only
+    /// thing left to be exact about: it may not offer to continue with files
+    /// nobody found.
+    static func actionTitle(_ remains: TransferRemains) -> String {
+        switch remains {
+        case .nothingKept: return "Download again…"
+        case .noDestination: return "Download…"
+        case .checking, .driveNotConnected, .unreadable, .kept:
+            return "Continue with kept files…"
         }
     }
 
-    private func interruption(
-        _ reason: InterruptionReason, _ progress: ProgressSnapshot
-    ) -> some View {
-        VStack(alignment: .leading, spacing: MRSpace.s1) {
-            Text("Interrupted — \(reason.sentence)")
-                .font(MRType.body)
-                .foregroundStyle(MRColor.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(
-                "\(MRFormat.bytesDecimal(progress.verifiedBytes)) of "
-                    + "\(MRFormat.bytesDecimal(progress.totalBytes)) kept. "
-                    + reason.recoverySentence
-            )
-            .font(MRType.caption)
-            .foregroundStyle(MRColor.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+    static func actionIsEnabled(_ remains: TransferRemains) -> Bool {
+        switch remains {
+        // Unreadable stays enabled: the action opens the destination picker,
+        // and a fresh grant from it is exactly what an unreadable folder
+        // needs. Only a drive that is not there, or a look not yet taken,
+        // leaves nothing for the button to do.
+        case .checking, .driveNotConnected: return false
+        case .noDestination, .nothingKept, .kept, .unreadable: return true
         }
     }
 
-    private func readyBody(measured: UInt64, fileCount: Int) -> some View {
-        VStack(alignment: .leading, spacing: MRSpace.s2) {
-            HStack(alignment: .firstTextBaseline, spacing: MRSpace.s2) {
-                ValueText(
-                    text: MRFormat.bytesDecimal(measured), provenance: .measured,
-                    font: MRType.readout)
-                Text("measured").mrLabel(MRColor.ok)
-            }
-            Text(
-                "\(MRFormat.grouped(fileCount)) planned files checked; payload digests verified."
-            )
-                .font(MRType.caption)
-                .foregroundStyle(MRColor.secondary)
-            if measured != declaredBytes {
-                Text(
-                    "Published size: \(MRFormat.publishedBytes(declaredBytes)). Measured on "
-                        + "disk: \(MRFormat.measuredBytes(measured))."
-                )
-                .font(MRType.micro)
-                .foregroundStyle(MRColor.caution)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+    /// The per-file position, kept only while the reconciliation agrees with
+    /// it. A snapshot that says "file 94 of 624" after 93 files were deleted is
+    /// the same lie in smaller type.
+    static func progressLine(
+        _ remains: TransferRemains, snapshot: ProgressSnapshot?
+    ) -> String? {
+        guard case .kept(let complete, _, _) = remains, let snapshot,
+            snapshot.filesTotal > 0, complete == snapshot.filesDone
+        else { return nil }
+        return "file \(min(complete + 1, snapshot.filesTotal)) of \(snapshot.filesTotal)"
     }
 
-    private func incompleteBody(files: Int, bytes: UInt64) -> some View {
-        NamedErrorCard(
-            headline: "\(files) file\(files == 1 ? "" : "s") did not verify.",
-            message:
-                "Those bytes are not trusted and will be re-fetched from zero. A byte that "
-                + "failed a digest is not a byte to resume from.",
-            namedError: "verificationIncomplete(pathsToRefetch: \(files))",
-            tone: .caution,
-            numbers: [("data to re-fetch", MRFormat.measuredBytes(bytes))])
-    }
-
-    @ViewBuilder private var actions: some View {
-        HStack(spacing: MRSpace.s2) {
-            switch state {
-            case .notStarted, .awaitingDestination:
-                if let onChooseVolume {
-                    Button("Download…", action: onChooseVolume)
-                        .buttonStyle(.borderedProminent)
-                }
-            case .active:
-                if let onPause { Button("Pause", action: onPause) }
-                if let onCancel { Button("Cancel", role: .destructive, action: onCancel) }
-            case .paused:
-                if let onResume {
-                    Button("Resume", action: onResume).buttonStyle(.borderedProminent)
-                }
-                if let onCancel { Button("Cancel", role: .destructive, action: onCancel) }
-            case .interrupted, .cancelled:
-                if let onChooseVolume {
-                    Button("Continue with kept files…", action: onChooseVolume)
-                        .buttonStyle(.borderedProminent)
-                }
-            case .incomplete:
-                if let onVerify {
-                    Button("Re-verify", action: onVerify).buttonStyle(.borderedProminent)
-                }
-            case .ready:
-                if let onVerify { Button("Re-verify", action: onVerify) }
-            case .verifying:
-                if let onCancelVerification {
-                    Button("Cancel verification", role: .cancel, action: onCancelVerification)
-                }
-            case .failed:
-                if let onChooseVolume {
-                    Button("Continue with kept files…", action: onChooseVolume)
-                        .buttonStyle(.borderedProminent)
-                }
-            default:
-                EmptyView()
-            }
+    /// The bar, drawn from the bytes that are there now. Nil where nothing has
+    /// been measured: an empty bar is a claim too.
+    static func keptFraction(_ remains: TransferRemains, totalBytes: UInt64) -> Double? {
+        switch remains {
+        case .checking, .noDestination, .driveNotConnected, .unreadable:
+            return nil
+        case .nothingKept:
+            return 0
+        case .kept(_, _, let bytes):
+            guard totalBytes > 0 else { return 0 }
+            return min(1, Double(bytes) / Double(totalBytes))
         }
-        .controlSize(.small)
-        .font(MRType.caption)
     }
 }

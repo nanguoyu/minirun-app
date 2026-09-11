@@ -725,6 +725,77 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(summary.wastedBytes, 0)
     }
 
+    /// A finished transfer keeps its work instead of throwing it away: the
+    /// summary carries, per published file, the digest it was read against and
+    /// the object the closing pass found it in, and that is exactly what
+    /// ``DownloadVerificationProof`` needs (ADR 0019).
+    func testAFinishedTransferCarriesPerFileEvidenceForEveryPublishedFile() async throws {
+        let manager = makeManager()
+        let plan = try await manager.plan(for: descriptor())
+        let job = try await manager.start(
+            plan, into: DownloadDestination(directory: destination), options: testOptions())
+
+        let events = await drainEvents(of: manager, job: job)
+        let summary = try XCTUnwrap(events.summary, "expected the job to finish: \(events)")
+        XCTAssertEqual(
+            summary.filesVerified.map(\.path), plan.files.map(\.path).sorted(),
+            "every planned file, metadata included, was digested by this job")
+
+        for evidence in summary.filesVerified {
+            let file = try XCTUnwrap(plan.file(at: evidence.path))
+            XCTAssertEqual(evidence.digest, file.digest)
+            XCTAssertEqual(evidence.expectedSizeBytes, file.sizeBytes)
+            XCTAssertEqual(evidence.isPayload, file.isPayload)
+            XCTAssertEqual(evidence.filesystem.sizeBytes, file.sizeBytes)
+            // The identity is the object on disk right now, not a placeholder.
+            var status = stat()
+            XCTAssertEqual(
+                stat(destination.appendingPathComponent(evidence.path).path, &status), 0)
+            XCTAssertEqual(evidence.filesystem.inode, UInt64(status.st_ino))
+        }
+
+        let proof = try DownloadVerificationProof(plan: plan, summary: summary)
+        XCTAssertEqual(proof.model, plan.model)
+        XCTAssertEqual(proof.repository, plan.repo)
+        XCTAssertEqual(proof.rootPath, destination.path)
+        XCTAssertEqual(proof.files.count, plan.files.count)
+    }
+
+    /// Nothing is claimed for a file this job did not read. A transfer that
+    /// adopted every file off disk digests nothing on landing; the closing pass
+    /// then digests the payloads and only size-checks the metadata, so the
+    /// metadata has no digest behind it and the hand-off refuses by name.
+    func testAdoptedMetadataHasNoDigestBehindItAndTheHandOffSaysSo() async throws {
+        let manager = makeManager()
+        let plan = try await manager.plan(for: descriptor())
+        // Put the whole artifact in place first, so the second job adopts it.
+        _ = await drainEvents(
+            of: manager,
+            job: try await manager.start(
+                plan, into: DownloadDestination(directory: destination),
+                options: testOptions()))
+
+        let adopting = makeManager()
+        let adopted = try await adopting.start(
+            plan, into: DownloadDestination(directory: destination), options: testOptions())
+        let events = await drainEvents(of: adopting, job: adopted)
+        let summary = try XCTUnwrap(events.summary, "expected the job to finish: \(events)")
+        XCTAssertTrue(summary.verification.isComplete)
+        XCTAssertEqual(summary.verification.depth, .digestPayload)
+
+        let metadata = plan.files.filter { !$0.isPayload }.map(\.path).sorted()
+        XCTAssertFalse(metadata.isEmpty)
+        XCTAssertEqual(
+            summary.filesVerified.map(\.path), plan.files.filter(\.isPayload).map(\.path).sorted(),
+            "the closing pass read the payloads and only measured the metadata")
+        XCTAssertThrowsError(try DownloadVerificationProof(plan: plan, summary: summary)) {
+            guard case ArtifactDownloadEvidenceError.bytesNeverDigested(let paths) = $0 else {
+                return XCTFail("expected a named refusal, got \($0)")
+            }
+            XCTAssertEqual(paths, metadata)
+        }
+    }
+
     func testTheLargeFileArrivesInSeveralChunksAndStillVerifies() async throws {
         let manager = makeManager()
         let plan = try await manager.plan(for: descriptor())

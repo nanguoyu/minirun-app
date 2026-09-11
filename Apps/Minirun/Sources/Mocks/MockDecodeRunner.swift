@@ -73,6 +73,27 @@ final class MockDecodeRunner: InstrumentedRunner, @unchecked Sendable {
                 maximumNewTokens: DeepSeekV4ProductMemoryBudget.maximumNewTokens,
                 acceptsTextPrompts: false, requiresMLX: true,
                 tokenEventGranularity: .perPass)
+        case .deepseekV41Flash:
+            // Same shape as the fallback below, with one field taken from the
+            // platform policy instead of the catalog row.
+            //
+            // A published row carries a single `minimumBudgetBytes` and the two
+            // platforms do not share one: V4.1's row states the Mac's
+            // 3,400,000,000 B, while the iPhone policy admits the model at
+            // 1,900,000,000 B. A preview or review build on a phone that read
+            // the row would name the Mac's floor — the exact number a phone was
+            // twice killed at — on a device whose own runner floor is lower.
+            // The policy is the authority for a floor; the row is a catalog
+            // fact about the publication.
+            capabilities = RunnerCapabilities(
+                model: entry.id, layout: entry.descriptor.layout,
+                supportedKnobs: [
+                    "expertPoolSlots", "expertsPerDispatch", "captureRoutingMargins",
+                ],
+                minimumBudgetBytes: DeepSeekV41ProductMemoryBudget.minimumBudgetBytes,
+                maximumNewTokens: DeepSeekV41ProductMemoryBudget.maximumNewTokens,
+                acceptsTextPrompts: false, requiresMLX: true,
+                tokenEventGranularity: .perToken)
         default:
             // A fixture with no product runner of its own. It states only the
             // geometry its own descriptor carries rather than borrowing a

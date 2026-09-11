@@ -208,9 +208,12 @@ struct InstrumentPanelView: View {
         @ViewBuilder private var gauge: some View {
             if let telemetry = snapshot.telemetry {
                 GeometryReader { geometry in
+                    // The budget's own basis, as in the full row: an absolute
+                    // figure over an added-basis ceiling filled this 72-point
+                    // bar solid on a run that was inside its budget.
                     let fraction = min(
                         1.2,
-                        Double(telemetry.footprintBytes)
+                        Double(telemetry.budgetedFootprintBytes)
                             / Double(max(1, telemetry.declaredBudgetBytes)))
                     ZStack(alignment: .leading) {
                         Rectangle().fill(MRColor.hairline)
@@ -230,7 +233,8 @@ struct InstrumentPanelView: View {
 
         private var footprintSpoken: String {
             guard let telemetry = snapshot.telemetry else { return "not reported" }
-            return "footprint \(MRFormat.bytesDecimal(telemetry.footprintBytes)) of "
+            let subject = telemetry.budgetsWhatTheRunAdds ? "footprint added" : "footprint"
+            return "\(subject) \(MRFormat.bytesDecimal(telemetry.budgetedFootprintBytes)) of "
                 + "\(MRFormat.bytesDecimal(telemetry.declaredBudgetBytes)) stated"
         }
     }
@@ -319,7 +323,7 @@ struct InstrumentPanelView: View {
 
     private var generationStage: RunGenerationStage? { snapshot.generationStage }
 
-    private var stageTitle: String {
+    var stageTitle: String {
         switch generationStage {
         case .prefill: return "Prefill"
         case .decode: return "Decode"
@@ -339,7 +343,7 @@ struct InstrumentPanelView: View {
         }
     }
 
-    private var stageDetail: String? {
+    var stageDetail: String? {
         guard let phase = snapshot.phase else { return nil }
         switch generationStage {
         case .prefill: return "Reading prompt"
@@ -410,12 +414,17 @@ struct InstrumentPanelView: View {
         snapshot.tokensPerSecond
     }
 
-    private var rateProvenance: String? {
+    /// The two numbers the rate was divided from. The count is decode passes
+    /// that have **completed**, which is deliberately not the token index in
+    /// the stage header: when `Token 15` is in flight, 13 decode tokens are
+    /// finished behind it and the fourteenth is the one prefill sampled. Both
+    /// numbers say which they are.
+    var rateProvenance: String? {
         guard let seconds = snapshot.telemetry?.decodeSeconds,
             seconds.isFinite, seconds >= 0
         else { return nil }
         let count = snapshot.decodeTokensCompleted
-        return "\(MRFormat.clock(seconds)) decode · \(count) token\(count == 1 ? "" : "s")"
+        return "\(MRFormat.clock(seconds)) decode · \(count) token\(count == 1 ? "" : "s") done"
     }
 
     private var bytesPerTokenText: String {
@@ -489,11 +498,9 @@ struct InstrumentPanelView: View {
 
     @ViewBuilder private var budgetGauge: some View {
         if let telemetry = snapshot.telemetry {
-            BudgetGauge(
-                footprintBytes: telemetry.footprintBytes,
-                peakBytes: telemetry.peakFootprintBytes,
-                declaredBudgetBytes: telemetry.declaredBudgetBytes,
-                latchedBreach: snapshot.budgetBreached)
+            // One mapping from sample to row, so the suite reads the same
+            // arithmetic the panel draws.
+            BudgetGauge(telemetry: telemetry, latchedBreach: snapshot.budgetBreached)
         } else {
             VStack(alignment: .leading, spacing: MRSpace.s2) {
                 Text("Footprint").mrLabel()
@@ -517,7 +524,7 @@ struct InstrumentPanelView: View {
         return "Budget \(MRFormat.bytesDecimal(declared))"
     }
 
-    private var layerProgress: String {
+    var layerProgress: String {
         LayerLadderAccessibility.visibleSummary(for: snapshot.ladder)
     }
 

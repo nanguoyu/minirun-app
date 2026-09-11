@@ -124,8 +124,7 @@ final class CatalogNamingTests: XCTestCase {
             headroomBytes: 1)
 
         XCTAssertEqual(
-            ModelRowPresentation.trailingArgument(
-                fitness: fitness, lastRunSecondsPerToken: 265),
+            ModelRowPresentation.note(fitness: fitness, lastRunSecondsPerToken: 265),
             "Last run 4:25/token")
     }
 
@@ -135,8 +134,32 @@ final class CatalogNamingTests: XCTestCase {
             headroomBytes: 1)
 
         XCTAssertNil(
-            ModelRowPresentation.trailingArgument(
-                fitness: fitness, lastRunSecondsPerToken: nil))
+            ModelRowPresentation.note(fitness: fitness, lastRunSecondsPerToken: nil))
+    }
+
+    /// The limit and the evidence are two different facts, and a row that could
+    /// print only one of them printed the wrong one: the pill said "Runs with
+    /// limits" and the measured time it took here went missing.
+    func testAModelThatRunsWithLimitsStillCarriesItsMeasuredTime() {
+        let fitness = PlatformFitness(
+            verdict: .runnableWithCaveats, reason: "supported, with the device limit",
+            requiredFreeBytes: 1, headroomBytes: 1)
+
+        XCTAssertEqual(
+            ModelRowPresentation.note(fitness: fitness, lastRunSecondsPerToken: 265),
+            "Runs with limits · Last run 4:25/token")
+    }
+
+    /// A device that cannot run the model says so in the row's own words
+    /// rather than in a red pill.
+    func testADeviceThatCannotRunTheModelSaysSoInWords() {
+        let fitness = PlatformFitness(
+            verdict: .refused, reason: "not enough memory", requiredFreeBytes: 1,
+            headroomBytes: 1)
+
+        XCTAssertEqual(
+            ModelRowPresentation.note(fitness: fitness, lastRunSecondsPerToken: nil),
+            "Won't run on this device")
     }
 
     @MainActor
@@ -273,7 +296,11 @@ final class CatalogNamingTests: XCTestCase {
             source.range(of: ".task {", range: toolbarStart.upperBound..<source.endIndex))
         let toolbar = String(source[toolbarStart.lowerBound..<toolbarEnd.lowerBound])
 
-        XCTAssertTrue(source.contains(".mrWorkspaceSurface()"))
+        // One surface, hairlines, no cards: the models list speaks the model
+        // page's language now, so it paints `panel` across the whole column
+        // rather than stacking rows on `abyss`.
+        XCTAssertTrue(source.contains(".mrProductPage()"))
+        XCTAssertFalse(source.contains("StatusChip("))
         XCTAssertTrue(toolbar.contains("FindModelsButton()"))
         XCTAssertTrue(source.contains("Button(\"Find Models\")"))
         XCTAssertTrue(source.contains("RemoteModelBrowserView"))
@@ -317,9 +344,13 @@ final class CatalogNamingTests: XCTestCase {
             source.range(of: "private var remoteEmptyState", range: rowStart.upperBound..<source.endIndex))
         let row = String(source[rowStart.lowerBound..<rowEnd.lowerBound])
 
-        XCTAssertTrue(row.contains(".frame(maxWidth: .infinity, alignment: .leading)"))
+        // The whole row is the destination: one `NavigationLink` whose label is
+        // the row, a tap target that covers it, and the chevron that says so.
+        // `MRListRow` carries the full-width frame; the row carries the rest.
+        XCTAssertTrue(row.contains("MRListRow {"))
         XCTAssertTrue(row.contains(".contentShape(Rectangle())"))
-        XCTAssertTrue(row.contains("Image(systemName: \"chevron.right\")"))
+        XCTAssertTrue(row.contains("MRDisclosureChevron()"))
+        XCTAssertEqual(row.components(separatedBy: "NavigationLink").count - 1, 1)
         XCTAssertFalse(row.contains("hasLocalCopy ? \"On this device\" : \"View\""))
     }
 
@@ -535,11 +566,15 @@ final class CatalogNamingTests: XCTestCase {
             XCTAssertEqual(fitness.requiredFreeBytes, entry.descriptor.totalBytes)
             XCTAssertNil(fitness.headroomBytes)
             XCTAssertNil(model.projection(for: entry))
+            // "Container only" is the same claim as the old "Storage and
+            // verification only", in the words a 230-point row column holds:
+            // this build can keep and check the files and cannot chat with
+            // them.
             XCTAssertEqual(
-                ModelRowPresentation.trailingArgument(
+                ModelRowPresentation.note(
                     fitness: fitness,
                     lastRunSecondsPerToken: nil),
-                "Storage and verification only")
+                "Container only")
         }
     }
 

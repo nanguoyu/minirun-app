@@ -57,16 +57,23 @@ struct MemoryProfile: Equatable, Sendable {
     let onRecordMinimumBudgetBytes: UInt64?
     let provenance: Provenance
 
-    /// DeepSeek V4's own ladder input, when this profile describes V4.
+    /// The streamed DeepSeek ladder's own input, when this profile describes
+    /// one of those models.
     ///
-    /// V4 cannot be described by ``ArtifactCensus``: that type derives resident
-    /// and saved from one array, and a pinned V4 layer holds ~1.031× what it
-    /// stops reading — see `docs/design/v4-memory-dial.md` §3.1. So V4 carries
-    /// the kit's second census beside the first rather than being squeezed
-    /// through it, and every V4 ladder question below is answered from this
-    /// field. Nil for every other model, and nil for a V4 artifact whose
-    /// manifests have not been read yet.
-    let deepSeekV4: DeepSeekV4MemoryDialInputs.ArtifactProfile?
+    /// Neither V4 nor V4.1 can be described by ``ArtifactCensus``: that type
+    /// derives resident and saved from one array, and a pinned unit of either
+    /// holds more than it stops reading — ~1.031× for a V4 layer
+    /// (`docs/design/v4-memory-dial.md` §3.1) and ~1.028× for a V4.1 block,
+    /// both because the loaded form carries an expanded FP8 scale grid. So they
+    /// carry the kit's second census beside the first rather than being squeezed
+    /// through it, and every ladder question below is answered from this field.
+    /// Nil for every other model, and nil for an artifact whose manifests have
+    /// not been read yet.
+    ///
+    /// The field is not named after V4 because it is not V4's: the ladder rules
+    /// in ``DeepSeekV4MemoryDial`` are about a storage-native decode rather than
+    /// about one checkpoint, and V4.1 rides them with its own census.
+    let deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile?
 
     init(
         census: ArtifactCensus,
@@ -75,7 +82,7 @@ struct MemoryProfile: Equatable, Sendable {
         requiredMinimumBudgetBytes: UInt64?,
         onRecordMinimumBudgetBytes: UInt64?,
         provenance: Provenance,
-        deepSeekV4: DeepSeekV4MemoryDialInputs.ArtifactProfile? = nil
+        deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile? = nil
     ) {
         self.census = census
         self.expertPoolBytes = expertPoolBytes
@@ -83,7 +90,7 @@ struct MemoryProfile: Equatable, Sendable {
         self.requiredMinimumBudgetBytes = requiredMinimumBudgetBytes
         self.onRecordMinimumBudgetBytes = onRecordMinimumBudgetBytes
         self.provenance = provenance
-        self.deepSeekV4 = deepSeekV4
+        self.deepSeekLadder = deepSeekLadder
     }
 
     /// The planner's floor, built from this profile's own terms.
@@ -121,7 +128,7 @@ struct MemoryProfile: Equatable, Sendable {
             max(requiredMinimumBudgetBytes ?? 0, onRecordMinimumBudgetBytes ?? 0))
     }
 
-    var layerCount: Int { deepSeekV4?.layerCount ?? census.layerStoredBytes.count }
+    var layerCount: Int { deepSeekLadder?.layerCount ?? census.layerStoredBytes.count }
     var routedLayerCount: Int { census.moeLayerCount }
     var denseLayerCount: Int { max(0, layerCount - routedLayerCount) }
     /// One expert as stored — the granularity a hot set would pin at.
@@ -145,8 +152,8 @@ struct MemoryProfile: Equatable, Sendable {
     /// That is the property the K3 relocation was for, and V4 keeps it: the
     /// screen cannot arrive at a boundary the run would not.
     var snapPoints: [UInt64] {
-        if let v4 = deepSeekV4 {
-            return DeepSeekV4MemoryDial.snapPoints(census: v4.census, floor: v4.floor)
+        if let ladder = deepSeekLadder {
+            return DeepSeekV4MemoryDial.snapPoints(census: ladder.census, floor: ladder.floor)
         }
         return MemoryDialPlanner.snapPoints(census: census, floor: floor)
     }
@@ -349,16 +356,28 @@ enum ReadAheadSetting: Equatable, Sendable {
 
 /// The model-specific execution contract drawn by the memory dial.
 ///
-/// K3 turns surplus into a concrete ``PinPlan``. DeepSeek V4 has a different
-/// lifecycle: weights stream and the causal cache is replaced one layer at a
-/// time beneath a hard process ceiling. Keeping those strategies explicit is
-/// what stops a V4 chat from being described as a one-layer K3 artifact.
+/// K3 turns surplus into a concrete ``PinPlan``. The streamed DeepSeek models
+/// have a different lifecycle: weights stream and the causal cache is replaced
+/// one layer at a time beneath a hard process ceiling. Keeping those strategies
+/// explicit is what stops such a chat from being described as a one-layer K3
+/// artifact.
 struct BudgetPlan: Equatable, Sendable {
 
     enum Strategy: Equatable, Sendable {
         case residency
         case boundedLayerStreaming
     }
+
+    /// The models whose dial draws a bounded streaming envelope rather than a
+    /// residency plan over a widened census.
+    ///
+    /// V4.1 is in here and was not: without it the plan fell through to K3's
+    /// residency rules over a census of one zero-sized layer, every preset
+    /// collapsed onto the 3.4 GB floor, and a Mac chat streamed all forty blocks
+    /// every token while the ladder that would have pinned them was never
+    /// consulted. The two models share the strategy because they share the
+    /// lifecycle, not because they share a checkpoint.
+    static let streamedModels: Set<ModelID> = [.deepseekV4Flash, .deepseekV41Flash]
 
     let model: ModelID
     let modelName: String
@@ -397,7 +416,7 @@ struct BudgetPlan: Equatable, Sendable {
         self.maximumNewTokens = maximumNewTokens
         self.deviceCeilingBytes = deviceCeilingBytes
         self.readAheadDepth = readAheadDepth
-        let strategy: Strategy = model == .deepseekV4Flash
+        let strategy: Strategy = Self.streamedModels.contains(model)
             ? .boundedLayerStreaming : .residency
         self.strategy = strategy
         self.readAheadRefusal = strategy == .residency
@@ -413,15 +432,16 @@ struct BudgetPlan: Equatable, Sendable {
             budgetBytes: budgetBytes, deviceCeilingBytes: deviceCeilingBytes, profile: profile)
         if refusal != nil || readAheadRefusal != nil {
             self.pinPlan = nil
-        } else if let v4 = profile.deepSeekV4 {
-            // V4's dial floor sits above the 2 GB product floor, and a budget
+        } else if let ladder = profile.deepSeekLadder {
+            // The dial floor sits above the product floor for both of these
+            // models — 2 GB against V4's, 3.4 GB against V4.1's — and a budget
             // between the two is a real, runnable configuration that pins
             // nothing. The planner refuses it by name; `try?` is that refusal
             // becoming "no pinned tier", which is exactly what the run does.
             self.pinPlan = try? DeepSeekV4MemoryDial.plan(
                 budgetBytes: budgetBytes,
-                census: v4.census,
-                floor: v4.floor,
+                census: ladder.census,
+                floor: ladder.floor,
                 maximumNewTokens: maximumNewTokens)
         } else if strategy == .residency {
             self.pinPlan = try? MemoryDialPlanner.plan(
@@ -605,12 +625,12 @@ struct BudgetPlan: Equatable, Sendable {
     /// the plan, so the dial and a run's JSON cannot disagree.
     var bytesReadPerToken: UInt64 {
         if let plan = pinPlan { return plan.projectedBytesPerTokenRead }
-        // A V4 budget between the product floor and the dial's floor is
+        // A streamed budget between the product floor and the dial's floor is
         // runnable and has no plan, because it pins nothing. It still reads,
         // and the whole census is what it reads — reporting 0 there said the
         // opposite of the truth.
-        if isRunnable, strategy == .boundedLayerStreaming, let v4 = profile.deepSeekV4 {
-            return v4.census.bytesPerToken
+        if isRunnable, strategy == .boundedLayerStreaming, let ladder = profile.deepSeekLadder {
+            return ladder.census.bytesPerToken
         }
         return 0
     }
@@ -694,7 +714,7 @@ struct BudgetPlan: Equatable, Sendable {
 
     func budget(for preset: Preset) -> UInt64 {
         if strategy == .boundedLayerStreaming {
-            return v4Budget(for: preset)
+            return streamedBudget(for: preset)
         }
         let points = profile.snapPoints
         let pad = profile.stagedPairPeakBytes
@@ -711,7 +731,8 @@ struct BudgetPlan: Equatable, Sendable {
         }
     }
 
-    /// V4's three positions, under K3's rules and on V4's own ladder.
+    /// The streamed models' three positions, under K3's rules and on each
+    /// model's own ladder.
     ///
     /// What this replaces was written before V4 had a memory dial: Balanced was
     /// a flat three-fifths of whatever the device offered, and its label called
@@ -720,8 +741,9 @@ struct BudgetPlan: Equatable, Sendable {
     /// deterministic layers out of its own headroom, so 20.6 GB on a 34.4 GB
     /// Mac is ~11 GB the run cannot spend: **every byte above the last rung
     /// buys nothing today**, because the ladder ends there — V4's rungs are the
-    /// 43 deterministic layers and then the output head, and no expert hot set
-    /// is reachable at any budget these devices offer.
+    /// 43 deterministic layers and then the output head, V4.1's are its 40
+    /// blocks and then its own head, and no expert hot set is reachable at any
+    /// budget these devices offer.
     ///
     /// So Balanced is the point where all of them are held. On a device that
     /// cannot reach it, the rule is K3's unchanged: the largest snap point
@@ -729,14 +751,15 @@ struct BudgetPlan: Equatable, Sendable {
     /// the first pin boundary anyway — over the ceiling, shown disabled with
     /// its deficit rather than quietly collapsing onto the floor.
     ///
-    /// There is no staged pair to pad with. V4's deterministic read-ahead is
-    /// named and not built (`docs/design/v4-memory-dial.md` §6), so a preset
-    /// that reserved for one would be reserving for a tier the run has no code
-    /// to fill.
-    private func v4Budget(for preset: Preset) -> UInt64 {
+    /// There is no staged pair to pad with. Neither model builds a deterministic
+    /// read-ahead — V4's is named and not built
+    /// (`docs/design/v4-memory-dial.md` §6), and V4.1's decode replaces one
+    /// block's state at a time — so a preset that reserved for one would be
+    /// reserving for a tier the run has no code to fill.
+    private func streamedBudget(for preset: Preset) -> UInt64 {
         switch preset {
         case .floor:
-            // The admitted product envelope, which is what a V4 chat that never
+            // The admitted product envelope, which is what a chat that never
             // touched the dial carries. Nothing is pinned here.
             return profile.refusalThresholdBytes
         case .balanced:
@@ -748,6 +771,20 @@ struct BudgetPlan: Equatable, Sendable {
             if let everyUnit = points.last, everyUnit <= target { return everyUnit }
             return boundary(in: points, atOrBelow: target, fallbackIndex: 1)
         case .generous:
+            // "Spend what the device has" — but only where the ladder can use
+            // it. On a device that cannot reach the **first** rung, every byte
+            // above the floor buys nothing at all, and a preset that quietly
+            // became "all of it, pinning nothing" would be the dial offering a
+            // residency it has no rung for. That is the iPhone today: the
+            // pinned envelope is 5.2 GB before a single block is held, and
+            // `os_proc_available_memory()` offers about 5 GB. So the preset
+            // reports the boundary instead, and the dial draws it disabled with
+            // its deficit — the same thing Balanced does, because on such a
+            // device they are the same sentence.
+            let points = profile.snapPoints
+            if let firstPin = points.dropFirst().first, firstPin > deviceCeilingBytes {
+                return firstPin
+            }
             return max(profile.refusalThresholdBytes, deviceCeilingBytes)
         }
     }
@@ -774,8 +811,10 @@ struct BudgetPlan: Equatable, Sendable {
         let target = budget(for: preset)
         if strategy == .boundedLayerStreaming {
             if case .floor = preset {
-                return "The minimum admitted V4 envelope. Nothing is held resident: every layer "
-                    + "streams, every token."
+                // Not "the V4 envelope": two models draw this sentence now, and
+                // a label that named one of them would be wrong for the other.
+                return "The minimum envelope this model is admitted at. Nothing is held "
+                    + "resident: every layer streams, every token."
             }
             let candidate = with(budgetBytes: target)
             let layers = candidate.pinnedLayerCount
@@ -784,8 +823,9 @@ struct BudgetPlan: Equatable, Sendable {
                 return "The first pin boundary this ladder has. This device cannot reach it."
             }
             let saved = MRFormat.bytesDecimal(candidate.bytesSavedPerToken)
-            // The head is the rung after the last layer, and it is worth 1.06 GB
-            // a token, so a preset that reached it says so.
+            // The head is the rung after the last layer, and it is worth a
+            // gigabyte and more a token — 1.06 GB on V4, 1.32 GB on V4.1 — so a
+            // preset that reached it says so.
             let head = candidate.pinsOutputHead ? " + output head" : ""
             if layers >= total {
                 return "All \(total) layers\(head) resident — about \(saved) fewer bytes "

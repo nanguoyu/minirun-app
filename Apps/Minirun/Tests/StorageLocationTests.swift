@@ -30,6 +30,13 @@ final class StorageLocationTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
+    /// Where a K3 transfer started at `root` actually writes. The folder the
+    /// operator confirms is the parent; the repository gets a folder of its own
+    /// named exactly as it is published.
+    private var k3ArtifactRoot: URL {
+        root.appendingPathComponent("Kimi-K3-minirun", isDirectory: true)
+    }
+
     // MARK: - The empty state
 
     /// The one the reviewed build got wrong. With nothing registered, "not
@@ -1177,7 +1184,7 @@ final class StorageLocationTests: XCTestCase {
         let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
         let job = DownloadJobID()
         let state = makeDownloadJobState(
-            plan: plan, destination: root, bookmark: Data("verify-cancel".utf8))
+            plan: plan, destination: k3ArtifactRoot, bookmark: Data("verify-cancel".utf8))
         let manager = AppDownloadManagerSpy(
             plan: plan, startJobID: job,
             events: [job: [makeFinishedEvent(state: state, job: job)]],
@@ -1255,7 +1262,7 @@ final class StorageLocationTests: XCTestCase {
         let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
         let job = DownloadJobID()
         let state = makeDownloadJobState(
-            plan: plan, destination: root, bookmark: Data("manager-cancelled".utf8))
+            plan: plan, destination: k3ArtifactRoot, bookmark: Data("manager-cancelled".utf8))
         let manager = AppDownloadManagerSpy(
             plan: plan, startJobID: job,
             events: [job: [makeFinishedEvent(state: state, job: job)]],
@@ -1277,7 +1284,7 @@ final class StorageLocationTests: XCTestCase {
         let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
         let job = DownloadJobID()
         let state = makeDownloadJobState(
-            plan: plan, destination: root, bookmark: Data("verify-race".utf8))
+            plan: plan, destination: k3ArtifactRoot, bookmark: Data("verify-race".utf8))
         let incomplete = VerificationReport(
             job: job, model: plan.model, depth: .digestPayload, checkedAt: Date(),
             ok: Array(plan.files.dropFirst()).map(\.path), missing: [plan.files[0].path],
@@ -1335,7 +1342,7 @@ final class StorageLocationTests: XCTestCase {
         for (label, makeInvalidReport) in invalidReports {
             let job = DownloadJobID()
             let state = makeDownloadJobState(
-                plan: plan, destination: root,
+                plan: plan, destination: k3ArtifactRoot,
                 bookmark: Data("invalid-report-\(label)".utf8))
             let manager = AppDownloadManagerSpy(
                 plan: plan, startJobID: job,
@@ -1344,7 +1351,7 @@ final class StorageLocationTests: XCTestCase {
             let controller = DownloadController(
                 entry: CatalogFixtures.kimiK3, manager: manager)
             var verifiedCallbacks = 0
-            controller.onArtifactVerified = { _, _ in verifiedCallbacks += 1 }
+            controller.onArtifactVerified = { _, _, _ in verifiedCallbacks += 1 }
 
             await controller.start(destination: root, scope: nil, options: DownloadOptions())
             try await waitUntil { controller.state.isReady }
@@ -1369,7 +1376,7 @@ final class StorageLocationTests: XCTestCase {
         for terminalKind in ["verification event", "finished summary"] {
             let job = DownloadJobID()
             let state = makeDownloadJobState(
-                plan: plan, destination: root,
+                plan: plan, destination: k3ArtifactRoot,
                 bookmark: Data("size-only-\(terminalKind)".utf8))
             let report = VerificationReport(
                 job: job, model: plan.model, depth: .sizeOnly, checkedAt: Date(),
@@ -1392,7 +1399,7 @@ final class StorageLocationTests: XCTestCase {
             let controller = DownloadController(
                 entry: CatalogFixtures.kimiK3, manager: manager)
             var verifiedCallbacks = 0
-            controller.onArtifactVerified = { _, _ in verifiedCallbacks += 1 }
+            controller.onArtifactVerified = { _, _, _ in verifiedCallbacks += 1 }
 
             await controller.start(destination: root, scope: nil, options: DownloadOptions())
             try await waitUntil {
@@ -1453,6 +1460,289 @@ final class StorageLocationTests: XCTestCase {
         }
     }
 
+    // MARK: - Forgetting a stopped transfer
+
+    /// The defect: a first attempt at V4.1 Flash was cancelled and its files
+    /// were deleted by hand, and its record sat in *Transfers* beside the live
+    /// job for the life of the install with no way to remove it.
+    func testForgettingACancelledTransferDropsItsRecordAndLeavesTheFilesAlone() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let kept = root.appendingPathComponent("forget-keeps-files", isDirectory: true)
+        try FileManager.default.createDirectory(at: kept, withIntermediateDirectories: true)
+        let file = kept.appendingPathComponent("layer00.bin")
+        try Data(repeating: 0x5A, count: 4096).write(to: file)
+        let cancelled = makeDownloadJobState(
+            plan: plan, destination: kept, bookmark: Data("cancelled".utf8),
+            runState: .cancelled)
+        let store = InMemoryDownloadStateStore()
+        try store.save(cancelled)
+        let manager = AppDownloadManagerSpy(
+            plan: plan,
+            restoreReport: DownloadRestoreReport(restoredJobs: [cancelled.job]),
+            summaries: [makeDownloadSummary(state: cancelled, reportedState: .cancelled)])
+        let model = makeDownloadAppModel(
+            manager: manager, stateStore: store, storage: InMemoryLocationStorage())
+
+        await model.restoreDownloads()
+        XCTAssertEqual(model.downloadJobs(for: .kimiK3).map(\.jobID), [cancelled.job])
+        XCTAssertTrue(model.canForgetDownloadJob(cancelled.job))
+
+        let warning = model.forgetDownloadJob(cancelled.job)
+
+        XCTAssertNil(warning)
+        XCTAssertTrue(model.downloadJobs(for: .kimiK3).isEmpty)
+        XCTAssertNil(model.downloadController(for: cancelled.job))
+        XCTAssertTrue(model.transfersForPresentation.isEmpty)
+        XCTAssertTrue(try store.all().isEmpty)
+        XCTAssertNil(model.download(.kimiK3)?.jobID)
+        // The whole promise of the button: the drive is untouched.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertEqual(
+            try Data(contentsOf: file).count, 4096,
+            "forgetting a record must not read, move or truncate what it left")
+    }
+
+    /// A record that is still moving is bookkeeping the app is using. Dropping
+    /// it would strand the transfer it describes, so it is refused by name.
+    func testForgettingARunningTransferIsRefusedAndChangesNothing() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let job = DownloadJobID()
+        let store = InMemoryDownloadStateStore()
+        let manager = AppDownloadManagerSpy(
+            plan: plan, startJobID: job,
+            events: [job: [.progress(makeDownloadProgress(job: job, plan: plan))]])
+        let model = makeDownloadAppModel(
+            manager: manager, stateStore: store, storage: InMemoryLocationStorage())
+
+        await model.restoreDownloads()
+        let controller = try XCTUnwrap(model.prepareDownload(for: .kimiK3))
+        let started = await controller.start(
+            destination: root, scope: nil, options: DownloadOptions())
+        XCTAssertTrue(started)
+        try await waitUntil { model.downloadController(for: job)?.state.isBusy == true }
+        XCTAssertFalse(model.canForgetDownloadJob(job))
+
+        let refusal = try XCTUnwrap(model.forgetDownloadJob(job))
+
+        XCTAssertTrue(refusal.localizedCaseInsensitiveContains("downloading"))
+        XCTAssertEqual(model.downloadJobs(for: .kimiK3).map(\.jobID), [job])
+        XCTAssertNotNil(model.downloadController(for: job))
+        XCTAssertEqual(model.download(.kimiK3)?.jobID, job)
+    }
+
+    /// A paused, verifying, ready or incomplete record is not stopped either.
+    /// The restored paused job is the one an operator is most likely to try.
+    func testForgettingAPausedTransferIsRefusedAndKeepsItsDurableRecord() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let paused = makeDownloadJobState(
+            plan: plan, destination: root, bookmark: Data("paused".utf8))
+        let store = InMemoryDownloadStateStore()
+        try store.save(paused)
+        let manager = AppDownloadManagerSpy(
+            plan: plan,
+            restoreReport: DownloadRestoreReport(restoredJobs: [paused.job]),
+            summaries: [makeDownloadSummary(state: paused)])
+        let model = makeDownloadAppModel(
+            manager: manager, stateStore: store, storage: InMemoryLocationStorage())
+
+        await model.restoreDownloads()
+        XCTAssertFalse(model.canForgetDownloadJob(paused.job))
+
+        let refusal = try XCTUnwrap(model.forgetDownloadJob(paused.job))
+
+        XCTAssertTrue(refusal.localizedCaseInsensitiveContains("paused"))
+        XCTAssertEqual(model.downloadJobs(for: .kimiK3).map(\.jobID), [paused.job])
+        XCTAssertEqual(try store.all().map(\.job), [paused.job])
+    }
+
+    /// Forgetting the record the screen is showing hands the screen the newest
+    /// of the ones that are left, rather than an empty card or a dangling id.
+    func testForgettingTheSelectedTransferMovesToTheNewestRemainingOne() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let now = Date()
+        let newest = makeDownloadJobState(
+            plan: plan, destination: root.appendingPathComponent("newest"),
+            bookmark: Data("newest".utf8), updatedAt: now, runState: .cancelled)
+        let middle = makeDownloadJobState(
+            plan: plan, destination: root.appendingPathComponent("middle"),
+            bookmark: Data("middle".utf8), updatedAt: now.addingTimeInterval(-3600),
+            runState: .cancelled)
+        let oldest = makeDownloadJobState(
+            plan: plan, destination: root.appendingPathComponent("oldest"),
+            bookmark: Data("oldest".utf8), updatedAt: now.addingTimeInterval(-7200),
+            runState: .cancelled)
+        let store = InMemoryDownloadStateStore()
+        for state in [newest, middle, oldest] { try store.save(state) }
+        let manager = AppDownloadManagerSpy(
+            plan: plan,
+            restoreReport: DownloadRestoreReport(
+                restoredJobs: [newest.job, middle.job, oldest.job]),
+            summaries: [newest, middle, oldest].map {
+                makeDownloadSummary(state: $0, reportedState: .cancelled)
+            })
+        let model = makeDownloadAppModel(
+            manager: manager, stateStore: store, storage: InMemoryLocationStorage())
+
+        await model.restoreDownloads()
+        model.selectDownloadJob(oldest.job)
+        XCTAssertEqual(model.download(.kimiK3)?.jobID, oldest.job)
+
+        XCTAssertNil(model.forgetDownloadJob(oldest.job))
+
+        XCTAssertEqual(model.download(.kimiK3)?.jobID, newest.job)
+        XCTAssertEqual(
+            model.downloadJobs(for: .kimiK3).map(\.jobID), [newest.job, middle.job])
+        XCTAssertEqual(Set(try store.all().map(\.job)), [newest.job, middle.job])
+
+        XCTAssertNil(model.forgetDownloadJob(newest.job))
+
+        XCTAssertEqual(model.download(.kimiK3)?.jobID, middle.job)
+        XCTAssertEqual(model.downloadJobs(for: .kimiK3).map(\.jobID), [middle.job])
+    }
+
+    /// The sentence the confirmation shows, for the exact pair of rows the
+    /// operator is looking at.
+    func testTheForgetConfirmationNamesTheDestinationAndPromisesTheFilesAreSafe() {
+        let message = ForgetTransferConfirmation.message(
+            destinationPath: "/Volumes/K3NVME")
+
+        XCTAssertTrue(message.contains("/Volumes/K3NVME"))
+        XCTAssertTrue(message.contains("Files on the drive are not touched."))
+        XCTAssertFalse(message.localizedCaseInsensitiveContains("delete"))
+        XCTAssertEqual(
+            ForgetTransferConfirmation.message(destinationPath: nil)
+                .contains("not recorded"), true)
+    }
+
+    // MARK: - The folder a model is written into
+
+    /// The defect: the confirmed folder *was* the artifact folder, so picking
+    /// the volume `/Volumes/K3NVME` put `index.json`, `LICENSE` and `layer00/`
+    /// into the drive's root beside the operator's own directories, and he
+    /// deleted them by hand.
+    func testAConfirmedFolderIsTheParentAndTheRepositoryGetsAFolderOfItsOwn() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let manager = AppDownloadManagerSpy(plan: plan, startJobID: DownloadJobID())
+        let controller = DownloadController(entry: CatalogFixtures.kimiK3, manager: manager)
+
+        let started = await controller.start(
+            destination: root, scope: nil, options: DownloadOptions())
+
+        XCTAssertTrue(started)
+        XCTAssertEqual(controller.destinationPath, k3ArtifactRoot.path)
+        XCTAssertEqual(manager.startedDestinations, [k3ArtifactRoot.path])
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: k3ArtifactRoot.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: root.path),
+            ["Kimi-K3-minirun"])
+    }
+
+    func testTheCreatedArtifactFolderIsOwnerWritableAndWorldReadable() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        let manager = AppDownloadManagerSpy(plan: plan, startJobID: DownloadJobID())
+        let controller = DownloadController(entry: CatalogFixtures.kimiK3, manager: manager)
+
+        await controller.start(destination: root, scope: nil, options: DownloadOptions())
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: k3ArtifactRoot.path)
+        XCTAssertEqual(attributes[.posixPermissions] as? NSNumber, NSNumber(value: 0o755))
+    }
+
+    /// *Continue with kept files* hands back the job's own recorded
+    /// destination, which already is the artifact folder.
+    func testContinuingIntoTheArtifactFolderItselfDoesNotNestASecondOne() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        try FileManager.default.createDirectory(
+            at: k3ArtifactRoot, withIntermediateDirectories: true)
+        let manager = AppDownloadManagerSpy(plan: plan, startJobID: DownloadJobID())
+        let controller = DownloadController(entry: CatalogFixtures.kimiK3, manager: manager)
+
+        let started = await controller.start(
+            destination: k3ArtifactRoot, scope: nil, options: DownloadOptions())
+
+        XCTAssertTrue(started)
+        XCTAssertEqual(controller.destinationPath, k3ArtifactRoot.path)
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: k3ArtifactRoot.appendingPathComponent("Kimi-K3-minirun").path))
+    }
+
+    func testAFolderHoldingSomethingElseIsRefusedAndNothingIsWrittenBesideIt() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        try FileManager.default.createDirectory(
+            at: k3ArtifactRoot, withIntermediateDirectories: true)
+        try Data("not a model".utf8).write(
+            to: k3ArtifactRoot.appendingPathComponent("tax-return-2025.pdf"))
+        let manager = AppDownloadManagerSpy(plan: plan, startJobID: DownloadJobID())
+        let controller = DownloadController(entry: CatalogFixtures.kimiK3, manager: manager)
+
+        let started = await controller.start(
+            destination: root, scope: nil, options: DownloadOptions())
+
+        XCTAssertFalse(started)
+        XCTAssertEqual(
+            controller.operationError,
+            k3ArtifactRoot.path + " already exists and holds something else")
+        XCTAssertTrue(manager.startedDestinations.isEmpty)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: k3ArtifactRoot.path),
+            ["tax-return-2025.pdf"])
+    }
+
+    func testAnArtifactFolderThisTransferAlreadyOwnsIsReused() async throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.kimiK3))
+        try FileManager.default.createDirectory(
+            at: k3ArtifactRoot, withIntermediateDirectories: true)
+        try Data(#"{"source_repo":"moonshotai/Kimi-K3","files":372,"bytes":1}"#.utf8)
+            .write(to: k3ArtifactRoot.appendingPathComponent("index.json"))
+        let manager = AppDownloadManagerSpy(plan: plan, startJobID: DownloadJobID())
+        let controller = DownloadController(entry: CatalogFixtures.kimiK3, manager: manager)
+
+        let started = await controller.start(
+            destination: root, scope: nil, options: DownloadOptions())
+
+        XCTAssertTrue(started)
+        XCTAssertEqual(manager.startedDestinations, [k3ArtifactRoot.path])
+        XCTAssertNil(controller.operationError)
+    }
+
+    /// The sentence the sheet shows before Continue, for the exact case the
+    /// operator hit.
+    func testThePickerPreviewNamesTheFolderTheBytesWillGoIn() throws {
+        let plan = try XCTUnwrap(PlanBuilder.plan(for: CatalogFixtures.deepseekV41Flash))
+        let volume = URL(fileURLWithPath: "/Volumes/K3NVME", isDirectory: true)
+
+        let layout = try XCTUnwrap(ArtifactFolderPolicy.resolve(picked: volume, plan: plan))
+
+        XCTAssertEqual(
+            layout.previewSentence,
+            "Will be saved to /Volumes/K3NVME/DeepSeek-V4.1-Flash-minirun")
+        XCTAssertEqual(
+            layout.chooserMessage,
+            "Choose where to keep this model. Minirun creates a folder named "
+                + "DeepSeek-V4.1-Flash-minirun inside it.")
+    }
+
+    func testTheDestinationSheetShowsThePreviewAndTakesCapacityAgainstTheParent() throws {
+        let appRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: appRoot.appendingPathComponent("Sources/Screens/DestinationPicker.swift"),
+            encoding: .utf8)
+
+        XCTAssertTrue(source.contains("layout.previewSentence"))
+        XCTAssertTrue(source.contains("message: chooserMessage"))
+        XCTAssertTrue(source.contains("at: layout?.parent ?? pendingDestination.directory"))
+        XCTAssertTrue(source.contains("layout.state.allowsWriting"))
+        XCTAssertTrue(source.contains("layout?.state.refusal"))
+        XCTAssertFalse(source.contains("directly into the folder you confirm"))
+    }
+
     func testVolumeShortcutCannotStartFromARawVolumesPath() throws {
         let appRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -1481,7 +1771,12 @@ final class StorageLocationTests: XCTestCase {
 
         XCTAssertFalse(addSource.contains("Menu(\"Mounted drives\")"))
         XCTAssertTrue(storageSource.contains("title: \"Folders Minirun can access\""))
-        XCTAssertTrue(storageSource.contains("SectionHeader(title: \"Mounted drives\""))
+        // Both are `MRPageSection` now — a hairline and a sentence-case
+        // heading — rather than a `Panel` and an ALL-CAPS `SectionHeader`. The
+        // separation the test is about is unchanged: grants above, hardware
+        // below, and the sentence between them saying which is which.
+        XCTAssertTrue(storageSource.contains("MRPageSection(title: \"Mounted drives\")"))
+        XCTAssertTrue(storageSource.contains("Minirun can read only the folders"))
         XCTAssertTrue(storageSource.contains("struct StorageRefreshButton"))
         XCTAssertTrue(storageSource.contains("Text(\"Rescan\")"))
         XCTAssertTrue(storageSource.contains("model.refreshVolumes()"))
@@ -1568,8 +1863,14 @@ final class StorageLocationTests: XCTestCase {
             ConversationStoragePresentation.folderDescription,
             "Saved privately in Minirun's app data")
         XCTAssertFalse(ConversationStoragePresentation.folderDescription.contains("/"))
-        XCTAssertEqual(AboutPresentation.versionLine("1.2.3"), "Version 1.2.3")
-        XCTAssertFalse(AboutPresentation.versionLine("1.2.3").contains("("))
+        // The version used to be one composed line, "Version 1.2.3", and the
+        // rule it carried was that a build number must never be smuggled into
+        // it inside a parenthesis. The product-page About states the two as
+        // separate labelled figures, which keeps that rule by construction:
+        // there is no string for a parenthesis to hide in.
+        XCTAssertEqual(AboutPresentation.versionLabel, "Version")
+        XCTAssertEqual(AboutPresentation.buildLabel, "Build")
+        XCTAssertNotEqual(AboutPresentation.versionLabel, AboutPresentation.buildLabel)
         XCTAssertEqual(AboutPresentation.linksTitle, "Links")
         XCTAssertEqual(AboutPresentation.websiteTitle, "Website")
         XCTAssertEqual(AboutPresentation.websiteLabel, "minirun.dev")
@@ -1724,7 +2025,302 @@ final class StorageLocationTests: XCTestCase {
         after.forget(key)
     }
 
+    // MARK: - What a stopped transfer left on the drive
+
+    /// The defect, in one test: a cancelled job kept telling the operator that
+    /// "verified and partial files remain on disk for a new job to reuse" after
+    /// the operator had deleted every one of them. The card now states a
+    /// reconciliation, and a reconciliation of an empty drive says so.
+    func testACancelledTransferCountsTheFilesThatAreThereAndThenSaysWhenTheyAreGone()
+        async throws
+    {
+        let plan = makeSmallPlan()
+        let destination = root.appendingPathComponent("transfer", isDirectory: true)
+        try writePlanFile(plan.files[0], bytes: 512, in: destination)
+        try writePartFile(plan.files[1], bytes: 40, in: destination)
+        let controller = makeStoppedController(plan: plan, destination: destination, state: .cancelled)
+
+        await controller.reconcileKeptFiles()
+
+        let kept = try XCTUnwrap(controller.keptFiles)
+        XCTAssertEqual(kept.destination, .present)
+        XCTAssertEqual(kept.completeFileCount, 1)
+        XCTAssertEqual(kept.completeBytes, 512)
+        XCTAssertEqual(kept.partialFileCount, 1)
+        XCTAssertEqual(kept.partialBytes, 40)
+        XCTAssertEqual(
+            TransferRemains.resolve(kept, destinationPath: destination.path),
+            .kept(completeFiles: 1, partialFiles: 1, bytes: 552))
+
+        // The operator deletes the directory in the Finder. Nothing tells the
+        // app; the next look at the screen is what has to notice.
+        try FileManager.default.removeItem(at: destination)
+        await controller.reconcileKeptFiles()
+
+        let after = try XCTUnwrap(controller.keptFiles)
+        XCTAssertEqual(after.destination, .missing)
+        XCTAssertTrue(after.isEmpty)
+        let remains = TransferRemains.resolve(after, destinationPath: destination.path)
+        XCTAssertEqual(remains, .nothingKept)
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(remains),
+            "Nothing from this transfer is on the drive any more.")
+        XCTAssertEqual(TransferRemainsPresentation.actionTitle(remains), "Download again…")
+        XCTAssertTrue(TransferRemainsPresentation.actionIsEnabled(remains))
+    }
+
+    func testAStoppedTransferOnAnUnpluggedDriveSaysSoInsteadOfClaimingNothingIsLeft()
+        async throws
+    {
+        let plan = makeSmallPlan()
+        let destination = URL(
+            fileURLWithPath: "/Volumes/minirun-absent-\(UUID().uuidString)/artifact",
+            isDirectory: true)
+        let controller = makeStoppedController(
+            plan: plan, destination: destination, state: .cancelled)
+
+        await controller.reconcileKeptFiles()
+
+        let kept = try XCTUnwrap(controller.keptFiles)
+        XCTAssertFalse(kept.wasExamined)
+        let remains = TransferRemains.resolve(kept, destinationPath: destination.path)
+        guard case .driveNotConnected = remains else {
+            return XCTFail("expected a disconnected drive, got \(remains)")
+        }
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(remains),
+            "The drive this transfer used is not connected.")
+        XCTAssertFalse(TransferRemainsPresentation.actionIsEnabled(remains))
+    }
+
+    /// A folder the app cannot read right now is not a dead end: the button
+    /// opens the destination picker, and the grant it hands back is what an
+    /// unreadable folder was missing. Disabling it would strand a sandboxed
+    /// job whose bookmark went stale.
+    func testUnreadableDestinationKeepsTheContinueActionEnabled() {
+        let remains = TransferRemains.unreadable(reason: "the destination directory is not readable")
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(remains),
+            "The folder this transfer used could not be read.")
+        XCTAssertEqual(
+            TransferRemainsPresentation.detail(remains),
+            "the destination directory is not readable")
+        XCTAssertEqual(
+            TransferRemainsPresentation.actionTitle(remains), "Continue with kept files…")
+        XCTAssertTrue(TransferRemainsPresentation.actionIsEnabled(remains))
+    }
+
+    /// A job that has not stopped has no business showing kept-file counts: its
+    /// bytes are moving, and the card shows the live progress instead.
+    func testARunningTransferKeepsNoReconciliation() async throws {
+        let plan = makeSmallPlan()
+        let destination = root.appendingPathComponent("running", isDirectory: true)
+        try writePlanFile(plan.files[0], bytes: 512, in: destination)
+        let controller = makeStoppedController(
+            plan: plan, destination: destination, state: .paused)
+
+        await controller.reconcileKeptFiles()
+
+        XCTAssertNil(controller.keptFiles)
+        XCTAssertEqual(
+            TransferRemains.resolve(nil, destinationPath: destination.path), .checking)
+    }
+
+    /// Before anything has looked, the card says it is looking — and it does
+    /// not offer to continue with files nobody has counted.
+    func testTheContinueButtonWaitsForTheDriveToBeRead() {
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(.checking),
+            "Checking what this transfer left on the drive…")
+        XCTAssertFalse(TransferRemainsPresentation.actionIsEnabled(.checking))
+        XCTAssertEqual(
+            TransferRemainsPresentation.actionTitle(.checking), "Continue with kept files…")
+    }
+
+    func testKeptCountsAreStatedWithTheirPartialFiles() {
+        let many = TransferRemains.kept(
+            completeFiles: 94, partialFiles: 1, bytes: 74_200_000)
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(many),
+            "94 files kept on disk (\(MRFormat.bytesDecimal(UInt64(74_200_000)))), 1 partial.")
+        XCTAssertEqual(
+            TransferRemainsPresentation.actionTitle(many), "Continue with kept files…")
+        XCTAssertTrue(TransferRemainsPresentation.actionIsEnabled(many))
+
+        let one = TransferRemains.kept(completeFiles: 1, partialFiles: 0, bytes: 512)
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(one),
+            "1 file kept on disk (\(MRFormat.bytesDecimal(UInt64(512)))).")
+
+        let partialOnly = TransferRemains.kept(
+            completeFiles: 0, partialFiles: 2, bytes: 1024)
+        XCTAssertEqual(
+            TransferRemainsPresentation.sentence(partialOnly),
+            "2 partial files kept on disk (\(MRFormat.bytesDecimal(UInt64(1024)))).")
+    }
+
+    /// "file 94 of 624" is kept only while the drive still holds 93 finished
+    /// files. Once it does not, the reconciled counts are the only thing said.
+    func testThePerFilePositionSurvivesOnlyWhileTheDriveAgrees() {
+        let snapshot = ProgressSnapshot(
+            totalBytes: 1024, verifiedBytes: 512, fetchedUnverifiedBytes: 0,
+            inFlightBytes: 0, filesTotal: 624, filesDone: 93,
+            currentFilePath: "layer00/w1.bin", currentFileBytes: 512,
+            currentFileOffset: 0, bytesPerSecond: 2_000_000,
+            estimatedTimeRemaining: 242_000, networkBytes: 512, wastedBytes: 0)
+
+        XCTAssertEqual(
+            TransferRemainsPresentation.progressLine(
+                .kept(completeFiles: 93, partialFiles: 1, bytes: 512), snapshot: snapshot),
+            "file 94 of 624")
+        XCTAssertNil(
+            TransferRemainsPresentation.progressLine(
+                .kept(completeFiles: 12, partialFiles: 0, bytes: 512), snapshot: snapshot))
+        XCTAssertNil(
+            TransferRemainsPresentation.progressLine(.nothingKept, snapshot: snapshot))
+        XCTAssertNil(
+            TransferRemainsPresentation.progressLine(.checking, snapshot: snapshot))
+    }
+
+    /// The bar under a stopped transfer is drawn from bytes that were counted,
+    /// or it is not drawn at all.
+    func testTheStoppedBarIsDrawnOnlyFromCountedBytes() {
+        XCTAssertEqual(
+            TransferRemainsPresentation.keptFraction(
+                .kept(completeFiles: 1, partialFiles: 0, bytes: 250), totalBytes: 1000),
+            0.25)
+        XCTAssertEqual(
+            TransferRemainsPresentation.keptFraction(.nothingKept, totalBytes: 1000), 0)
+        XCTAssertNil(TransferRemainsPresentation.keptFraction(.checking, totalBytes: 1000))
+        XCTAssertNil(
+            TransferRemainsPresentation.keptFraction(
+                .driveNotConnected(volume: "K3NVME"), totalBytes: 1000))
+    }
+
+    /// The rate, the ETA and the resume offset live in one place, and a stopped
+    /// transfer's block does not go near it.
+    ///
+    /// This used to read `DownloadCard.stoppedBody` in `Rows.swift`. That card
+    /// is gone — the two screens that drew a transfer now draw the same
+    /// `MRTransferBlock` the model page does — so the rule is checked in both
+    /// places that still build one.
+    func testAStoppedTransferShowsNoRateEtaOrResumeOffset() throws {
+        for (file, next) in [
+            ("Sources/Screens/ModelDetailView.swift", "private var keptHeadline"),
+            ("Sources/Screens/DownloadsView.swift", "@ViewBuilder private func links("),
+        ] {
+            let appRoot = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+            let source = try String(
+                contentsOf: appRoot.appendingPathComponent(file), encoding: .utf8)
+            let stopped = try XCTUnwrap(
+                source.range(of: "stoppedBlock("), "\(file) draws no stopped transfer")
+            let end = try XCTUnwrap(
+                source.range(of: next, range: stopped.upperBound..<source.endIndex))
+            let body = String(source[stopped.lowerBound..<end.lowerBound])
+
+            XCTAssertFalse(body.contains("MRFormat.throughput"), file)
+            XCTAssertFalse(body.contains("estimatedTimeRemaining"), file)
+            XCTAssertFalse(body.contains("resumeSentence"), file)
+        }
+    }
+
+    /// A stopped transfer in the Downloads list states what the drive holds
+    /// now, from a reconciliation — never from the snapshot the job stopped
+    /// with, which after an afternoon of deleting is a memory of a drive that
+    /// has changed.
+    func testTheDownloadsListStatesAStoppedTransferFromTheDrive() throws {
+        let appRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: appRoot.appendingPathComponent("Sources/Screens/DownloadsView.swift"),
+            encoding: .utf8)
+
+        XCTAssertTrue(source.contains("TransferRemains.resolve("))
+        XCTAssertTrue(source.contains("await controller?.reconcileKeptFiles()"))
+        XCTAssertTrue(source.contains("TransferRemainsPresentation.actionTitle(remains)"))
+        XCTAssertTrue(
+            source.contains("TransferRemainsPresentation.actionIsEnabled(remains)"))
+        XCTAssertTrue(source.contains("ForgetTransferConfirmation.cardActionTitle"))
+        XCTAssertFalse(source.contains("DownloadCard("))
+        XCTAssertFalse(source.contains("StatusChip("))
+    }
+
+    /// The transfer's own detail screen is reached from the transfer block, as
+    /// a text link — never as a lone bordered button floating under a card.
+    ///
+    /// This assertion used to name `DisclosureLink(title: "Download details")`,
+    /// which was the same rule in the panel language: a title and the chevron
+    /// every list row uses, rather than a control shaped like nothing else on
+    /// the screen. The model page has no chevrons and no cards, so the same
+    /// rule is now spelled as the page's own quiet third tier.
+    func testTransferDetailsIsATextLinkOnTheTransferBlock() throws {
+        let appRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: appRoot.appendingPathComponent("Sources/Screens/ModelDetailView.swift"),
+            encoding: .utf8)
+
+        XCTAssertTrue(source.contains("Text(\"Transfer details\")"))
+        XCTAssertTrue(source.contains("DownloadDetailView(modelID: modelID)"))
+        XCTAssertTrue(source.contains(".mrTextLink()"))
+        XCTAssertFalse(source.contains("DisclosureLink("))
+        XCTAssertFalse(source.contains("buttonStyle(.borderedProminent)"))
+    }
+
     // MARK: - Helpers
+
+    private func makeSmallPlan() -> DownloadPlan {
+        let files = [
+            RepoFile(
+                path: "layer00/layer00-w1.bin", sizeBytes: 512,
+                digest: .sha256(hex: String(repeating: "a", count: 64)), isPayload: true),
+            RepoFile(
+                path: "layer00/layer00-w2.bin", sizeBytes: 2048,
+                digest: .sha256(hex: String(repeating: "b", count: 64)), isPayload: true),
+        ]
+        return DownloadPlan(
+            model: .kimiK3,
+            repo: HuggingFaceRepoRef(
+                repoID: "nanguoyu/Kimi-K3-minirun",
+                revision: "159987d3ac437e0aceaff0763d43ddeb549b1842"),
+            files: files, index: nil,
+            reconciliation: IndexReconciliation.between(files: files, claim: nil))
+    }
+
+    private func writePlanFile(_ file: RepoFile, bytes: Int, in directory: URL) throws {
+        try write(file.path, bytes: bytes, in: directory)
+    }
+
+    private func writePartFile(_ file: RepoFile, bytes: Int, in directory: URL) throws {
+        try write(file.path + DownloadManager.partSuffix, bytes: bytes, in: directory)
+    }
+
+    private func write(_ relativePath: String, bytes: Int, in directory: URL) throws {
+        let url = directory.appendingPathComponent(relativePath)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: 0x5A, count: bytes).write(to: url)
+    }
+
+    /// A controller restored from a saved job, which is how a cancelled or
+    /// interrupted transfer comes back after a relaunch — plan and destination
+    /// present, nothing running.
+    private func makeStoppedController(
+        plan: DownloadPlan, destination: URL, state: DownloadJobSummary.JobState
+    ) -> DownloadController {
+        let saved = makeDownloadJobState(
+            plan: plan, destination: destination, bookmark: Data("saved".utf8),
+            runState: state)
+        return DownloadController(
+            entry: CatalogFixtures.kimiK3,
+            manager: AppDownloadManagerSpy(plan: plan),
+            restoredState: saved,
+            summary: makeDownloadSummary(state: saved, reportedState: state))
+    }
 
     private func makeDownloadJobState(
         plan: DownloadPlan, destination: URL, bookmark: Data,
@@ -2175,6 +2771,12 @@ private final class AppDownloadManagerSpy: DownloadManaging, @unchecked Sendable
 
     var startError: DownloadError?
     var releaseScopeBeforeStartError = false
+    private var startedDestinationPaths: [String] = []
+
+    /// Every directory this manager was actually handed, in order. A refusal
+    /// that happens before the handoff leaves this empty, which is the whole
+    /// point of asserting on it.
+    var startedDestinations: [String] { withLock { startedDestinationPaths } }
 
     init(
         plan: DownloadPlan,
@@ -2224,6 +2826,7 @@ private final class AppDownloadManagerSpy: DownloadManaging, @unchecked Sendable
     func start(
         _ plan: DownloadPlan, into destination: DownloadDestination, options: DownloadOptions
     ) async throws -> DownloadJobID {
+        withLock { startedDestinationPaths.append(destination.directory.path) }
         if let startError {
             if releaseScopeBeforeStartError { destination.scope?.release() }
             throw startError

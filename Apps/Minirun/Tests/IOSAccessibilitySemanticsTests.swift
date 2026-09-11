@@ -33,9 +33,13 @@ final class IOSAccessibilitySemanticsTests: XCTestCase {
         ]
 
         XCTAssertEqual(LayerLadderAccessibility.completedCount(in: cells), 1)
+        // The visible summary names layers because the header it sits on also
+        // carries a token index and sits above a pace line counting completed
+        // decode passes. A bare leading count took its subject from whichever
+        // number was nearest.
         XCTAssertEqual(
             LayerLadderAccessibility.visibleSummary(for: cells),
-            "1 complete · layer 2 of 3")
+            "1 layer done · layer 2 of 3")
         XCTAssertEqual(
             LayerLadderAccessibility.spokenValue(for: cells),
             "1 of 3 layers complete, layer 2 of 3 is computing")

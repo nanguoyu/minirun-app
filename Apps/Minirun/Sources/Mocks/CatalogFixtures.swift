@@ -24,7 +24,10 @@ import MinirunRunners
 //     4,682,514,432 B, the 2,581,886,208 B product working reserve and the
 //     1,267,810,304 B staged-pair peak;
 //   * the one-token demonstration: token 3372, twice, bit-identical logits,
-//     5.26 GB peak inside a 5.80 GB stated budget, thermally nominal.
+//     5.26 GB peak inside a 5.80 GB stated budget, thermally nominal;
+//   * V4.1's memory-dial ladder, read from the published container's own block
+//     and globals manifests — `deepSeekV41MeasuredLadder` states each of the six
+//     block shapes and where their totals were confirmed.
 //
 // PLACEHOLDER — invented so the screens have something to draw, and marked as
 // such wherever they surface. No claim rests on any of them:
@@ -183,6 +186,155 @@ enum CatalogFixtures {
             expertPoolBytes: expertPool)
     }()
 
+    /// MEASURED. DeepSeek V4.1's ladder, before a copy of the artifact has been
+    /// read on this machine.
+    ///
+    /// Unlike V4's projection above, every byte column here is the published
+    /// container's own. `nanguoyu/DeepSeek-V4.1-Flash-minirun@fbf8d74e` states
+    /// only **six** distinct block shapes over its forty blocks, so the whole
+    /// table fits as a base shape and five named exceptions rather than as a
+    /// spread of a total nobody split:
+    ///
+    /// * 31 plain blocks at 170,240,984 B read / 174,959,576 B resident;
+    /// * blocks 24, 28, 32 and 36 — the later index sources — at
+    ///   175,844,312 / 180,693,976;
+    /// * blocks 2 and 8 at 186,462,424 / 191,312,088 and block 20 at
+    ///   181,219,544 / 186,069,208, which carry KV-source geometry;
+    /// * the two Engram blocks, 1 and 14, at 327,789,528 / 337,243,096 and
+    ///   344,010,968 / 353,595,608, because `engram.wkv` is `[25600, 6144]` FP8.
+    ///
+    /// They sum to 7,206,792,640 B read and 7,406,054,848 B resident, which is
+    /// exactly the dense total the phase 3 arms measured
+    /// (`docs/experiments/2026-09-11-v41-phase3-runner.md` §3: 7.21 GB of dense
+    /// weights re-read every token at the floor, 8,729,882,048 B of resident
+    /// weights at 15 GB with the head).
+    ///
+    /// The globals rung is `global00`'s own: head and embedding are both
+    /// `[129280, 5120]` BF16 at 1,323,827,200 B, the head is walked whole every
+    /// pass so pinning it saves what it costs, and a decode token reads one
+    /// 10,240 B embedding row — which is why that table is censused and never
+    /// ranked.
+    ///
+    /// The floor is the stated dial terms: the 5.2 GB transient envelope of a
+    /// run that **pins** (measured on phase 3's stated arm, and not the 3.2 GB
+    /// the floor arm measured with nothing resident), the 20-slot routed-expert
+    /// pool at one expert's half-tile, the saturated 512 MiB MLX cache and the
+    /// stated 256 MiB pin margin. The retained state and one-block replacement
+    /// are prompt-dependent and small (~8 MB at the product ceilings);
+    /// `DeepSeekV41MemoryDialInputs.inspect` prices them exactly and replaces
+    /// this the moment a copy is verified.
+    static let deepSeekV41MeasuredLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile =
+        deepSeekV41MeasuredLadder(policy: DeepSeekV41ProductMemoryBudget.currentPolicy)
+
+    /// K3's catalog memory profile, priced by a named platform policy.
+    ///
+    /// The same parameterization as ``deepSeekV41Memory(policy:)`` below and
+    /// for the same reason. K3's floor and its working reserve are platform
+    /// terms — the Mac's supported 8.00 GB boundary and 2.58 GB reserve against
+    /// the bounded iPhone tier's twice-completed 5.80 GB device record and
+    /// 0.98 GB reserve — so a fixture that only ever asked `currentPolicy` could
+    /// state one platform's numbers and be asserted on the other. A suite that
+    /// means "the Mac's arithmetic" now says so by naming the Mac's policy, and
+    /// is byte-identical wherever it is hosted.
+    ///
+    /// `onRecordMinimumBudgetBytes` is 5.80 GB on both, because it is not a
+    /// policy term at all: it is the one-token device arm that actually ran,
+    /// twice, with matching logits. The iPhone tier's floor coinciding with it
+    /// is why that tier exists.
+    static func k3Memory(policy: K3ProductMemoryBudget.Policy) -> MemoryProfile {
+        MemoryProfile(
+            census: k3Census,
+            expertPoolBytes: k3ExpertPoolBytes,
+            workingSetReserveBytes: K3ProductMemoryBudget.defaultWorkingReserveBytes(
+                for: policy),
+            requiredMinimumBudgetBytes: policy.minimumBudgetBytes,
+            onRecordMinimumBudgetBytes: k3OnRecordMinimumBudget,
+            provenance: .declaredByIndex)
+    }
+
+    /// V4.1's catalog memory profile, priced by a named platform policy.
+    ///
+    /// The product floor goes in all three places, exactly as V4's entry states
+    /// its 2 GB one. The reserve carries it so the arithmetic floor is the
+    /// admitted envelope rather than zero; the required minimum is the boundary
+    /// the platform policy declares; and on the Mac 3.4 GB is also the smallest
+    /// budget V4.1 is on record as having run at — the floor arm of phase 3,
+    /// which produced the same tokens as the 15 GB arm.
+    ///
+    /// The entry used to state none of them, and the dial refused nothing: a
+    /// V4.1 chat could be sent below the floor its own runner requires and meet
+    /// the refusal inside the run instead of in the dial. It then stated all
+    /// three as **constants**, and a constant is how an iPhone came to open
+    /// every new chat at the Mac's 3.4 GB while its own runner's floor was
+    /// 1.9 GB. They are the policy's now, and the policy is a parameter so the
+    /// Mac's suite can check the phone's numbers.
+    static func deepSeekV41Memory(
+        policy: DeepSeekV41ProductMemoryBudget.Policy
+    ) -> MemoryProfile {
+        MemoryProfile(
+            census: unknownGeometryCensus,
+            expertPoolBytes: 0,
+            workingSetReserveBytes: policy.minimumBudgetBytes,
+            requiredMinimumBudgetBytes: policy.minimumBudgetBytes,
+            // Only the Mac has an arm at its floor. The iPhone policy is
+            // experimental and nothing has run at 1.9 GB on a phone, so it
+            // claims no record — the dial then refuses at the product boundary,
+            // which is the same number, without calling it a measurement.
+            onRecordMinimumBudgetBytes: policy.isExperimental
+                ? nil : policy.minimumBudgetBytes,
+            provenance: .declaredByIndex,
+            deepSeekLadder: deepSeekV41MeasuredLadder(policy: policy))
+    }
+
+    /// The same census, priced by a named platform policy.
+    ///
+    /// Stated as a function so the macOS suite can draw the **iPhone** dial —
+    /// its floor, its presets and their deficits — without pretending it ran on
+    /// an iPhone, which is the same reason the policies are values at all.
+    static func deepSeekV41MeasuredLadder(
+        policy: DeepSeekV41ProductMemoryBudget.Policy
+    ) -> DeepSeekV4MemoryDialInputs.ArtifactProfile {
+        var read = [UInt64](repeating: 170_240_984, count: 40)
+        var resident = [UInt64](repeating: 174_959_576, count: 40)
+        for block in [24, 28, 32, 36] {
+            read[block] = 175_844_312
+            resident[block] = 180_693_976
+        }
+        for block in [2, 8] {
+            read[block] = 186_462_424
+            resident[block] = 191_312_088
+        }
+        read[20] = 181_219_544
+        resident[20] = 186_069_208
+        read[1] = 327_789_528
+        resident[1] = 337_243_096
+        read[14] = 344_010_968
+        resident[14] = 353_595_608
+        let census = try! DeepSeekV4MemoryDial.Census(
+            layerReadBytes: read,
+            layerResidentBytes: resident,
+            globals: DeepSeekV4MemoryDial.Globals(
+                headResidentBytes: 1_323_827_200,
+                headReadBytesPerToken: 1_323_827_200,
+                embeddingResidentBytes: 1_323_827_200,
+                embeddingReadBytesPerToken: 10_240),
+            expertBytesPerToken: 0)
+        // Every term of this floor is the **platform policy's**: the pool is
+        // its slot count at the published half-tile, and the pinned envelope is
+        // `pinnedTransientExecutionBytes`. On a Mac they are the numbers above;
+        // on a phone they are the iPhone policy's, which is what stops a phone
+        // being offered a Mac's ladder before a copy has been read.
+        let expertPool = UInt64(policy.expertPoolSlots) * 6_266_880
+        return DeepSeekV4MemoryDialInputs.ArtifactProfile(
+            census: census,
+            floor: WorkingSetFloor(
+                widestResidentLayerBytes: policy.pinnedTransientExecutionBytes,
+                expertPoolBytes: expertPool,
+                workingReserveBytes: 536_870_912
+                    + DeepSeekV41MemoryDialInputs.statedPinMarginBytes),
+            expertPoolBytes: expertPool)
+    }
+
     /// A model with no runner and no published geometry. One zero-sized layer,
     /// so the census is well-formed and nothing is pinnable — which is the
     /// truth: there is no ladder to climb until somebody reads the containers.
@@ -223,13 +375,7 @@ enum CatalogFixtures {
             layers: 93, globals: 1, files: 372, bytes: k3PayloadBytes,
             sourceRepo: "nanguoyu/Kimi-K3-minirun",
             sourceRevision: "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"),
-        memory: MemoryProfile(
-            census: k3Census,
-            expertPoolBytes: k3ExpertPoolBytes,
-            workingSetReserveBytes: workingSetReserve,
-            requiredMinimumBudgetBytes: k3ProductMinimumBudget,
-            onRecordMinimumBudgetBytes: k3OnRecordMinimumBudget,
-            provenance: .declaredByIndex),
+        memory: k3Memory(policy: K3ProductMemoryBudget.currentPolicy),
         // The two byte terms are the measured per-token split. The compute term
         // is the residual: it is set so that the projection at the historical
         // one-token budget, over the link on record, lands on the pass actually
@@ -284,7 +430,7 @@ enum CatalogFixtures {
             requiredMinimumBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes,
             onRecordMinimumBudgetBytes: DeepSeekV4ProductMemoryBudget.minimumBudgetBytes,
             provenance: .declaredByIndex,
-            deepSeekV4: deepSeekV4ProjectedLadder),
+            deepSeekLadder: deepSeekV4ProjectedLadder),
         terms: WorkloadTerms(
             deterministicBytesPerToken: 0, expertBytesPerToken: 0,
             computeSecondsPerToken: 0, isMeasuredHere: false),
@@ -305,27 +451,25 @@ enum CatalogFixtures {
             payloadFileCount: 557,
             metadataFileCount: 67,
             largestFileBytes: 8_192_016_384,
-            minimumBudgetBytes: nil,
-            runner: .none,
+            // The platform policy's floor, the way V4's row states its own. It
+            // was the 3.4 GB literal until the iPhone dial work, and a literal
+            // is exactly how a phone came to be offered the Mac's floor.
+            minimumBudgetBytes: DeepSeekV41ProductMemoryBudget.minimumBudgetBytes,
+            runner: .decodeRunner,
             licenseName: "MIT License",
             licenseAcknowledgementRequired: true,
             notes: [
                 "Twenty-six of this repo's payload files, and 210 GB of its total, are the "
                     + "two conditional-memory tables: slices of a 384-million-row table "
                     + "stored as 4 KiB row pages.",
-                "This build ships no runner for it.",
+                "This build decodes it. At the stated floor every block is streamed; a "
+                    + "larger budget buys residency through the memory dial.",
             ]),
         index: ArtifactIndexSummary(
             layers: nil, globals: 1, files: 557, bytes: 517_260_264_264,
             sourceRepo: "nanguoyu/DeepSeek-V4.1-Flash-minirun",
             sourceRevision: "fbf8d74eae864a622d2773d62085b4a0bc99344e"),
-        memory: MemoryProfile(
-            census: unknownGeometryCensus,
-            expertPoolBytes: 0,
-            workingSetReserveBytes: workingSetReserve,
-            requiredMinimumBudgetBytes: nil,
-            onRecordMinimumBudgetBytes: nil,
-            provenance: .declaredByIndex),
+        memory: deepSeekV41Memory(policy: DeepSeekV41ProductMemoryBudget.currentPolicy),
         terms: WorkloadTerms(
             deterministicBytesPerToken: 0, expertBytesPerToken: 0,
             computeSecondsPerToken: 0, isMeasuredHere: false),

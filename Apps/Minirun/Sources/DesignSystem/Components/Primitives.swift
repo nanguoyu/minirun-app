@@ -693,3 +693,313 @@ struct Panel<Content: View>: View {
         .mrCard()
     }
 }
+
+// MARK: - Answer text
+
+/// The small, deliberate subset of Markdown a model answer is allowed to use,
+/// split into blocks a `Text` can actually draw.
+///
+/// ## Why a splitter at all
+///
+/// `AttributedString(markdown:)` will happily parse a whole document, but
+/// `Text` draws no block structure from it: a bulleted list arrives as one
+/// paragraph with the bullets gone. So the block level is parsed here — fenced
+/// code, list items, headings, quotes — and only the inline level is handed to
+/// Foundation.
+///
+/// ## Why it is safe on a half-arrived answer
+///
+/// The transcript re-renders on every token, so this runs against every prefix
+/// of the final text. Two rules keep that from flickering:
+///
+/// - An unmatched inline delimiter stays literal. Foundation already does
+///   this — `**Vien` parses to `**Vien` — so the asterisks are visible until
+///   their closer arrives and the span then turns bold once. Nothing throws,
+///   and a parse that fails anyway falls back to the raw text rather than to
+///   an empty bubble.
+/// - An unterminated fence is a code block **being written**, not a stray
+///   fence line. Treating it as open means the closing fence changes nothing
+///   on screen when it lands; treating it as text would redraw the block.
+enum MRAnswerMarkdown {
+
+    struct Block: Equatable {
+        enum Kind: Equatable {
+            case paragraph
+            case heading(level: Int)
+            case bullet
+            case ordered(number: Int)
+            case quote
+            case code(language: String?)
+        }
+
+        var kind: Kind
+        var text: String
+        /// Nesting depth for list items, two source spaces to a level, capped
+        /// so a deep paste cannot indent an answer off the bubble.
+        var indent: Int = 0
+    }
+
+    static func blocks(in source: String) -> [Block] {
+        var blocks: [Block] = []
+        var paragraph: [String] = []
+        var code: [String]?
+        var codeLanguage: String?
+
+        func flushParagraph() {
+            guard !paragraph.isEmpty else { return }
+            blocks.append(Block(kind: .paragraph, text: paragraph.joined(separator: "\n")))
+            paragraph = []
+        }
+
+        for line in source.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            if code != nil {
+                if trimmed.hasPrefix("```") {
+                    blocks.append(
+                        Block(
+                            kind: .code(language: codeLanguage),
+                            text: code?.joined(separator: "\n") ?? ""))
+                    code = nil
+                    codeLanguage = nil
+                } else {
+                    code?.append(line)
+                }
+                continue
+            }
+
+            if trimmed.hasPrefix("```") {
+                flushParagraph()
+                let language = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
+                codeLanguage = language.isEmpty ? nil : language
+                code = []
+                continue
+            }
+
+            if trimmed.isEmpty {
+                flushParagraph()
+                continue
+            }
+
+            if let item = listItem(line) {
+                flushParagraph()
+                blocks.append(item)
+                continue
+            }
+
+            if let heading = heading(trimmed) {
+                flushParagraph()
+                blocks.append(heading)
+                continue
+            }
+
+            if trimmed == ">" || trimmed.hasPrefix("> ") {
+                flushParagraph()
+                blocks.append(
+                    Block(
+                        kind: .quote,
+                        text: String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)))
+                continue
+            }
+
+            paragraph.append(line)
+        }
+
+        // The fence that has not closed yet belongs to the block it opened.
+        if let code {
+            blocks.append(
+                Block(kind: .code(language: codeLanguage), text: code.joined(separator: "\n")))
+        }
+        flushParagraph()
+        return blocks
+    }
+
+    /// Inline Markdown only, with the whitespace kept: a single newline inside
+    /// a paragraph is a line break in an answer, not the joinable soft break
+    /// that document Markdown makes of it.
+    static func inline(_ source: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            allowsExtendedAttributes: true,
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible)
+        guard var attributed = try? AttributedString(markdown: source, options: options) else {
+            return AttributedString(source)
+        }
+
+        // Nothing in an answer navigates. Foundation turns `[text](url)` into a
+        // link attribute and `Text` draws that tappable, which would let a
+        // generated string open a browser from inside a transcript, and would
+        // also hide the destination behind whatever the model chose to call it.
+        // So the link goes and the destination is printed instead: the reader
+        // sees where it points and decides for themselves. Rewritten back to
+        // front, because replacing a run's characters moves every index after
+        // it.
+        let links = attributed.runs
+            .compactMap { run -> (Range<AttributedString.Index>, URL)? in
+                run.link.map { (run.range, $0) }
+            }
+            .reversed()
+        for (range, url) in links {
+            let shown = String(attributed[range].characters)
+            var replacement = AttributedString(
+                shown.contains(url.absoluteString) ? shown : "\(shown) (\(url.absoluteString))")
+            replacement.inlinePresentationIntent = attributed[range].inlinePresentationIntent
+            attributed.replaceSubrange(range, with: replacement)
+        }
+
+        // `Text` resolves bold and italic from the intent on its own. Inline
+        // code needs a font, and a font set on a run has to stay relative to
+        // the body style or it stops answering Dynamic Type. The ranges are
+        // collected before anything is written, and the writes set attributes
+        // only, so no index moves under the loop. The scope is named because
+        // this file also imports AppKit and UIKit, which both spell `font`.
+        let codeRanges = attributed.runs
+            .filter { $0.inlinePresentationIntent?.contains(.code) == true }
+            .map(\.range)
+        for range in codeRanges {
+            attributed[range].swiftUI.font = Font.system(.subheadline, design: .monospaced)
+            attributed[range].swiftUI.backgroundColor = MRColor.hairline.opacity(0.55)
+        }
+        return attributed
+    }
+
+    /// The answer as the bubble shows it, for the accessibility value. The
+    /// markers a sighted reader sees — the bullet, the number — are spoken too;
+    /// the delimiters that became bold or code are not, because they are not on
+    /// screen either.
+    static func spokenText(_ source: String) -> String {
+        blocks(in: source)
+            .map { block in
+                let text = String(inline(block.text).characters)
+                switch block.kind {
+                case .bullet: return "• \(text)"
+                case .ordered(let number): return "\(number). \(text)"
+                case .code(let language):
+                    return language.map { "\($0) code: \(block.text)" } ?? "code: \(block.text)"
+                case .paragraph, .heading, .quote: return text
+                }
+            }
+            .joined(separator: "\n")
+    }
+
+    private static func heading(_ trimmed: String) -> Block? {
+        let hashes = trimmed.prefix { $0 == "#" }
+        guard !hashes.isEmpty, hashes.count <= 6 else { return nil }
+        let rest = trimmed.dropFirst(hashes.count)
+        guard rest.first == " " else { return nil }
+        return Block(
+            kind: .heading(level: hashes.count),
+            text: String(rest).trimmingCharacters(in: .whitespaces))
+    }
+
+    private static func listItem(_ line: String) -> Block? {
+        let leading = line.prefix { $0 == " " || $0 == "\t" }
+        let indent = min(3, leading.count / 2)
+        let rest = line.dropFirst(leading.count)
+        guard let first = rest.first else { return nil }
+
+        if first == "-" || first == "*" || first == "+" {
+            let after = rest.dropFirst()
+            guard after.first == " " else { return nil }
+            return Block(
+                kind: .bullet,
+                text: String(after).trimmingCharacters(in: .whitespaces), indent: indent)
+        }
+
+        let digits = rest.prefix { $0.isNumber }
+        guard !digits.isEmpty, digits.count <= 3, let number = Int(digits) else { return nil }
+        var after = rest.dropFirst(digits.count)
+        guard let punctuation = after.first, punctuation == "." || punctuation == ")" else {
+            return nil
+        }
+        after = after.dropFirst()
+        guard after.first == " " else { return nil }
+        return Block(
+            kind: .ordered(number: number),
+            text: String(after).trimmingCharacters(in: .whitespaces), indent: indent)
+    }
+}
+
+/// A model answer, drawn as the Markdown it is written in.
+///
+/// The bubble used to print the source: `The capital of Austria is **Vienna**`
+/// reached the reader with its asterisks on. Only assistant turns come through
+/// here — a person's own message is shown exactly as they typed it, because
+/// their asterisks are theirs.
+struct AnswerText: View {
+    let source: String
+    /// Drawn immediately after the last block, so a streaming caret sits where
+    /// the next character will land rather than at the end of the first line.
+    var caret: Text?
+
+    var body: some View {
+        let blocks = MRAnswerMarkdown.blocks(in: source)
+        VStack(alignment: .leading, spacing: MRSpace.s2) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                view(for: block, isLast: index == blocks.count - 1)
+            }
+            // A caret with nothing in front of it still has to be visible, or
+            // the first moments of a turn look like a turn that never started.
+            if blocks.isEmpty, let caret {
+                caret.font(MRType.body)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder private func view(for block: MRAnswerMarkdown.Block, isLast: Bool) -> some View {
+        let trailing = isLast ? caret : nil
+        switch block.kind {
+        case .paragraph:
+            inlineText(block.text, trailing: trailing)
+        case .heading:
+            inlineText(block.text, trailing: trailing)
+                .font(MRType.headline)
+        case .bullet:
+            marker("•", block: block, trailing: trailing)
+        case .ordered(let number):
+            marker("\(number).", block: block, trailing: trailing)
+        case .quote:
+            inlineText(block.text, trailing: trailing)
+                .foregroundStyle(MRColor.secondary)
+                .padding(.leading, MRSpace.s3)
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(MRColor.hairline).frame(width: 2)
+                }
+        case .code(let language):
+            VStack(alignment: .leading, spacing: MRSpace.s1) {
+                if let language {
+                    Text(language).mrLabel()
+                }
+                (Text(block.text) + (trailing ?? Text(verbatim: "")))
+                    .font(MRType.path)
+                    .foregroundStyle(MRColor.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(MRSpace.s3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                MRColor.hairline.opacity(0.45),
+                in: RoundedRectangle(cornerRadius: MRRadius.control, style: .continuous))
+        }
+    }
+
+    private func inlineText(_ text: String, trailing: Text?) -> some View {
+        (Text(MRAnswerMarkdown.inline(text)) + (trailing ?? Text(verbatim: "")))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func marker(
+        _ symbol: String, block: MRAnswerMarkdown.Block, trailing: Text?
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: MRSpace.s2) {
+            Text(symbol)
+                .foregroundStyle(MRColor.secondary)
+                .monospacedDigit()
+            inlineText(block.text, trailing: trailing)
+        }
+        .padding(.leading, CGFloat(block.indent) * MRSpace.s4)
+    }
+}

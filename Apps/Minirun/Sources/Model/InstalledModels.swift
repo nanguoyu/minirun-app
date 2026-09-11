@@ -16,6 +16,10 @@ typealias InstalledArtifactRemovalOperation = @Sendable (
     ArtifactVerificationRoot
 ) async throws -> ArtifactRemovalReceipt
 
+typealias InstalledDownloadEvidenceOperation = @Sendable (
+    DownloadVerificationProof, ArtifactIndexIdentity, ArtifactVerificationRoot
+) async throws -> ArtifactVerificationRecord
+
 enum InstalledArtifactAccessError: Error, Equatable, CustomStringConvertible {
     case notInCurrentScan(path: String)
     case locationUnavailable(path: String)
@@ -163,6 +167,12 @@ final class InstalledModels {
     private let verificationOperation: InstalledArtifactVerificationOperation?
     private let removalOperation: InstalledArtifactRemovalOperation?
     private let scanOperation: InstalledModelScanOperation?
+    private let downloadEvidenceOperation: InstalledDownloadEvidenceOperation?
+    /// Proofs handed over by finished transfers, keyed by the standardized
+    /// artifact path, waiting for a scan to produce the row they describe.
+    /// A proof stays here until the scanner has seen the directory, because the
+    /// ledger record is written through that row's registered-location grant.
+    private var pendingDownloadEvidence: [String: DownloadVerificationProof] = [:]
     private let monitor = VolumeChangeMonitor()
     /// `StorageManaging` owns the bookmark ledger, so Observation cannot see a
     /// bookmark appear or disappear by itself. Reading `locationKeys` also
@@ -187,7 +197,8 @@ final class InstalledModels {
         initialReport: DiscoveryReport = .empty,
         verificationOperation: InstalledArtifactVerificationOperation? = nil,
         removalOperation: InstalledArtifactRemovalOperation? = nil,
-        scanOperation: InstalledModelScanOperation? = nil
+        scanOperation: InstalledModelScanOperation? = nil,
+        downloadEvidenceOperation: InstalledDownloadEvidenceOperation? = nil
     ) {
         self.storage = storage
         self.catalog = catalog
@@ -200,6 +211,7 @@ final class InstalledModels {
         self.verificationOperation = verificationOperation
         self.removalOperation = removalOperation
         self.scanOperation = scanOperation
+        self.downloadEvidenceOperation = downloadEvidenceOperation
     }
 
     // MARK: - Locations
@@ -269,6 +281,47 @@ final class InstalledModels {
         }
     }
 
+    /// Remember a folder a finished transfer wrote into — but only if nothing
+    /// already registered covers it.
+    ///
+    /// A download lands in `<picked folder>/<repository name>`, and the folder
+    /// the operator picked is almost always a location they registered long ago.
+    /// Registering the artifact directory as well gives the scanner two roots
+    /// over one tree: the model page then lists the same 517 GB copy twice, and
+    /// *Verify all files* on that page starts two passes over the same drive.
+    ///
+    /// So a destination inside a registered location is not a new location. It
+    /// is a reason to rescan the one that already covers it, which is what this
+    /// does.
+    func registerDownloadDestination(_ url: URL) {
+        if let covering = coveringLocationPath(of: url) {
+            locationError = nil
+            lastAddOutcome = .alreadyRegistered(path: covering)
+            refresh()
+            return
+        }
+        addLocation(url)
+    }
+
+    /// The registered location that is, or contains, this folder.
+    ///
+    /// Compared as whole path components after standardising, for the reason
+    /// ``relativeComponents(of:from:)`` gives: `/Volumes/Model` is a string
+    /// prefix of `/Volumes/Models` and is not a parent of it.
+    func coveringLocationPath(of url: URL) -> String? {
+        let target = url.standardizedFileURL.pathComponents
+        for key in locationKeys {
+            guard let recorded = storage.bookmark(key)?.recordedPath else { continue }
+            let location = URL(fileURLWithPath: recorded, isDirectory: true)
+                .standardizedFileURL.pathComponents
+            guard target.count >= location.count,
+                Array(target.prefix(location.count)) == location
+            else { continue }
+            return recorded
+        }
+        return nil
+    }
+
     /// The picker was dismissed without a folder. Recorded rather than ignored:
     /// a silent no-op is indistinguishable from a broken button.
     func noteAddCancelled() { lastAddOutcome = .cancelled }
@@ -335,8 +388,95 @@ final class InstalledModels {
             if self.rescanPending {
                 self.rescanPending = false
                 self.refresh()
+                return
+            }
+            await self.applyPendingDownloadEvidence()
+        }
+    }
+
+    // MARK: - Evidence a finished transfer hands over
+
+    /// Take a finished transfer's own per-file digest proof and have the kit
+    /// file it as artifact verification evidence (ADR 0019).
+    ///
+    /// The transfer already read every published file and matched it against the
+    /// published digest; before this, that work was thrown away and the copy
+    /// appeared as *Not verified*, so the page asked the operator for a third
+    /// full read of the drive — half an hour, and 517 GB, to learn what the
+    /// transfer had just proved.
+    ///
+    /// The proof is held until a scan has produced the row it describes, because
+    /// the ledger write goes through that row's registered-location grant and
+    /// through nothing else.
+    func recordDownloadVerification(_ proof: DownloadVerificationProof) {
+        let key = URL(fileURLWithPath: proof.rootPath, isDirectory: true)
+            .standardizedFileURL.path
+        pendingDownloadEvidence[key] = proof
+        refresh()
+    }
+
+    private func applyPendingDownloadEvidence() async {
+        guard !pendingDownloadEvidence.isEmpty, verificationTask == nil, removalInFlight == nil
+        else { return }
+        let operation: InstalledDownloadEvidenceOperation
+        if let downloadEvidenceOperation {
+            operation = downloadEvidenceOperation
+        } else {
+            let verifier = ArtifactVerifier(
+                tree: HuggingFaceTreeClient(transport: URLSessionTransport()),
+                catalog: catalog, ledger: ledger, checkpoints: checkpoints)
+            operation = { proof, index, authority in
+                try await verifier.recordEvidence(
+                    fromDownload: proof, index: index, rootedAt: authority)
             }
         }
+
+        var applied = false
+        for (key, proof) in pendingDownloadEvidence.sorted(by: { $0.key < $1.key }) {
+            guard let row = report.locations.flatMap(\.artifacts).first(where: { candidate in
+                URL(fileURLWithPath: candidate.rootPath, isDirectory: true)
+                    .standardizedFileURL.path == key
+            }) else {
+                // The scan has not reached this directory yet. Keep the proof;
+                // the next scan is what decides whether it can ever be spent.
+                continue
+            }
+            pendingDownloadEvidence.removeValue(forKey: key)
+            do {
+                let location = try owningLocation(of: row)
+                guard let storageKey = location.storageKey else {
+                    throw InstalledArtifactAccessError.missingStorageAuthority(
+                        path: location.rootPath)
+                }
+                let scope = try storage.resolve(storageKey)
+                defer { scope.release() }
+                let remapped = try Self.remappedArtifactAndAuthority(
+                    row, from: location, to: scope.url)
+                // The record is filed under the path the held capability
+                // actually opened, which is the path a later scan will look it
+                // up under.
+                let rebased = DownloadVerificationProof(
+                    model: proof.model, repository: proof.repository,
+                    rootPath: remapped.artifact.rootPath, files: proof.files,
+                    checkedAt: proof.checkedAt)
+                let record = try await operation(rebased, row.index, remapped.authority)
+                guard record.state == .fullyVerified else {
+                    throw InstalledArtifactAccessError.verificationEvidenceNotRecorded(
+                        path: row.rootPath)
+                }
+                report = Self.applyingVerification(
+                    record.state, checkedAt: record.checkedAt, to: row, in: report)
+                onReportChanged?(report)
+                verificationOutcome[row.rootPath] = record.detail
+                applied = true
+            } catch {
+                // Refused, and named. The copy stays exactly as the scan found
+                // it — unverified — and the row keeps offering the full pass.
+                verificationOutcome[row.rootPath] =
+                    "The transfer's own check could not be recorded: \(error)"
+            }
+        }
+        if applied { refresh() }
     }
 
     /// Start listening for drives arriving and leaving.
@@ -371,9 +511,7 @@ final class InstalledModels {
     /// The mounted artifact a run would read, largest first — the most complete
     /// copy of the model this machine can currently reach.
     func preferredArtifact(for model: ModelID) -> DiscoveredArtifact? {
-        report.locations
-            .filter(\.isMounted)
-            .flatMap { $0.artifacts(for: model) }
+        report.mountedInstallations(of: model)
             .max { $0.bytesOnDisk < $1.bytesOnDisk }
     }
 
@@ -384,9 +522,7 @@ final class InstalledModels {
         for model: ModelID,
         matching predicate: (DiscoveredArtifact) -> Bool = { _ in true }
     ) -> DiscoveredArtifact? {
-        report.locations
-            .filter(\.isMounted)
-            .flatMap { $0.artifacts(for: model) }
+        report.mountedInstallations(of: model)
             .filter { $0.isComplete != false && $0.verification == .fullyVerified }
             .filter(predicate)
             .max { lhs, rhs in

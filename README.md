@@ -13,7 +13,7 @@ Weights stream from your SSD through a memory budget you set. Free, local, on Ma
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone on TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="Version 0.4" src="https://img.shields.io/badge/version-0.4-3b8cf5"></a>
+  <a href="CHANGELOG.md"><img alt="Version 0.5" src="https://img.shields.io/badge/version-0.5-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
@@ -55,13 +55,14 @@ requantization), published at [huggingface.co/nanguoyu](https://huggingface.co/n
 and listed at [minirun.dev/models](https://minirun.dev/models). Speeds below
 are what the app shows on the reference devices — a MacBook Pro (M1 Pro, 32 GB)
 over a USB4 (40 Gb/s) enclosure, and an iPhone 16 Pro over its USB 3 port with a
-powered dock — and change with the drive, cable and budget.
+powered dock — and change with the drive, cable and budget. A model is listed
+as chat ready on a device only where a run on that device has been timed.
 
 | Model | On disk | Mac (M1 Pro, 32 GB) | iPhone 16 Pro | Status |
 | --- | ---: | --- | --- | --- |
 | [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731) — 284 B MoE | 167 GB | ≈ 1.7 s / token, 10.7 GB budget; runs at 2 GB | ≈ 15 s / token, 3.8 GB budget; runs at 2 GB | Chat ready |
 | [Kimi K3](https://minirun.dev/models/kimi-k3) — 2.8 T MoE | 1.56 TB | ≈ 70 s / token, 8 GB budget | ≈ 220 s / token, 5.8 GB budget, 2-token replies | Chat ready |
-| [DeepSeek V4.1 Flash](https://minirun.dev/models/deepseek-v4.1-flash) — 552 B multimodal MoE | 517 GB | download, verify and store | download, verify and store | Container ready |
+| [DeepSeek V4.1 Flash](https://minirun.dev/models/deepseek-v4.1-flash) — 552 B multimodal MoE | 517 GB | ≈ 5 s / token, 14.9 GB budget; runs at 3.4 GB | ≈ 21 s / token, 1.9 GB budget | Chat ready |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3) — audio & video generation | 64 GB | download, verify and store | download, verify and store | Container ready |
 | Qwen3.8-27B | — | — | — | Coming soon |
 
@@ -129,8 +130,9 @@ TestFlight updates them.
    the external drive (on iPhone, through the Files app). Minirun assesses the
    drive and lists the containers it finds.
 2. **Get a model.** *Settings → Models → Find Models* shows the published
-   containers; download one into that folder, or point at a copy you already
-   have.
+   containers; download one, or point at a copy you already have. Pick the
+   folder — or the whole drive — you want it kept in: Minirun creates a folder
+   named after the model inside it and shows you that path before it starts.
 3. **Verify.** *Verify all files* digests the container against its published
    tree. On iPhone this continues in the background and finishes with a
    notification.

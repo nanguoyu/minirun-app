@@ -281,6 +281,10 @@ final class ContractTests: XCTestCase {
                 // one blue while the dial had one tier for both, and a legend
                 // swatch is a foreground like any other.
                 ("tierStaged", MRColor.tierStaged),
+                // The product page's accent. It is set as a foreground far
+                // more often than as a fill — every text link on the page is
+                // this colour, and a link nobody can read is a link.
+                ("accent", MRColor.accent),
             ]
         }
 

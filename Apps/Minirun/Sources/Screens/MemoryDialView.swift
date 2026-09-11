@@ -246,10 +246,10 @@ struct MemoryDialView: View {
                         MRFormat.bytesDecimal(plan.bytesReadPerToken))
                 }
                 Text(
-                    "V4 holds the deterministic layers this budget can pay for — and the output "
-                        + "head above them — and streams the rest, replacing each layer's old "
-                        + "causal cache before advancing. The runner stops rather than crossing "
-                        + "this budget."
+                    "\(plan.modelName) holds the deterministic layers this budget can pay for "
+                        + "— and the output head above them — and streams the rest, replacing "
+                        + "each layer's old causal cache before advancing. The runner stops "
+                        + "rather than crossing this budget."
                 )
                     .font(MRType.micro)
                     .foregroundStyle(MRColor.tertiary)

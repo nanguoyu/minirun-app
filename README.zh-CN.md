@@ -13,7 +13,7 @@
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="下载 Mac 版" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone 版 TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="版本 0.4" src="https://img.shields.io/badge/version-0.4-3b8cf5"></a>
+  <a href="CHANGELOG.md"><img alt="版本 0.5" src="https://img.shields.io/badge/version-0.5-3b8cf5"></a>
   <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
@@ -35,13 +35,13 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 
 ## 模型
 
-容器是对已发布 checkpoint 的逐字节重新打包（不重新量化），发布在 [huggingface.co/nanguoyu](https://huggingface.co/nanguoyu)，列表见 [minirun.dev/models](https://minirun.dev/models)。下表速度是 app 在两台参考设备上显示的数值：MacBook Pro（M1 Pro，32 GB）经 USB4（40 Gb/s）硬盘盒，以及 iPhone 16 Pro 经其 USB 3 接口加供电底座；换硬盘、线材或预算，数字都会变。
+容器是对已发布 checkpoint 的逐字节重新打包（不重新量化），发布在 [huggingface.co/nanguoyu](https://huggingface.co/nanguoyu)，列表见 [minirun.dev/models](https://minirun.dev/models)。下表速度是 app 在两台参考设备上显示的数值：MacBook Pro（M1 Pro，32 GB）经 USB4（40 Gb/s）硬盘盒，以及 iPhone 16 Pro 经其 USB 3 接口加供电底座；换硬盘、线材或预算，数字都会变。只有在某台设备上真正跑过并计过时的模型，才会标成在那台设备上可对话。
 
 | 模型 | 磁盘占用 | Mac（M1 Pro，32 GB） | iPhone 16 Pro | 状态 |
 | --- | ---: | --- | --- | --- |
 | [DeepSeek V4 Flash](https://minirun.dev/models/deepseek-v4-flash-0731)，284B MoE | 167 GB | 约 1.7 秒/token，预算 10.7 GB；2 GB 也能跑 | 约 15 秒/token，预算 3.8 GB；2 GB 也能跑 | 可对话 |
 | [Kimi K3](https://minirun.dev/models/kimi-k3)，2.8T MoE | 1.56 TB | 约 70 秒/token，预算 8 GB | 约 220 秒/token，预算 5.8 GB，每轮 2 个 token | 可对话 |
-| [DeepSeek V4.1 Flash](https://minirun.dev/models/deepseek-v4.1-flash)，552B 多模态 MoE | 517 GB | 下载、验证、存储 | 下载、验证、存储 | 容器就绪 |
+| [DeepSeek V4.1 Flash](https://minirun.dev/models/deepseek-v4.1-flash)，552B 多模态 MoE | 517 GB | 约 5 秒/token，预算 14.9 GB；3.4 GB 也能跑 | 约 21 秒/token，预算 1.9 GB | 可对话 |
 | [MiniMax H3](https://minirun.dev/models/minimax-h3)，音频与视频生成 | 64 GB | 下载、验证、存储 | 下载、验证、存储 | 容器就绪 |
 | Qwen3.8-27B | — | — | — | 即将推出 |
 
@@ -92,7 +92,7 @@ Minirun 是一个原生的 macOS 与 iOS 应用，用来运行权重远大于设
 ## 快速开始
 
 1. **添加存储。** *Settings → Storage → Add a folder…*，选外接盘上的一个文件夹（iPhone 上通过"文件"app 选择）。Minirun 会评估这块盘并列出其中找到的容器。
-2. **获取模型。** *Settings → Models → Find Models* 会显示已发布的容器；下载一个到那个文件夹，或者指向你已有的副本。
+2. **获取模型。** *Settings → Models → Find Models* 会显示已发布的容器；下载一个，或者指向你已有的副本。选一个文件夹——或者整块盘——作为存放位置：Minirun 会在你选的位置里新建一个以模型命名的文件夹，并在开始前把这个路径显示给你。
 3. **验证。** *Verify all files* 会把容器与其发布的文件树逐一核对摘要。iPhone 上验证会在后台继续，完成后发通知。
 4. **对话。** 新建对话，选模型，选预算，发送。（应用界面目前为英文。）
 

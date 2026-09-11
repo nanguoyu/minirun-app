@@ -367,7 +367,13 @@ struct NewChatDefaults: Codable, Equatable, Sendable {
     /// 4 retires the first-launch seed for models whose new-chat default is a
     /// position on a ladder rather than a fixed floor. The seeded number is
     /// dropped so it can be re-derived; anything else stays.
-    static let currentBudgetSchemaVersion = 4
+    ///
+    /// 5 moves a stored DeepSeek V4.1 default that is exactly the *other*
+    /// platform's floor onto this platform's — the rule K3 has had since its
+    /// iPhone tier existed. Without it an iPhone that had launched before the
+    /// iOS V4.1 policy shipped kept seeding every new chat with the Mac's
+    /// 3.4 GB, which is the budget Jetsam killed the app at.
+    static let currentBudgetSchemaVersion = 5
     static let currentInstrumentPanelSchemaVersion = 1
 
     var model: ModelID

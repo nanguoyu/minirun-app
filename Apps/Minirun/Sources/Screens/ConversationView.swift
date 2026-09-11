@@ -287,8 +287,9 @@ struct ConversationView: View {
         .accessibilityValue(
             snapshot.tokens.isEmpty
                 ? "no tokens yet"
-                : snapshot.generatedText
-                    ?? snapshot.tokens.map { $0.text ?? "token \($0.tokenID)" }.joined())
+                : MRAnswerMarkdown.spokenText(
+                    snapshot.generatedText
+                        ?? snapshot.tokens.map { $0.text ?? "token \($0.tokenID)" }.joined()))
     }
 
     // MARK: - Cards and banners
@@ -578,8 +579,12 @@ struct ConversationView: View {
                     systemImage: "gauge.with.dots.needle.bottom.50percent")
             }
         } label: {
+            // No frame. This menu lives in the phone's navigation bar, whose
+            // glass capsule already supplies the 44-point target and its own
+            // padding; a hand-set frame inside it draws a second control and
+            // pushes the capsule toward the screen edge. See
+            // `MRControlPlacement`.
             Image(systemName: "ellipsis")
-                .frame(minWidth: 44, minHeight: 44)
         }
         .menuIndicator(.hidden)
         .help("Choose what the panel shows")
@@ -902,13 +907,25 @@ struct MessageBlock: View {
         }
     }
 
-    private var messageText: some View {
-        Text(message.text)
-            .font(MRType.body)
-            .foregroundStyle(MRColor.primary)
-            .textSelection(.enabled)
-            .lineSpacing(5)
-            .fixedSize(horizontal: false, vertical: true)
+    /// A model turn is Markdown and is drawn as Markdown; a person's turn is
+    /// drawn exactly as they typed it. Somebody who writes `**` in a question
+    /// means the asterisks, and a transcript that silently reformats what they
+    /// sent is a transcript of something else.
+    @ViewBuilder private var messageText: some View {
+        if isUser {
+            Text(message.text)
+                .font(MRType.body)
+                .foregroundStyle(MRColor.primary)
+                .textSelection(.enabled)
+                .lineSpacing(5)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            AnswerText(source: message.text)
+                .font(MRType.body)
+                .foregroundStyle(MRColor.primary)
+                .textSelection(.enabled)
+                .lineSpacing(5)
+        }
     }
 
     private func telemetryLine(_ telemetry: MessageTelemetry) -> some View {
@@ -969,7 +986,11 @@ struct MessageBlock: View {
     }
 
     private var spokenValue: String {
-        var value = message.text
+        // What the bubble shows, not what it was written in: VoiceOver reading
+        // an answer must not say "asterisk asterisk Vienna" when the screen
+        // says Vienna. A person's own turn is spoken exactly as they typed it,
+        // for the same reason it is drawn that way.
+        var value = isUser ? message.text : MRAnswerMarkdown.spokenText(message.text)
         if let namedError = message.namedError {
             value += ". " + ConversationErrorCopy.summary(
                 for: namedError, failure: message.failure)
@@ -1041,6 +1062,11 @@ struct MessageBlock: View {
 /// The answer being produced, with a thin caret at the insertion point —
 /// inline, so it follows the last character across wrapped lines — blinking
 /// at 1 Hz only while a token is in flight. Still under Reduce Motion.
+///
+/// It is the same Markdown renderer the finished turn uses, running on every
+/// prefix of the answer. The caret is handed down to the last block rather than
+/// concatenated here, so it stays at the insertion point inside a list item or
+/// a code block instead of dropping below them.
 struct StreamingText: View {
     let text: String
     let caretActive: Bool
@@ -1048,8 +1074,9 @@ struct StreamingText: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        (Text(text)
-            + Text("\u{258E}")
+        AnswerText(
+            source: text,
+            caret: Text("\u{258E}")
                 .foregroundColor(caretActive && visible ? MRColor.streamDet : .clear))
             .font(MRType.body)
             .foregroundStyle(MRColor.primary)

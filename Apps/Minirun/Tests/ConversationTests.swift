@@ -321,6 +321,125 @@ final class ConversationPresentationTests: XCTestCase {
         XCTAssertFalse(MessageFailure.verifyModelFiles.allowsRetry)
         XCTAssertTrue(MessageFailure.retryAfterStorageReturns.allowsRetry)
     }
+
+    // MARK: An answer is Markdown
+
+    /// The reply that started this: the bubble printed
+    /// `The capital of Austria is **Vienna** (German: *Wien*).` with the
+    /// asterisks on.
+    func testAnAnswerIsDrawnAsMarkdownRatherThanPrintedAsSource() {
+        let answer = "The capital of Austria is **Vienna** (German: *Wien*)."
+        let blocks = MRAnswerMarkdown.blocks(in: answer)
+        XCTAssertEqual(blocks.count, 1)
+        XCTAssertEqual(blocks.first?.kind, .paragraph)
+
+        let inline = MRAnswerMarkdown.inline(answer)
+        XCTAssertEqual(
+            String(inline.characters), "The capital of Austria is Vienna (German: Wien).")
+
+        let bold = inline.runs.first { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true }
+        let italic = inline.runs.first { $0.inlinePresentationIntent?.contains(.emphasized) == true }
+        XCTAssertEqual(bold.map { String(inline[$0.range].characters) }, "Vienna")
+        XCTAssertEqual(italic.map { String(inline[$0.range].characters) }, "Wien")
+    }
+
+    /// Inline code, bullets, ordered items and a fenced block are the rest of
+    /// the subset. A fence still open is the block being written, not a stray
+    /// fence line, so the closing fence changes nothing on screen when it
+    /// arrives.
+    func testTheBlockSubsetIsParsedAndAnOpenFenceIsAlreadyItsBlock() {
+        let closed = """
+            Steps:
+
+            - run `swift build`
+            1. then ship
+
+            ```swift
+            let city = "Vienna"
+            ```
+            """
+        let blocks = MRAnswerMarkdown.blocks(in: closed)
+        XCTAssertEqual(
+            blocks.map(\.kind),
+            [.paragraph, .bullet, .ordered(number: 1), .code(language: "swift")])
+        XCTAssertEqual(blocks.last?.text, "let city = \"Vienna\"")
+        XCTAssertEqual(String(MRAnswerMarkdown.inline("run `swift build`").characters),
+            "run swift build")
+
+        let stillOpen = String(closed.dropLast(4))
+        XCTAssertEqual(MRAnswerMarkdown.blocks(in: stillOpen).map(\.kind), blocks.map(\.kind))
+        XCTAssertEqual(MRAnswerMarkdown.blocks(in: stillOpen).last?.text, blocks.last?.text)
+    }
+
+    /// Every prefix of an answer is rendered at some point, because the
+    /// transcript redraws on every token. None of them may throw, blank the
+    /// bubble, or swallow characters that have already arrived: a half-written
+    /// `**Vien` stays exactly that until its closer lands.
+    func testEveryPrefixOfAStreamedAnswerRendersWhatHasArrived() {
+        let answer = """
+            The capital of Austria is **Vienna** (German: *Wien*).
+
+            - `Wien` is the endonym
+
+            ```swift
+            let city = "Vienna"
+            ```
+            """
+        for length in 1...answer.count {
+            let prefix = String(answer.prefix(length))
+            let blocks = MRAnswerMarkdown.blocks(in: prefix)
+            let visible = blocks
+                .map { String(MRAnswerMarkdown.inline($0.text).characters) }
+                .joined()
+            XCTAssertFalse(blocks.isEmpty, "no block for prefix of length \(length)")
+            XCTAssertFalse(visible.isEmpty, "empty bubble at prefix of length \(length)")
+        }
+
+        XCTAssertEqual(
+            String(MRAnswerMarkdown.inline("The capital of Austria is **Vien").characters),
+            "The capital of Austria is **Vien",
+            "an unclosed emphasis stays literal instead of flashing bold or vanishing")
+    }
+
+    /// Prose that only looks like Markdown must survive intact — the product
+    /// talks about `snake_case` fields and multiplies numbers.
+    func testProseThatMerelyLooksLikeMarkdownIsLeftAlone() {
+        for text in ["a_b_c and snake_case_name", "5 * 3 * 2 experts", "trailing *", "**"] {
+            XCTAssertEqual(String(MRAnswerMarkdown.inline(text).characters), text, text)
+        }
+    }
+
+    /// A generated string may not open a browser, and may not hide where it
+    /// points behind a name it chose.
+    func testALinkInAnAnswerIsNotTappableAndNamesItsDestination() {
+        let rendered = MRAnswerMarkdown.inline("See [the docs](https://example.com/x) first.")
+        XCTAssertEqual(
+            String(rendered.characters),
+            "See the docs (https://example.com/x) first.")
+        XCTAssertTrue(rendered.runs.allSatisfy { $0.link == nil })
+
+        // A bare URL is already its own destination and is not printed twice.
+        let bare = MRAnswerMarkdown.inline("[https://example.com](https://example.com)")
+        XCTAssertEqual(String(bare.characters), "https://example.com")
+        XCTAssertTrue(bare.runs.allSatisfy { $0.link == nil })
+    }
+
+    /// VoiceOver gets what the bubble shows. Reading the source aloud would say
+    /// "asterisk asterisk Vienna" about a screen that says Vienna; the markers
+    /// a sighted reader can see are spoken, the delimiters that became bold are
+    /// not.
+    func testTheSpokenAnswerIsWhatTheBubbleShows() {
+        let spoken = MRAnswerMarkdown.spokenText(
+            """
+            The capital is **Vienna**.
+
+            - The endonym is `Wien`
+            1. Visit it
+            """)
+        XCTAssertEqual(spoken, "The capital is Vienna.\n• The endonym is Wien\n1. Visit it")
+        XCTAssertFalse(spoken.contains("*"))
+        XCTAssertFalse(spoken.contains("`"))
+    }
 }
 
 /// The settings split, which is the point of this milestone: a global default
@@ -354,6 +473,9 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
 
         model.backToApp()
         XCTAssertEqual(model.destination, .conversation(id))
+        // Leaving Settings is a programmatic route like any other, so the Chats
+        // stack acknowledges it before an empty path means Back again.
+        model.activatePendingConversationNavigation()
 
         model.setConversationNavigationPath([])
         XCTAssertEqual(model.destination, .chats)
@@ -402,6 +524,86 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
         XCTAssertEqual(model.destination, .settings)
         XCTAssertEqual(model.settingsNavigationPath, [.storage])
         XCTAssertEqual(model.settingsSection, .storage)
+    }
+
+    /// Reported from an iPhone 16 Pro: **New chat** on the model page created
+    /// and saved the conversation, and the screen stayed where it was. One row
+    /// appeared in Chats per tap, which is what a route that was written and
+    /// then erased looks like from the list.
+    func testANewChatRouteSurvivesTheLazyChatsStackInitialization() throws {
+        let model = AppModel.freshForTests()
+        model.openSettings(.models)
+        model.activatePendingSettingsNavigation()
+
+        let activationBefore = model.conversationNavigationActivationID
+        let id = try XCTUnwrap(model.newConversation())
+        XCTAssertEqual(model.destination, .conversation(id))
+        XCTAssertNotEqual(
+            model.conversationNavigationActivationID, activationBefore,
+            "a retained Chats tab needs a new task identity to acknowledge this route")
+
+        // Crossing to the Chats tab builds its NavigationStack, and SwiftUI
+        // introduces that stack by writing its empty initial path back.
+        model.setConversationNavigationPath([])
+        XCTAssertEqual(
+            model.destination, .conversation(id),
+            "the framework's initialization write is not a person pressing Back")
+
+        model.activatePendingConversationNavigation()
+        XCTAssertEqual(model.destination, .conversation(id))
+
+        model.setConversationNavigationPath([])
+        XCTAssertEqual(
+            model.destination, .chats,
+            "after acknowledgement an ordinary Back must still pop to Chats")
+    }
+
+    func testASecondNewChatReusesTheNewestEmptyOne() throws {
+        let model = AppModel.freshForTests()
+        let first = try XCTUnwrap(model.newConversation())
+        XCTAssertEqual(
+            model.newConversation(), first,
+            "a second New chat lands in the empty one rather than beside it")
+        XCTAssertEqual(model.conversations.count, 1)
+
+        // Typing in a chat is using it.
+        model.setDraft("Where does the K3 index live?", in: first)
+        let second = try XCTUnwrap(model.newConversation())
+        XCTAssertNotEqual(second, first)
+        XCTAssertEqual(model.conversations.count, 2)
+
+        // Naming one is using it too.
+        model.rename(second, to: "Budget notes")
+        let third = try XCTUnwrap(model.newConversation())
+        XCTAssertNotEqual(third, second)
+        XCTAssertEqual(model.conversations.count, 3)
+
+        // And a chat with a turn in it is never reused, however empty the
+        // transcript looks after a refused answer.
+        model.update(third) { $0.append(Message(role: .user, text: "Hello")) }
+        let fourth = try XCTUnwrap(model.newConversation())
+        XCTAssertNotEqual(fourth, third)
+        XCTAssertEqual(model.conversations.count, 4)
+        XCTAssertEqual(
+            model.reusableEmptyConversationID, fourth,
+            "only the untouched chat is offered for reuse")
+    }
+
+    func testReusingAnEmptyChatRestatesItsModelWithoutRewritingTheDefault() throws {
+        let model = AppModel.freshForTests(installedModels: [.kimiK3, .deepseekV4Flash])
+        model.defaults.model = .kimiK3
+
+        let empty = try XCTUnwrap(model.newConversation())
+        let reused = try XCTUnwrap(model.newConversation(modelID: .deepseekV4Flash))
+
+        XCTAssertEqual(reused, empty)
+        XCTAssertEqual(model.conversations.count, 1)
+        XCTAssertEqual(
+            model.conversation(reused)?.settings.model, .deepseekV4Flash,
+            "the reused chat has to answer with the model that was asked for")
+        XCTAssertEqual(
+            model.defaults.model, .kimiK3,
+            "a model-page chat is a choice for this chat, not a new default")
     }
 
     func testReadyNewChatUsesFallbackWithoutChangingTheDefault() throws {
@@ -553,6 +755,9 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
         let model = AppModel.freshForTests()
         model.setDefaultBudget(5_800_000_000, for: .kimiK3)
         let first = model.newConversation()!
+        // Naming it makes it somebody's chat, so the second New chat is a
+        // second chat rather than the reuse of an untouched one.
+        model.rename(first, to: "first chat")
         let second = model.newConversation()!
 
         model.setBudget(7_000_000_000, in: first)
@@ -624,6 +829,99 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
         XCTAssertEqual(v4.settings.maximumNewTokens, 64)
     }
 
+    /// **The chat the phone was killed in carried the Mac's floor.**
+    ///
+    /// `settings.memoryBudgetBytes = 3400000000`, pulled out of the app
+    /// container after the second Jetsam kill, on a build whose iOS policy
+    /// already said 1.9 GB. Nothing had ever revisited the number, so the only
+    /// thing that can: the exact former automatic floor moves, and a budget the
+    /// operator stated stays theirs even when it is larger.
+    func testTheIOSV41PolicyMigratesOnlyTheFormerAutomaticConversationBoundary() {
+        var automatic = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 3_400_000_000,
+                maximumNewTokens: 64))
+        XCTAssertTrue(
+            AppModel.migrateDeepSeekV41Conversation(
+                &automatic, to: DeepSeekV41ProductMemoryBudget.iOSProductPolicy))
+        XCTAssertEqual(automatic.settings.memoryBudgetBytes, 1_900_000_000)
+        XCTAssertEqual(automatic.settings.maximumNewTokens, 64)
+
+        var operatorChoice = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 4_200_000_000,
+                maximumNewTokens: 64))
+        XCTAssertFalse(
+            AppModel.migrateDeepSeekV41Conversation(
+                &operatorChoice, to: DeepSeekV41ProductMemoryBudget.iOSProductPolicy))
+        XCTAssertEqual(operatorChoice.settings.memoryBudgetBytes, 4_200_000_000)
+
+        // A chat already carrying this platform's floor is not touched, and a
+        // chat with another model is never this migration's business.
+        var already = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 1_900_000_000,
+                maximumNewTokens: 64))
+        XCTAssertFalse(
+            AppModel.migrateDeepSeekV41Conversation(
+                &already, to: DeepSeekV41ProductMemoryBudget.iOSProductPolicy))
+        var v4 = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV4Flash, memoryBudgetBytes: 3_400_000_000,
+                maximumNewTokens: 64))
+        XCTAssertFalse(
+            AppModel.migrateDeepSeekV41Conversation(
+                &v4, to: DeepSeekV41ProductMemoryBudget.iOSProductPolicy))
+        XCTAssertEqual(v4.settings.memoryBudgetBytes, 3_400_000_000)
+
+        // On the Mac the same function moves the phone's floor back, so a
+        // defaults file that travelled between platforms cannot leave a chat on
+        // a floor its runner does not have.
+        var fromPhone = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 1_900_000_000,
+                maximumNewTokens: 64))
+        XCTAssertTrue(
+            AppModel.migrateDeepSeekV41Conversation(
+                &fromPhone, to: DeepSeekV41ProductMemoryBudget.macOSProductPolicy))
+        XCTAssertEqual(fromPhone.settings.memoryBudgetBytes, 3_400_000_000)
+    }
+
+    /// The same rule for the seed a new chat inherits. Without it the migrated
+    /// conversation was the only one fixed, and the *next* chat opened at
+    /// 3.4 GB again.
+    func testTheStoredV41DefaultMovesToThisPlatformsFloorOnce() throws {
+        func loadedModel(stored: UInt64, schema: Int?) throws -> (AppModel, UserDefaults) {
+            let suite = "minirun.v41-default-tests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            let legacy = NewChatDefaults(
+                budgetBytes: [ModelID.deepseekV41Flash.rawValue: stored],
+                budgetSchemaVersion: schema)
+            defaults.set(
+                try JSONEncoder().encode(legacy), forKey: "minirun.newChatDefaults")
+            return (AppModel.freshForTests(userDefaults: defaults), defaults)
+        }
+
+        // A defaults file written by a build that had already run the schema-4
+        // migration is exactly the phone's case: the seed is the other
+        // platform's floor and no later launch ever looked at it again.
+        let other = DeepSeekV41ProductMemoryBudget.currentPolicy.isExperimental
+            ? DeepSeekV41ProductMemoryBudget.macOSProductPolicy
+            : DeepSeekV41ProductMemoryBudget.iOSProductPolicy
+        let (migrated, store) = try loadedModel(stored: other.minimumBudgetBytes, schema: 4)
+        XCTAssertEqual(
+            migrated.defaults.budget(for: .deepseekV41Flash),
+            DeepSeekV41ProductMemoryBudget.minimumBudgetBytes)
+        let persisted = try XCTUnwrap(store.data(forKey: "minirun.newChatDefaults"))
+        XCTAssertEqual(
+            try JSONDecoder().decode(NewChatDefaults.self, from: persisted).budgetSchemaVersion,
+            NewChatDefaults.currentBudgetSchemaVersion)
+        XCTAssertEqual(NewChatDefaults.currentBudgetSchemaVersion, 5)
+
+        let (choice, _) = try loadedModel(stored: 4_200_000_000, schema: 4)
+        XCTAssertEqual(choice.defaults.budget(for: .deepseekV41Flash), 4_200_000_000)
+    }
+
     func testLegacyManualInstrumentDefaultMigratesOnceThenPreservesAnExplicitOff() throws {
         let suite = "minirun.instrument-default-tests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -690,7 +988,13 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(model.conversation(id)).messages.isEmpty)
         XCTAssertFalse(model.run.isRunning)
         let reason = try XCTUnwrap(model.runPreparationError(for: id))
-        XCTAssertEqual(reason, "This prompt needs 8.23 GB; this chat states 8.00 GB.")
+        // The prompt's own floor is arithmetic over the census and does not
+        // move; what the chat states is the platform's product boundary, which
+        // is 8.00 GB on the Mac and the bounded tier's 5.80 GB on a phone.
+        XCTAssertEqual(
+            reason,
+            "This prompt needs 8.23 GB; this chat states "
+                + "\(MRFormat.bytesDecimal(K3ProductMemoryBudget.minimumBudgetBytes)).")
         XCTAssertEqual(model.runPreparationBudgetTarget(for: id), 8_229_307_136)
         let saved = try XCTUnwrap(model.conversation(id))
         let preparedPlan = try XCTUnwrap(model.budgetPlan(for: saved))
@@ -872,8 +1176,9 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
     func testRunSnapshotAndFaultBelongOnlyToTheConversationThatStartedThem() async throws {
         let model = AppModel.freshForTests(runFault: .shortRead(atLayer: 0))
         let first = try XCTUnwrap(model.newConversation())
-        let second = try XCTUnwrap(model.newConversation())
+        // Before the second: an unused chat is reused, not duplicated.
         model.rename(first, to: "owner chat")
+        let second = try XCTUnwrap(model.newConversation())
 
         model.send("first turn", in: first)
         XCTAssertTrue(model.isRunning(first))
@@ -1037,14 +1342,20 @@ final class ProductRuntimeTruthGateTests: XCTestCase {
 
     func testProductRuntimeCompositionContainsOnlyCompletedProviders() {
         #if arch(arm64)
+            // Three completed providers. A family enters this list only when
+            // its artifact-published tokenizer and its real runner are one
+            // binding; V4.1 joined when `DeepSeekV41ProductRuntime` supplied
+            // both (`docs/experiments/2026-09-11-v41-phase3-runner.md`).
             XCTAssertEqual(
                 ModelRuntimeRegistry.product.registeredModelIDs,
-                [.kimiK3, .deepseekV4Flash])
+                [.kimiK3, .deepseekV4Flash, .deepseekV41Flash])
             XCTAssertNotNil(ModelRuntimeRegistry.product.runtime(for: .deepseekV4Flash))
+            XCTAssertNotNil(ModelRuntimeRegistry.product.runtime(for: .deepseekV41Flash))
         #else
             XCTAssertEqual(ModelRuntimeRegistry.product.registeredModelIDs, [])
             XCTAssertNil(ModelRuntimeRegistry.product.runtime(for: .kimiK3))
             XCTAssertNil(ModelRuntimeRegistry.product.runtime(for: .deepseekV4Flash))
+            XCTAssertNil(ModelRuntimeRegistry.product.runtime(for: .deepseekV41Flash))
         #endif
         XCTAssertNil(ModelRuntimeRegistry.product.runtime(for: .minimaxH3))
     }
@@ -1495,7 +1806,8 @@ extension AppModel {
         runtimeWorkingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil,
         userDefaults injectedDefaults: UserDefaults? = nil,
         store injectedStore: ConversationStore? = nil,
-        now: Date = Date()
+        now: Date = Date(),
+        device: DeviceProfile? = nil
     ) -> AppModel {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("MinirunTests-\(UUID().uuidString)", isDirectory: true)
@@ -1525,6 +1837,11 @@ extension AppModel {
             downloadServices: .preview(entries: CatalogFixtures.all),
             now: now,
             installed: installed,
+            // Nil keeps the macOS suite's reference Mac. A test that means a
+            // *phone* has to say so: on iOS there is no test-host profile, so
+            // the plans would otherwise be computed against whichever simulator
+            // or device happened to host the bundle.
+            device: device,
             seedRecordedRuns: false,
             startDiscovery: false)
     }

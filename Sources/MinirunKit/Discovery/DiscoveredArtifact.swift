@@ -659,9 +659,66 @@ public struct DiscoveryReport: Sendable, Equatable {
 
     public static let empty = DiscoveryReport(locations: [], scannedAt: .distantPast)
 
-    /// Every place this model was found, mounted or not.
+    /// Every place this model was found, mounted or not — once per copy.
+    ///
+    /// Registered locations nest. `/Volumes/K3NVME` and
+    /// `/Volumes/K3NVME/DeepSeek-V4.1-Flash-minirun` are two locations an
+    /// operator can perfectly reasonably have registered, and a walk of each
+    /// finds the *same directory*: one artifact, reported twice, listed twice,
+    /// and — because every control on the row is keyed by the row — verified
+    /// twice, which on a 517 GB copy is two full reads of the same drive
+    /// started by one press.
+    ///
+    /// So the identity of a copy is the tree, not the pair of a registered root
+    /// and a tree. Where two roots cover one tree the copy is reported through
+    /// the location that can actually act on it: mounted before unmounted,
+    /// better-established verification before worse, and the outermost
+    /// registered location before one nested inside it.
     public func installations(of model: ModelID) -> [DiscoveredArtifact] {
-        locations.flatMap { $0.artifacts(for: model) }
+        distinctArtifacts { $0.artifacts(for: model) }
+    }
+
+    /// The same, restricted to locations whose volume is present right now.
+    public func mountedInstallations(of model: ModelID) -> [DiscoveredArtifact] {
+        distinctArtifacts { $0.isMounted ? $0.artifacts(for: model) : [] }
+    }
+
+    /// Every artifact any registered location holds, once per copy.
+    public func distinctArtifacts() -> [DiscoveredArtifact] {
+        distinctArtifacts { $0.artifacts }
+    }
+
+    private func distinctArtifacts(
+        _ selecting: (LocationScan) -> [DiscoveredArtifact]
+    ) -> [DiscoveredArtifact] {
+        var best: [String: (rank: (Int, Int, Int, String), artifact: DiscoveredArtifact)] = [:]
+        var order: [String] = []
+        for location in locations {
+            for artifact in selecting(location) {
+                let key = ArtifactVerificationPathIdentity.canonical(artifact.rootPath)
+                let rank = (
+                    location.isMounted ? 0 : 1,
+                    Self.verificationRank(artifact.verification),
+                    location.rootPath.utf8.count,
+                    location.rootPath
+                )
+                if let existing = best[key] {
+                    if rank < existing.rank { best[key] = (rank, artifact) }
+                } else {
+                    best[key] = (rank, artifact)
+                    order.append(key)
+                }
+            }
+        }
+        return order.compactMap { best[$0]?.artifact }
+    }
+
+    private static func verificationRank(_ verification: ArtifactVerification) -> Int {
+        switch verification {
+        case .fullyVerified: return 0
+        case .spotChecked: return 1
+        case .unverified: return 2
+        }
     }
 
     /// The model has an artifact somewhere, mounted or not.
@@ -678,6 +735,6 @@ public struct DiscoveryReport: Sendable, Equatable {
     }
 
     public var unidentifiedArtifacts: [DiscoveredArtifact] {
-        locations.flatMap { $0.artifacts }.filter { !$0.isIdentified }
+        distinctArtifacts().filter { !$0.isIdentified }
     }
 }

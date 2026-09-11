@@ -78,7 +78,6 @@ enum StorageLocationActionPolicy {
 /// is the durable read grant Minirun may scan.
 struct AddLocationButton: View {
     @Environment(AppModel.self) private var model
-    var prominent = false
 
     #if os(iOS)
         @State private var isPicking = false
@@ -86,23 +85,21 @@ struct AddLocationButton: View {
 
     @ViewBuilder var body: some View {
         if model.visualReviewNotice != nil {
-            Label(
-                StorageLocationActionPolicy.reviewDisabledMessage,
-                systemImage: "externaldrive.badge.xmark")
-                .font(MRType.caption)
-                .foregroundStyle(MRColor.secondary)
+            MRStatusLine(
+                tone: .idle,
+                sentence: StorageLocationActionPolicy.reviewDisabledMessage)
         } else {
             #if os(macOS)
+            // The one filled button on the Storage page. It used to be
+            // `borderedProminent` tinted with the memory dial's pinned blue,
+            // which made the product's single primary action wear a colour from
+            // a bar chart's legend; the page language has one accent and one
+            // filled style, and this is where they are spent.
             Button("Add a folder…") { choose(startingAt: nil) }
-                .buttonStyle(.borderedProminent)
-                .tint(MRColor.tierPinned)
-                .controlSize(prominent ? .large : .small)
-                .frame(minHeight: 44)
+                .mrFilledAction()
             #else
             Button("Add a folder…") { isPicking = true }
-                .buttonStyle(.borderedProminent)
-                .tint(MRColor.tierPinned)
-                .frame(minHeight: 44)
+                .mrFilledAction()
                 .fileImporter(isPresented: $isPicking, allowedContentTypes: [.folder]) { result in
                     switch result {
                     case .success(let url): model.installed.addLocation(url)
@@ -141,7 +138,7 @@ struct NoStorageLocationCard: View {
         #if os(iOS)
             phoneEmptyState
         #else
-            desktopCautionCard
+            desktopEmptyState
         #endif
     }
 
@@ -169,7 +166,7 @@ struct NoStorageLocationCard: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
                 .fixedSize(horizontal: false, vertical: true)
-                AddLocationButton(prominent: true)
+                AddLocationButton()
                 AddLocationOutcomeLine()
                     .multilineTextAlignment(.center)
             }
@@ -179,29 +176,38 @@ struct NoStorageLocationCard: View {
         }
     #endif
 
-    private var desktopCautionCard: some View {
+    /// First-run guidance is not a warning.
+    ///
+    /// This used to be an amber-bordered caution card — the same treatment the
+    /// app gives a refused budget and a failed verification — and wearing it
+    /// before anything had happened told a new operator they had already done
+    /// something wrong. It is now the page's own language: a glyph, a heading,
+    /// the sentence, and the one filled button the Storage page has.
+    private var desktopEmptyState: some View {
         VStack(alignment: .leading, spacing: MRSpace.s3) {
-            HStack(spacing: MRSpace.s2) {
+            HStack(spacing: MRSpace.s3) {
                 Image(systemName: "folder.badge.plus")
                     .font(.system(size: 22))
-                    .foregroundStyle(MRColor.caution)
+                    .foregroundStyle(MRColor.tertiary)
+                    .accessibilityHidden(true)
                 Text("No folders added")
-                    .font(MRType.title)
+                    .font(MRType.pageTitle)
+                    .tracking(-0.5)
                     .foregroundStyle(MRColor.primary)
+                    .accessibilityAddTraits(.isHeader)
             }
             Text(
                 "Choose a folder for Minirun to scan. The app keeps read access so the same "
                     + "folder is available after relaunch; you can remove that access here."
             )
-            .font(MRType.body)
+            .font(MRType.pageSubtitle)
             .foregroundStyle(MRColor.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            AddLocationButton(prominent: true)
+            AddLocationButton()
             AddLocationOutcomeLine()
         }
-        .padding(MRSpace.s4)
+        .padding(.vertical, MRSpace.s3)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .mrCard(MRColor.caution.opacity(0.10), stroke: MRColor.caution.opacity(0.45))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("no folders have been added")
     }
@@ -215,29 +221,23 @@ struct AddLocationOutcomeLine: View {
     var body: some View {
         if let outcome = model.installed.lastAddOutcome {
             VStack(alignment: .leading, spacing: MRSpace.s2) {
-                HStack(spacing: MRSpace.s2) {
-                    Image(
-                        systemName: outcome.isFailure
-                            ? "exclamationmark.triangle" : "checkmark.circle"
-                    )
-                    .imageScale(.small)
-                    Text(sentence(outcome))
-                        .font(MRType.caption)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-                .foregroundStyle(outcome.isFailure ? MRColor.caution : MRColor.ok)
+                MRStatusLine(
+                    tone: outcome.isFailure ? .attention : .ready,
+                    sentence: sentence(outcome))
                 if !outcome.isFailure {
-                    HStack(spacing: MRSpace.s2) {
+                    HStack(spacing: MRSpace.s3) {
                         if model.installed.isScanning {
                             ProgressView().controlSize(.small)
                             Text("Scanning…")
-                                .font(MRType.micro)
+                                .font(MRType.prose)
                                 .foregroundStyle(MRColor.secondary)
                         }
-                        NavigationLink("View models") { ModelCatalogView() }
-                            .controlSize(.small)
-                            .frame(minHeight: 44)
+                        NavigationLink {
+                            ModelCatalogView()
+                        } label: {
+                            Text("View models")
+                        }
+                        .mrTextLink()
                     }
                 }
             }
@@ -271,9 +271,12 @@ struct UnavailableModelAction: View {
 
     var body: some View {
         if model.installed.hasLocation {
-            NavigationLink("Find models") { ModelCatalogView() }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+            NavigationLink {
+                ModelCatalogView()
+            } label: {
+                Text("Find models")
+            }
+            .mrOutlineAction()
         } else {
             AddLocationButton()
         }

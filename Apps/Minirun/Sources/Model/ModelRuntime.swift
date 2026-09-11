@@ -106,7 +106,7 @@ struct ModelRuntime {
                 return PreparedModelRuntime(
                     tokenizer: tokenizer, runner: makeRunner(conversation),
                     artifactCensus: inspection.census,
-                    deepSeekV4Ladder: inspection.deepSeekV4Ladder,
+                    deepSeekLadder: inspection.deepSeekLadder,
                     progressLayerCount: inspection.progressLayerCount,
                     workingSetReserveBytes: inspection.workingSetReserveBytes)
             })
@@ -135,7 +135,7 @@ struct ModelRuntime {
                     return PreparedModelRuntime(
                         tokenizer: tokenizer, runner: makeRunner(conversation),
                         artifactCensus: inspection.census,
-                        deepSeekV4Ladder: inspection.deepSeekV4Ladder,
+                        deepSeekLadder: inspection.deepSeekLadder,
                         progressLayerCount: inspection.progressLayerCount,
                         workingSetReserveBytes: inspection.workingSetReserveBytes)
                 })
@@ -160,31 +160,33 @@ struct ModelRuntime {
 
 struct PreparedArtifactRuntimeInspection {
     let census: ArtifactCensus?
-    /// DeepSeek V4's ladder input, for the runtime whose planner needs the
-    /// kit's second census rather than `ArtifactCensus`.
+    /// The streamed DeepSeek ladder's input, for a runtime whose planner needs
+    /// the kit's second census rather than `ArtifactCensus`. V4 and V4.1 are
+    /// both such runtimes and both fill this field.
     ///
     /// A separate field and not a second `ArtifactCensus`, for the reason
     /// `docs/design/v4-memory-dial.md` §3.1 gives: that type derives resident
-    /// and saved from one array, and a V4 plan built through it is wrong by
-    /// 3.1% in whichever direction the caller picks.
-    let deepSeekV4Ladder: DeepSeekV4MemoryDialInputs.ArtifactProfile?
+    /// and saved from one array, and a plan built through it is wrong by ~3% in
+    /// whichever direction the caller picks.
+    let deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile?
     /// Exact execution layers from the verified model configuration.
     ///
     /// This is separate from `census`: a runtime can report honest progress
     /// without claiming the per-layer residency geometry required by the
-    /// memory planner. V4 is such a runtime; K3 derives both from one census.
+    /// memory planner. V4 and V4.1 are such runtimes; K3 derives both from one
+    /// census.
     let progressLayerCount: Int?
     let workingSetReserveBytes: (@Sendable (_ promptTokens: Int, _ maximumNewTokens: Int) throws
         -> UInt64)?
 
     init(
         census: ArtifactCensus?,
-        deepSeekV4Ladder: DeepSeekV4MemoryDialInputs.ArtifactProfile? = nil,
+        deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile? = nil,
         progressLayerCount: Int? = nil,
         workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil
     ) {
         self.census = census
-        self.deepSeekV4Ladder = deepSeekV4Ladder
+        self.deepSeekLadder = deepSeekLadder
         self.progressLayerCount = progressLayerCount
         self.workingSetReserveBytes = workingSetReserveBytes
     }
@@ -196,8 +198,8 @@ struct PreparedModelRuntime {
     /// Exact metadata from the rooted artifact this prepared runtime will
     /// consume. Nil for models whose planner has no artifact-specific census.
     let artifactCensus: ArtifactCensus?
-    /// The same, for V4's own planner. Nil for every other model.
-    let deepSeekV4Ladder: DeepSeekV4MemoryDialInputs.ArtifactProfile?
+    /// The same, for the streamed DeepSeek planner. Nil for every other model.
+    let deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile?
     /// Exact layer count used by live progress, when it is independently
     /// available without a planner census.
     let progressLayerCount: Int?

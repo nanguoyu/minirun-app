@@ -26,6 +26,10 @@ public struct DownloadProgress: Sendable, Equatable, Codable {
     public let remainingBytes: UInt64
     public let filesTotal: Int
     public let filesVerified: Int
+    /// Complete on disk at their planned size, digest not checked yet — the
+    /// files a resumed job carried in rather than fetched. Counted so that a
+    /// resume reports "file 566 of 624", not "file 3 of 624".
+    public let filesFetchedUnverified: Int
     public let filesFailed: Int
     /// Bytes off the wire this job, *including* bytes a failed digest threw
     /// away. Not the same as progress, and kept separate so a retry loop that
@@ -47,7 +51,7 @@ public struct DownloadProgress: Sendable, Equatable, Codable {
     public init(
         job: DownloadJobID, planTotalBytes: UInt64, verifiedBytes: UInt64,
         fetchedUnverifiedBytes: UInt64, inFlightBytes: UInt64, remainingBytes: UInt64,
-        filesTotal: Int, filesVerified: Int, filesFailed: Int,
+        filesTotal: Int, filesVerified: Int, filesFetchedUnverified: Int = 0, filesFailed: Int,
         networkBytes: UInt64, wastedBytes: UInt64,
         instantaneousBytesPerSecond: Double, smoothedBytesPerSecond: Double,
         estimatedTimeRemaining: TimeInterval?, startedAt: Date, elapsed: TimeInterval
@@ -60,6 +64,7 @@ public struct DownloadProgress: Sendable, Equatable, Codable {
         self.remainingBytes = remainingBytes
         self.filesTotal = filesTotal
         self.filesVerified = filesVerified
+        self.filesFetchedUnverified = filesFetchedUnverified
         self.filesFailed = filesFailed
         self.networkBytes = networkBytes
         self.wastedBytes = wastedBytes
@@ -97,11 +102,22 @@ public struct DownloadSummary: Sendable, Codable, Equatable {
     public let wallSeconds: TimeInterval
     public let meanBytesPerSecond: Double
     public let verification: VerificationReport
+    /// One entry per planned file whose bytes this job read and matched against
+    /// the digest the repository publishes — as it landed, in the closing pass,
+    /// or both — carrying the filesystem identity the closing pass observed.
+    ///
+    /// This is what makes the closing verification re-usable instead of
+    /// disposable: it is the same per-file shape ``ArtifactVerifier`` records,
+    /// so a finished transfer can hand the ledger a full verification without a
+    /// third read of the artifact (ADR 0019). A file the job only size-checked
+    /// gets no entry, and the hand-off refuses rather than claiming it.
+    public let filesVerified: [ArtifactVerifiedFile]
 
     public init(
         job: DownloadJobID, model: ModelID, repo: HuggingFaceRepoRef, destinationPath: String,
         bytesWritten: UInt64, networkBytes: UInt64, wastedBytes: UInt64,
-        wallSeconds: TimeInterval, meanBytesPerSecond: Double, verification: VerificationReport
+        wallSeconds: TimeInterval, meanBytesPerSecond: Double, verification: VerificationReport,
+        filesVerified: [ArtifactVerifiedFile] = []
     ) {
         self.job = job
         self.model = model
@@ -113,6 +129,31 @@ public struct DownloadSummary: Sendable, Codable, Equatable {
         self.wallSeconds = wallSeconds
         self.meanBytesPerSecond = meanBytesPerSecond
         self.verification = verification
+        self.filesVerified = filesVerified.sorted { $0.path < $1.path }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case job, model, repo, destinationPath, bytesWritten, networkBytes, wastedBytes
+        case wallSeconds, meanBytesPerSecond, verification, filesVerified
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            job: try container.decode(DownloadJobID.self, forKey: .job),
+            model: try container.decode(ModelID.self, forKey: .model),
+            repo: try container.decode(HuggingFaceRepoRef.self, forKey: .repo),
+            destinationPath: try container.decode(String.self, forKey: .destinationPath),
+            bytesWritten: try container.decode(UInt64.self, forKey: .bytesWritten),
+            networkBytes: try container.decode(UInt64.self, forKey: .networkBytes),
+            wastedBytes: try container.decode(UInt64.self, forKey: .wastedBytes),
+            wallSeconds: try container.decode(TimeInterval.self, forKey: .wallSeconds),
+            meanBytesPerSecond: try container.decode(Double.self, forKey: .meanBytesPerSecond),
+            verification: try container.decode(VerificationReport.self, forKey: .verification),
+            // Absent in any summary written before the hand-off existed. Such a
+            // summary proves nothing per file, and the recorder refuses it.
+            filesVerified: try container.decodeIfPresent(
+                [ArtifactVerifiedFile].self, forKey: .filesVerified) ?? [])
     }
 }
 
@@ -238,6 +279,14 @@ public enum DownloadEvent: Sendable {
     case fileFailed(path: String, DownloadError)
     case paused(DownloadProgress)
     case resumed(DownloadProgress)
+    /// A verification pass began — the closing pass after the last byte, or a
+    /// pass the operator asked for. Until this existed, a job whose transfer
+    /// had ended sat at "downloading, 100%" for the minutes the pass took.
+    case verificationStarted(depth: VerificationDepth, filesTotal: Int, bytesTotal: UInt64)
+    /// One more file examined by that pass. `bytesChecked` counts every file
+    /// the pass has passed over, digested or size-checked.
+    case verificationProgress(
+        filesChecked: Int, filesTotal: Int, bytesChecked: UInt64, bytesTotal: UInt64)
     case verificationFinished(VerificationReport)
     case finished(DownloadSummary)
     case failed(DownloadError, DownloadProgress)

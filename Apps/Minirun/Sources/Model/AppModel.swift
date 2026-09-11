@@ -242,7 +242,7 @@ enum AppCatalogAdapter {
                 requiredMinimumBudgetBytes: baseMemory?.requiredMinimumBudgetBytes,
                 onRecordMinimumBudgetBytes: baseMemory?.onRecordMinimumBudgetBytes,
                 provenance: baseMemory == nil ? .unknown : .declaredByIndex,
-                deepSeekV4: baseMemory?.deepSeekV4),
+                deepSeekLadder: baseMemory?.deepSeekLadder),
             terms: supplemental?.terms
                 ?? WorkloadTerms(
                     deterministicBytesPerToken: 0,
@@ -501,6 +501,21 @@ final class AppModel {
     /// Settings route crosses the tab boundary. A plain onAppear is not enough:
     /// iOS may keep both tabs mounted after their first visit.
     private(set) var settingsNavigationActivationID = UUID()
+    /// The same defence, for the route that goes the other way.
+    ///
+    /// A conversation route is written while iOS may still be showing Settings,
+    /// so the Chats `NavigationStack` that has to display it does not exist yet.
+    /// SwiftUI creates that stack by writing its empty initial path back
+    /// through the binding, and that write used to land on
+    /// `setConversationNavigationPath([])`, which read it as a pop and sent the
+    /// App to the Chats root. The chat itself had already been created and
+    /// saved, so a **New chat** tap from Settings inserted a conversation, left
+    /// the screen where it was, and piled up another row for every tap.
+    private var pendingConversationNavigationID: UUID?
+    /// New task identity for every programmatic conversation route, so a
+    /// retained Chats tab acknowledges the route even when iOS keeps both tabs
+    /// mounted after their first visit.
+    private(set) var conversationNavigationActivationID = UUID()
     /// Settings is a detour, not a reset to the newest transcript. Remember
     /// the exact workspace that opened it so Back returns without surprising
     /// navigation or creating a conversation.
@@ -542,6 +557,7 @@ final class AppModel {
         }
         settingsSection = section
         settingsNavigationPath = [section]
+        pendingConversationNavigationID = nil
         destination = .settings
     }
 
@@ -551,6 +567,7 @@ final class AppModel {
         if destination != .settings { settingsReturnDestination = destination }
         pendingSettingsNavigationSection = nil
         settingsNavigationPath = []
+        pendingConversationNavigationID = nil
         destination = .settings
     }
 
@@ -587,14 +604,42 @@ final class AppModel {
     func setConversationNavigationPath(_ path: [UUID]) {
         guard destination != .settings else { return }
         guard let id = path.last, conversation(id) != nil else {
+            // A lazily created stack writes its empty initial path before it
+            // renders the conversation this App has just routed to. That is the
+            // framework introducing itself, not a person pressing Back.
+            if pendingConversationNavigationID != nil { return }
             destination = .chats
             return
         }
+        pendingConversationNavigationID = nil
         destination = .conversation(id)
     }
 
     func openConversation(_ id: UUID) {
         guard conversation(id) != nil else { return }
+        presentConversation(id)
+    }
+
+    /// Routes to a conversation and keeps that route authoritative until the
+    /// Chats navigation stack has acknowledged it. Every programmatic route
+    /// goes through here, so no call site has to know whether the stack that
+    /// will show the chat exists yet.
+    private func presentConversation(_ id: UUID) {
+        pendingConversationNavigationID = id
+        conversationNavigationActivationID = UUID()
+        destination = .conversation(id)
+    }
+
+    /// Called by the iOS Chats root once its navigation stack exists. It
+    /// reasserts the route the App asked for, then hands ordinary pops back to
+    /// `setConversationNavigationPath`.
+    func activatePendingConversationNavigation() {
+        guard let id = pendingConversationNavigationID else { return }
+        pendingConversationNavigationID = nil
+        // Acknowledging is usually all this does. The reassertion below repairs
+        // only the erased state, and only that: if the operator has gone
+        // somewhere else in the meantime, where they went is the newer truth.
+        guard destination == .chats, conversation(id) != nil else { return }
         destination = .conversation(id)
     }
 
@@ -614,6 +659,9 @@ final class AppModel {
     }
 
     func restoreNavigation(from mirror: SceneNavigationMirror) {
+        // A restore states the whole navigation truth, so no intent from the
+        // navigation it replaces may survive it.
+        pendingConversationNavigationID = nil
         switch mirror.place {
         case .chats:
             pendingSettingsNavigationSection = nil
@@ -623,7 +671,7 @@ final class AppModel {
             pendingSettingsNavigationSection = nil
             settingsNavigationPath = []
             if let id = mirror.conversationID, conversation(id) != nil {
-                destination = .conversation(id)
+                presentConversation(id)
             } else {
                 destination = .chats
             }
@@ -648,10 +696,11 @@ final class AppModel {
     /// creates a chat as a navigation side effect.
     func backToApp() {
         pendingSettingsNavigationSection = nil
+        pendingConversationNavigationID = nil
         settingsNavigationPath = []
         switch settingsReturnDestination {
         case .conversation(let id) where conversation(id) != nil:
-            destination = .conversation(id)
+            presentConversation(id)
         case .conversation, .chats, .settings:
             destination = .chats
         }
@@ -769,15 +818,15 @@ final class AppModel {
     /// this cache only keeps the visible dial identical to the request just
     /// constructed from that copy.
     private var preparedArtifactCensuses: [ModelID: ArtifactCensus] = [:]
-    /// The same thing for DeepSeek V4, whose ladder needs the kit's second
-    /// census and a floor priced from the product plan's own terms.
+    /// The same thing for the streamed DeepSeek models, whose ladder needs the
+    /// kit's second census and a floor priced from the product plan's own terms.
     ///
     /// It is read the same way and cached the same way, with one difference
-    /// that matters for the dial: V4's census comes from layer manifests alone,
-    /// so it can be taken as soon as a copy is verified rather than only from
-    /// the run that consumes it. Without that, a new chat's default preset
+    /// that matters for the dial: these censuses come from unit manifests
+    /// alone, so one can be taken as soon as a copy is verified rather than only
+    /// from the run that consumes it. Without that, a new chat's default preset
     /// would have to be chosen against a ladder nobody had read yet.
-    private var preparedDeepSeekV4Ladders:
+    private var preparedDeepSeekLadders:
         [ModelID: DeepSeekV4MemoryDialInputs.ArtifactProfile] = [:]
     /// Prompt-length-aware reserve most recently prepared for each conversation.
     /// Unlike the model census, this cannot be keyed only by model: MLA state
@@ -1016,7 +1065,8 @@ final class AppModel {
                     for: entry.id)
             }
         }
-        if (loaded.budgetSchemaVersion ?? 0) < NewChatDefaults.currentBudgetSchemaVersion {
+        let storedBudgetSchema = loaded.budgetSchemaVersion ?? 0
+        if storedBudgetSchema < 4 {
             // Migrate only exact automatic boundaries. An operator-stated
             // value is never silently rewritten. macOS keeps the supported
             // 8 GB product policy; iOS moves the old 8 GB default to its
@@ -1034,10 +1084,12 @@ final class AppModel {
                 loaded.setBudget(policy.minimumBudgetBytes, for: .kimiK3)
             }
             // The same rule for the seed this launch no longer writes. A stored
-            // V4 budget that is exactly the old automatic 2 GB carries no
-            // operator statement, so it is dropped and re-derived — which on a
-            // Mac is what moves V4 off its floor and onto Balanced. Any other
-            // stored number is a choice and stays.
+            // budget that is exactly the model's own seeded floor — V4's old
+            // automatic 2 GB, V4.1's 3.4 GB — carries no operator statement, so
+            // it is dropped and re-derived, which on a Mac is what moves those
+            // models off their floor and onto Balanced. Any other stored number
+            // is a choice and stays. The loop asks `defaultPreset`, so a model
+            // that joins that rule joins this migration with it.
             for entry in entries where Self.defaultPreset(for: entry.id) != .floor {
                 let seeded = entry.memory.requiredMinimumBudgetBytes
                     ?? entry.memory.onRecordMinimumBudgetBytes
@@ -1046,6 +1098,25 @@ final class AppModel {
                     loaded.clearBudget(for: entry.id)
                 }
             }
+        }
+        if storedBudgetSchema < 5 {
+            // K3's rule, for V4.1, and written five months late: a default
+            // seeded by a build from before this platform had a V4.1 policy is
+            // the *other* platform's floor. On the owner's iPhone that was
+            // 3.4 GB — the Mac's — and every new chat inherited it after the
+            // iOS floor had already shipped at 1.9 GB. Only the exact former
+            // automatic floor moves; a number the operator stated is theirs.
+            let policy = DeepSeekV41ProductMemoryBudget.currentPolicy
+            let other = policy.isExperimental
+                ? DeepSeekV41ProductMemoryBudget.macOSProductPolicy
+                : DeepSeekV41ProductMemoryBudget.iOSProductPolicy
+            if other.minimumBudgetBytes != policy.minimumBudgetBytes,
+                loaded.budget(for: .deepseekV41Flash) == other.minimumBudgetBytes
+            {
+                loaded.setBudget(policy.minimumBudgetBytes, for: .deepseekV41Flash)
+            }
+        }
+        if storedBudgetSchema < NewChatDefaults.currentBudgetSchemaVersion {
             loaded.budgetSchemaVersion = NewChatDefaults.currentBudgetSchemaVersion
             migratedDefaults = true
         }
@@ -1247,10 +1318,10 @@ final class AppModel {
     }
 
     private func handleDiscoveryReport(_ report: DiscoveryReport) {
-        // A newly verified V4 copy is the first moment its ladder can be read,
+        // A newly verified copy is the first moment its ladder can be read,
         // and the dial needs it before any run: the default preset for a new
         // chat is a position on that ladder.
-        refreshDeepSeekV4Ladder()
+        refreshDeepSeekLadders()
         schedulePublishedResolutionForLocalModels(in: report)
         guard !didRequestPublishedRefreshForLocalDivergence,
             Self.cachedCatalogNeedsRefresh(snapshot: snapshot, report: report)
@@ -1457,8 +1528,10 @@ final class AppModel {
             var recovered = restored[index]
             let migrated = Self.migrateK3Conversation(
                 &recovered, to: K3ProductMemoryBudget.currentPolicy)
+            let migratedV41 = Self.migrateDeepSeekV41Conversation(
+                &recovered, to: DeepSeekV41ProductMemoryBudget.currentPolicy)
             let interrupted = recovered.recordInterruptedReplyIfNeeded(at: recoveredAt)
-            guard migrated || interrupted else { continue }
+            guard migrated || migratedV41 || interrupted else { continue }
 
             if conversationStore.isPersistent {
                 do {
@@ -1493,6 +1566,43 @@ final class AppModel {
         var changed = false
         if conversation.settings.memoryBudgetBytes
             == K3ProductMemoryBudget.macOSProductPolicy.minimumBudgetBytes
+        {
+            conversation.settings.memoryBudgetBytes = policy.minimumBudgetBytes
+            changed = true
+        }
+        if conversation.settings.maximumNewTokens > policy.maximumNewTokens {
+            conversation.settings.maximumNewTokens = policy.maximumNewTokens
+            changed = true
+        }
+        return changed
+    }
+
+    /// The same one-time compatibility for DeepSeek V4.1, and for the same
+    /// reason the K3 one exists: a conversation written before this platform
+    /// had a policy carries the **other** platform's floor.
+    ///
+    /// It is not hypothetical. The owner's iPhone was killed by Jetsam in
+    /// prefill carrying `memoryBudgetBytes = 3400000000` — the Mac floor —
+    /// after the iOS floor had already shipped at 1.9 GB, because the number
+    /// was seeded into that chat by an earlier build and nothing ever revisited
+    /// it. A budget is a statement the operator can make, so only the **exact**
+    /// former automatic floor is recognized and rewritten; any other number is
+    /// a choice and is left alone, even when it is larger.
+    ///
+    /// The token ceiling is a hard runtime capability rather than a preference,
+    /// so it is constrained for every V4.1 turn the way K3's is.
+    @discardableResult
+    static func migrateDeepSeekV41Conversation(
+        _ conversation: inout Conversation,
+        to policy: DeepSeekV41ProductMemoryBudget.Policy
+    ) -> Bool {
+        guard conversation.settings.model == .deepseekV41Flash else { return false }
+        let other = policy.isExperimental
+            ? DeepSeekV41ProductMemoryBudget.macOSProductPolicy
+            : DeepSeekV41ProductMemoryBudget.iOSProductPolicy
+        var changed = false
+        if conversation.settings.memoryBudgetBytes == other.minimumBudgetBytes,
+            other.minimumBudgetBytes != policy.minimumBudgetBytes
         {
             conversation.settings.memoryBudgetBytes = policy.minimumBudgetBytes
             changed = true
@@ -1556,11 +1666,47 @@ final class AppModel {
             // can stop at any layer boundary.
             maximumNewTokens: capabilities.maximumNewTokens)
         Self.constrain(&settings, to: capabilities)
+        // A second New chat lands in the first one rather than beside it.
+        if let reusable = reusableEmptyConversationID {
+            update(reusable) { $0.settings = settings }
+            presentConversation(reusable)
+            return reusable
+        }
         let conversation = Conversation(settings: settings)
         conversations.insert(conversation, at: 0)
         persist(conversation)
-        destination = .conversation(conversation.id)
+        presentConversation(conversation.id)
         return conversation.id
+    }
+
+    /// The chat a second **New chat** lands in instead of creating another one.
+    ///
+    /// **The rule: reuse the newest empty chat.** A chat is empty when it holds
+    /// no turns, carries no unsent draft, still has the name it was born with,
+    /// and is not the one a turn is running in. Such a chat is indistinguishable
+    /// from the one the action is about to make, so making a second is only a
+    /// row in the list that says nothing — and a New chat tap that appeared to
+    /// do nothing used to leave one behind every time it was pressed.
+    ///
+    /// It is the *newest* rather than any empty chat because `conversations` is
+    /// ordered newest-updated first, so the newest is the one the person was
+    /// just looking at. Reuse restates that chat's settings — a New chat from a
+    /// model page is a choice of model, and the reused chat must answer with it
+    /// — which is safe precisely because no turn has run under the old ones.
+    /// Anything typed, renamed or answered is a used chat and is never touched.
+    var reusableEmptyConversationID: UUID? {
+        conversations.first(where: isUnusedNewConversation)?.id
+    }
+
+    private func isUnusedNewConversation(_ conversation: Conversation) -> Bool {
+        guard conversation.messages.isEmpty, !conversation.titleIsCustom,
+            conversation.title == Conversation.untitled,
+            runningConversationID != conversation.id
+        else {
+            return false
+        }
+        let draft = drafts[conversation.id] ?? ""
+        return draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     /// Every mutation of a conversation goes through here, so persistence is not
@@ -1594,7 +1740,12 @@ final class AppModel {
             conversationWriteError = "\(error)"
         }
         if case .conversation(let selected) = destination, selected == id {
-            destination = conversations.first.map { .conversation($0.id) } ?? .chats
+            if let next = conversations.first {
+                presentConversation(next.id)
+            } else {
+                pendingConversationNavigationID = nil
+                destination = .chats
+            }
         }
     }
 
@@ -1815,9 +1966,13 @@ final class AppModel {
     /// Launch-local, like `preparedArtifactCensuses`: discovery and complete
     /// verification stay the authority on whether a copy may run, and this only
     /// keeps the dial identical to the request built from that copy.
+    ///
+    /// Keyed by the model the preparation was for and never by a model named
+    /// here, so it took no change to cover V4.1: the runtime that fills the
+    /// ladder decides which ladder it is.
     private func capture(_ prepared: PreparedModelRuntime, for id: ModelID) {
-        if let ladder = prepared.deepSeekV4Ladder {
-            preparedDeepSeekV4Ladders[id] = ladder
+        if let ladder = prepared.deepSeekLadder {
+            preparedDeepSeekLadders[id] = ladder
         }
     }
 
@@ -1878,10 +2033,28 @@ final class AppModel {
             previousDigest: previousDigest)
     }
 
+    /// Where this build's flight recorder writes, beside `Conversations/` in
+    /// the same container — which is what makes one `devicectl device copy
+    /// from --domain-type appDataContainer` bring back both the chat and the
+    /// trace of the run that killed it.
+    ///
+    /// Nil for a non-persistent store, so a visual review or a test host writes
+    /// no files anywhere.
+    private var runTraceDirectory: URL? {
+        guard conversationStore.isPersistent else { return nil }
+        return conversationStore.directory
+            .deletingLastPathComponent()
+            .appendingPathComponent("RunTraces", isDirectory: true)
+    }
+
     private func startPreparedTurn(_ prepared: PreparedTurn, in id: UUID) {
         runningConversationID = id
         runSnapshotConversationID = id
-        runningTurnStartedAt = Date()
+        let startedAt = Date()
+        runningTurnStartedAt = startedAt
+        let trace = runTraceDirectory.flatMap {
+            RunTraceRecorder(directory: $0, conversationID: id, startedAt: startedAt)
+        }
         run.start(
             runner: prepared.runner, request: prepared.request,
             linkCeiling: calibration(for: prepared.entry.id)?.bytesPerSecond,
@@ -1893,10 +2066,86 @@ final class AppModel {
             widenedBytesPerLayer: prepared.artifactCensus?.layerResidentBytes.max()
                 ?? prepared.entry.memory.widenedResidentBytes,
             decodeTokens: prepared.decodeTokens,
-            previousDigest: prepared.previousDigest)
+            previousDigest: prepared.previousDigest,
+            trace: trace,
+            traceStart: trace == nil
+                ? nil
+                : Self.traceStart(
+                    conversationID: id, startedAt: startedAt, request: prepared.request,
+                    runner: prepared.runner,
+                    pinPlan: conversation(id).flatMap { budgetPlan(for: $0)?.pinPlan }))
         // A refusal is synchronous and terminal; the controller has already
         // reported it by the time `start` returns.
         if case .refused = run.snapshot.state { recordTurn(from: run.snapshot) }
+    }
+
+    /// The trace's first line: what this run was admitted as, before it has
+    /// allocated anything.
+    ///
+    /// The scale is read off the runner rather than recomputed, because the
+    /// scale is the single decision that says whether the product memory policy
+    /// is enforced at all, and a trace that reported the app's opinion of it
+    /// instead of the runner's would be exactly no use on the day they differ.
+    /// The V4.1 policy is written out in full for the same reason: a floor and
+    /// an envelope that came from another platform is a thing a reader has to
+    /// be able to see in the file.
+    static func traceStart(
+        conversationID: UUID, startedAt: Date, request: RunRequest,
+        runner: any RunnerFacade, pinPlan: PinPlan?
+    ) -> RunTraceRecorder.Start {
+        let footprint = ProcessFootprint.current()
+        let scale: String
+        if let v41 = runner as? DeepSeekV41DecodeRunner {
+            switch v41.scale {
+            case .product: scale = "product"
+            case .stated(let minimum, let tokens):
+                scale = "stated(\(minimum),\(tokens))"
+            }
+        } else {
+            scale = "product"
+        }
+        var policy: RunTraceRecorder.PolicyLine?
+        if request.model == .deepseekV41Flash {
+            let current = DeepSeekV41ProductMemoryBudget.currentPolicy
+            policy = RunTraceRecorder.PolicyLine(
+                name: current.name,
+                floorBytes: current.minimumBudgetBytes,
+                transientExecutionBytes: current.transientExecutionBytes,
+                pinnedTransientExecutionBytes: current.pinnedTransientExecutionBytes,
+                budgetOvershootAllowanceBytes: current.budgetOvershootAllowanceBytes,
+                maximumPromptTokens: current.maximumPromptTokens,
+                maximumNewTokens: current.maximumNewTokens,
+                expertPoolSlots: current.expertPoolSlots,
+                headWindowRows: current.headWindowRows,
+                boundsLiveOperands: current.boundsLiveOperands,
+                isExperimental: current.isExperimental)
+        }
+        let promptTokenCount: Int?
+        if case .tokenIDs(let ids) = request.prompt {
+            promptTokenCount = ids.count
+        } else {
+            promptTokenCount = nil
+        }
+        return RunTraceRecorder.Start(
+            at: startedAt,
+            conversation: conversationID.uuidString,
+            model: request.model.rawValue,
+            scale: scale,
+            declaredBudgetBytes: request.memoryBudgetBytes,
+            maximumNewTokens: request.maximumNewTokens,
+            promptTokenCount: promptTokenCount,
+            policy: policy,
+            pinPlan: pinPlan.map {
+                RunTraceRecorder.PinPlanLine(
+                    pinnedBytes: $0.pinnedBytes,
+                    pinnedLayerCount: $0.pinnedLayers.count,
+                    pinsOutputHead: $0.pinnedGlobals?.unit == .outputHead,
+                    workingFloorBytes: $0.workingFloorBytes)
+            },
+            footprintBytes: footprint?.footprintBytes ?? 0,
+            residentBytes: MemoryUsage.current()?.residentBytes ?? 0,
+            availableBytes: footprint?.availableBytes,
+            gitRevision: BuildInfo.gitRevision)
     }
 
     /// Writes the finished turn into the transcript.
@@ -2079,6 +2328,57 @@ final class AppModel {
     func selectDownloadJob(_ job: DownloadJobID) {
         guard let controller = downloadJobs[job] else { return }
         selectedDownloadJob[controller.model] = job
+    }
+
+    /// Whether this job's record may be dropped. Only a transfer that has
+    /// stopped and will not move again on its own: a record that is still
+    /// running, paused, verifying, ready or incomplete is bookkeeping the app
+    /// is still using, and removing it would strand the work it describes.
+    func canForgetDownloadJob(_ job: DownloadJobID) -> Bool {
+        downloadJobs[job]?.state.hasStopped ?? false
+    }
+
+    /// Retire one stopped transfer's record, and nothing else.
+    ///
+    /// This does not delete a single byte. Whatever the job left in its
+    /// destination stays exactly where it is, and the next storage scan finds
+    /// it the same way it would have before. The record is the only thing that
+    /// goes — which is the whole point: a first attempt that was cancelled and
+    /// cleaned up by hand months ago has nothing left to describe, and until
+    /// now it stayed in the transfer list forever.
+    ///
+    /// Returns a sentence when the request was refused, or when durable
+    /// bookkeeping could not be fully retired. The in-memory controller is
+    /// dropped either way once the durable record is gone, so this process
+    /// never keeps presenting a row the operator asked to be rid of.
+    @discardableResult
+    func forgetDownloadJob(_ job: DownloadJobID) -> String? {
+        guard let controller = downloadJobs[job] else {
+            return "This transfer is no longer listed."
+        }
+        guard controller.state.hasStopped else {
+            return "Only a cancelled, interrupted or failed transfer can be forgotten. "
+                + "This one is \(controller.state.phrase)."
+        }
+        let id = controller.model
+
+        var warning: String?
+        if let downloadStateStore {
+            do {
+                try downloadStateStore.remove(job)
+            } catch {
+                warning = "job \(job.rawValue.uuidString): \(error)"
+            }
+        }
+
+        downloadJobs.removeValue(forKey: job)
+        pendingRestoredDownloads.removeValue(forKey: job)
+        downloadRecoveryIssues.removeAll { $0.job == job }
+        if selectedDownloadJob[id] == job {
+            selectedDownloadJob[id] = downloadJobs(for: id).first?.jobID
+        }
+        if let entry = entry(id) { ensureDownloadDraft(for: entry) }
+        return warning
     }
 
     var downloadStartRefusal: String? {
@@ -2629,6 +2929,24 @@ final class AppModel {
         return warnings.isEmpty ? nil : warnings.joined(separator: "; ")
     }
 
+    #if DEBUG
+        /// Promote a prepared draft into the durable job table under a
+        /// fabricated identity, without a manager and without moving a byte.
+        ///
+        /// `prepareDownload` returns a *draft* — a controller with no job id —
+        /// and Downloads and Download details are lists of jobs, so a draft is
+        /// invisible to both. This is the same bargain `markStateForPreview`
+        /// makes one level down: nothing here is compiled into Release, and the
+        /// table it writes is the one the manager's own callback writes.
+        func registerDownloadJobForPreview(
+            _ job: DownloadJobID, controller: DownloadController
+        ) {
+            downloadDrafts[controller.model] = nil
+            downloadJobs[job] = controller
+            selectedDownloadJob[controller.model] = job
+        }
+    #endif
+
     private func makeDownloadController(entry: CatalogEntry) -> DownloadController {
         let controller = DownloadController(entry: entry, manager: downloadManager)
         controller.onJobRegistered = { [weak self, weak controller] job in
@@ -2638,8 +2956,8 @@ final class AppModel {
             self.selectedDownloadJob[controller.model] = job
         }
         if downloadStateStore != nil {
-            controller.onArtifactVerified = { [weak self] job, destination in
-                self?.registerDownloadedArtifact(job: job, at: destination)
+            controller.onArtifactVerified = { [weak self] job, destination, proof in
+                self?.registerDownloadedArtifact(job: job, at: destination, proof: proof)
             }
         }
         return controller
@@ -2658,8 +2976,8 @@ final class AppModel {
         guard downloadJobs[state.job] == nil else { return }
         let controller = DownloadController(
             entry: entry, manager: downloadManager, restoredState: state, summary: summary)
-        controller.onArtifactVerified = { [weak self] job, destination in
-            self?.registerDownloadedArtifact(job: job, at: destination)
+        controller.onArtifactVerified = { [weak self] job, destination, proof in
+            self?.registerDownloadedArtifact(job: job, at: destination, proof: proof)
         }
         downloadJobs[state.job] = controller
         downloadDrafts[entry.id] = nil
@@ -2682,7 +3000,9 @@ final class AppModel {
         pendingRestoredDownloads = stillPending
     }
 
-    private func registerDownloadedArtifact(job: DownloadJobID, at destination: URL) {
+    private func registerDownloadedArtifact(
+        job: DownloadJobID, at destination: URL, proof: DownloadVerificationProof?
+    ) {
         // Concurrent jobs may point at different drives, so the durable
         // per-job bookmark is the only authority for this callback. The picker
         // does not create a second global destination grant.
@@ -2702,10 +3022,19 @@ final class AppModel {
             else {
                 throw StorageError.volumeUnavailable(path: destination.path)
             }
-            installed.addLocation(destination)
+            // Not `addLocation`. A download lands inside the folder the operator
+            // picked, and that folder is usually a location they registered long
+            // ago; adding the artifact directory as a second location gives the
+            // scanner two roots over one tree, and the model page then lists the
+            // same copy twice and verifies it twice.
+            installed.registerDownloadDestination(destination)
             switch installed.lastAddOutcome {
             case .added, .alreadyRegistered:
                 artifactRegistrationError = nil
+                // The transfer read every published file against the published
+                // digests. Hand that over so the copy reads verified without a
+                // third pass over the drive (ADR 0019).
+                if let proof { installed.recordDownloadVerification(proof) }
             case .failed(let reason):
                 artifactRegistrationError =
                     "The verified download could not be added to storage: \(reason)"
@@ -3182,7 +3511,7 @@ final class AppModel {
         preparedArtifactCensuses = preparedArtifactCensuses.filter { id, _ in
             snapshot.descriptor(id) == fresh.descriptor(id)
         }
-        preparedDeepSeekV4Ladders = preparedDeepSeekV4Ladders.filter { id, _ in
+        preparedDeepSeekLadders = preparedDeepSeekLadders.filter { id, _ in
             snapshot.descriptor(id) == fresh.descriptor(id)
         }
         let freshEntries = AppCatalogAdapter.entries(from: fresh)
@@ -3334,25 +3663,41 @@ final class AppModel {
             requiredMinimumBudgetBytes: memory.requiredMinimumBudgetBytes,
             onRecordMinimumBudgetBytes: memory.onRecordMinimumBudgetBytes,
             provenance: .measured,
-            deepSeekV4: preparedDeepSeekV4Ladders[id] ?? memory.deepSeekV4)
+            deepSeekLadder: preparedDeepSeekLadders[id] ?? memory.deepSeekLadder)
     }
 
-    /// Read V4's ladder off the verified copy on disk, once.
+    /// Read each streamed DeepSeek ladder off the verified copy on disk, once.
+    ///
+    /// The name used to say V4 and the body used to mean it, which is most of
+    /// why the dial did nothing for V4.1: the one model whose ladder was ever
+    /// read was the one named here. Both are read now, each by its own
+    /// inspector, because the two censuses are arithmetic over two different
+    /// published geometries even though the ranking rules are shared.
     ///
     /// A no-op for every other model, for a copy that is not runnable, and for
-    /// one already read. The read itself is `index.json`, the verified config
-    /// and one `manifest.json` per layer — metadata the complete verification
-    /// pass already covered, and no payload byte.
-    private func refreshDeepSeekV4Ladder() {
-        let id = ModelID.deepseekV4Flash
-        guard preparedDeepSeekV4Ladders[id] == nil,
-            let runtime = runtimes.runtime(for: id),
-            let artifact = try? installed.runnableArtifactReference(
-                for: id, matching: runtime.accepts),
-            let ladder = try? DeepSeekV4MemoryDialInputs.inspect(artifact)
-        else { return }
-        preparedDeepSeekV4Ladders[id] = ladder
+    /// one already read. The read itself is `index.json`, the verified
+    /// configuration and one `manifest.json` per unit — metadata the complete
+    /// verification pass already covered, and no payload byte.
+    private func refreshDeepSeekLadders() {
+        for (id, inspect) in Self.deepSeekLadderInspectors {
+            guard preparedDeepSeekLadders[id] == nil,
+                let runtime = runtimes.runtime(for: id),
+                let artifact = try? installed.runnableArtifactReference(
+                    for: id, matching: runtime.accepts),
+                let ladder = try? inspect(artifact)
+            else { continue }
+            preparedDeepSeekLadders[id] = ladder
+        }
     }
+
+    /// Which inspector reads which model's ladder. A table rather than a switch
+    /// so that adding a model to ``BudgetPlan/streamedModels`` and forgetting to
+    /// read its ladder is one missing line in one place.
+    private static let deepSeekLadderInspectors:
+        [ModelID: (ArtifactReference) throws -> DeepSeekV4MemoryDialInputs.ArtifactProfile] = [
+            .deepseekV4Flash: DeepSeekV4MemoryDialInputs.inspect,
+            .deepseekV41Flash: DeepSeekV41MemoryDialInputs.inspect,
+        ]
 
     /// The dial for THIS conversation's stated budget.
     func budgetPlan(for conversation: Conversation) -> BudgetPlan? {
@@ -3381,7 +3726,7 @@ final class AppModel {
             requiredMinimumBudgetBytes: memory.requiredMinimumBudgetBytes,
             onRecordMinimumBudgetBytes: memory.onRecordMinimumBudgetBytes,
             provenance: memory.provenance,
-            deepSeekV4: memory.deepSeekV4)
+            deepSeekLadder: memory.deepSeekLadder)
         return BudgetPlan(
             model: entry.id, modelName: entry.descriptor.displayName, profile: preparedMemory,
             budgetBytes: conversation.settings.memoryBudgetBytes,
@@ -3396,17 +3741,23 @@ final class AppModel {
 
     /// **The preset a new chat starts from, per model and per platform.**
     ///
-    /// Every model starts at its Floor except V4 on the Mac, and the asymmetry
-    /// is deliberate rather than a tuning choice:
+    /// Every model starts at its Floor except the streamed DeepSeek pair on the
+    /// Mac, and the asymmetry is deliberate rather than a tuning choice:
     ///
-    /// * **macOS → Balanced.** The Mac has the memory. V4's Balanced is the
-    ///   ladder point at which every deterministic layer is resident, which on
-    ///   this owner's 34.4 GB machine is under a quarter of the device — and
-    ///   every byte below it buys resident layers, so starting at the floor
-    ///   would start every Mac chat re-reading 5.87 GB a token for no reason.
-    /// * **iOS → Floor.** The phone's V4 has no device measurement at all: no
-    ///   pinned V4 arm has been run there, and `os_proc_available_memory()` on
-    ///   a phone is a much harder ceiling than physical RAM on a Mac. A default
+    /// * **macOS → Balanced.** The Mac has the memory. Balanced is the ladder
+    ///   point at which every deterministic unit and the output head are
+    ///   resident, and on this owner's 34.4 GB machine that is 14.86 GB for
+    ///   V4.1 and 9.73 GB for V4 — both under the three-fifths rule's 20.6 GB,
+    ///   and for V4.1 the difference the arms measured is 3.40–3.96 s a token
+    ///   against 7.49 and 4.51 GB a token against 11.72
+    ///   (`docs/experiments/2026-09-11-v41-phase3-runner.md` §3 and
+    ///   `2026-09-11-v41-app-dial.md`). Every byte
+    ///   below Balanced buys resident units, so starting at the floor would
+    ///   start every Mac chat re-reading the whole model each token for no
+    ///   reason.
+    /// * **iOS → Floor.** Neither model has a device measurement at all: no
+    ///   pinned arm has been run on a phone, and `os_proc_available_memory()`
+    ///   there is a much harder ceiling than physical RAM on a Mac. A default
     ///   that spent it on a projection would be the product stating a budget it
     ///   has no evidence for. The dial still offers Balanced; the operator can
     ///   state it.
@@ -3415,7 +3766,7 @@ final class AppModel {
     /// wins over this; this is only the value they have not overruled.
     static func defaultPreset(for id: ModelID) -> BudgetPlan.Preset {
         #if os(macOS)
-            if id == .deepseekV4Flash { return .balanced }
+            if BudgetPlan.streamedModels.contains(id) { return .balanced }
         #endif
         return .floor
     }

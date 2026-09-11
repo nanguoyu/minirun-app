@@ -511,6 +511,60 @@ final class ArtifactDiscoveryTests: XCTestCase {
         XCTAssertFalse(report.isInstalled(.minimaxH3))
     }
 
+    /// Two registered locations, one nested inside the other, cover one
+    /// directory. That directory is one copy, and the report says so once.
+    ///
+    /// This is the shape the owner's Mac was in after a 517 GB download: the
+    /// drive was registered, the finished transfer registered its own artifact
+    /// folder as well, and the model page then listed the same copy twice —
+    /// both rows *624 files · Not verified*, and one press of *Verify all
+    /// files* started two passes over the same drive.
+    func testTwoNestedLocationsOverOneDirectoryAreOneCopy() throws {
+        try makeArtifact(named: "k3-artifact", index: Self.k3Index)
+        let drive = locator().scan(root)
+        let insideTheDrive = locator().scan(root.appendingPathComponent("k3-artifact"))
+        XCTAssertEqual(drive.artifacts.count, 1)
+        XCTAssertEqual(insideTheDrive.artifacts.count, 1)
+
+        let report = DiscoveryReport(
+            locations: [drive, insideTheDrive], scannedAt: Date())
+        let copies = report.installations(of: .kimiK3)
+        XCTAssertEqual(copies.count, 1, "one tree is one copy, whatever covers it")
+        XCTAssertEqual(copies.first?.rootPath, drive.artifacts.first?.rootPath)
+        XCTAssertEqual(
+            copies.first?.locationPath, root.path,
+            "the copy is reported through the outermost registered location")
+        XCTAssertEqual(report.distinctArtifacts().count, 1)
+        XCTAssertEqual(report.mountedInstallations(of: .kimiK3).count, 1)
+        XCTAssertTrue(report.isInstalled(.kimiK3))
+        XCTAssertTrue(report.isRunnableHere(.kimiK3))
+    }
+
+    /// The copy is reported through a location that can act on it. A drive in a
+    /// drawer cannot verify, remove or open anything, so where the same tree is
+    /// covered twice the mounted row wins even if it is the nested one.
+    func testTheMountedLocationIsTheOneThatSpeaksForASharedTree() throws {
+        try makeArtifact(named: "k3-artifact", index: Self.k3Index)
+        let mounted = locator().scan(root.appendingPathComponent("k3-artifact"))
+        let away = LocationScan(
+            rootPath: root.path, displayName: "away", isMounted: false, storageKey: nil,
+            artifacts: mounted.artifacts.map { artifact in
+                DiscoveredArtifact(
+                    rootPath: artifact.rootPath, locationPath: root.path,
+                    index: artifact.index, model: artifact.model,
+                    displayName: artifact.displayName, bytesOnDisk: artifact.bytesOnDisk,
+                    fileCount: artifact.fileCount, expectedFileCount: artifact.expectedFileCount,
+                    expectedBytes: artifact.expectedBytes, verification: .unverified,
+                    verifiedAt: nil, scannedAt: artifact.scannedAt)
+            },
+            unreadable: [:], scannedAt: Date())
+
+        let copies = DiscoveryReport(locations: [away, mounted], scannedAt: Date())
+            .installations(of: .kimiK3)
+        XCTAssertEqual(copies.count, 1)
+        XCTAssertEqual(copies.first?.locationPath, mounted.rootPath)
+    }
+
     // MARK: - The real drive
 
     /// Scans the actual artifacts, READ-ONLY, when the drive is present and the

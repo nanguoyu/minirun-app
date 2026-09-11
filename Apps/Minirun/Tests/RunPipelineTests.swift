@@ -41,7 +41,12 @@ final class RunPipelineTests: XCTestCase {
                 error as? RunError
             else { return XCTFail("expected budgetBelowMinimum, got \(error)") }
             XCTAssertEqual(declared, 4_000_000_000)
-            XCTAssertEqual(minimum, 8_000_000_000)
+            // The runner's floor is its platform policy's — the Mac's supported
+            // 8.00 GB boundary, the bounded iPhone tier's 5.80 GB — and the
+            // refusal names whichever this build admits at. Asserting the Mac's
+            // constant here made the phone-hosted suite fail on a refusal that
+            // was correct.
+            XCTAssertEqual(minimum, K3ProductMemoryBudget.minimumBudgetBytes)
             XCTAssertEqual(model, .kimiK3)
         }
     }
@@ -780,6 +785,264 @@ final class InstrumentEvidenceTests: XCTestCase {
         XCTAssertEqual(AccountingStatusChip(status: .failed("x")).title, "Byte counts mismatch")
     }
 
+    // MARK: The footprint row states one basis
+
+    private func footprintTelemetry(
+        declaredBudgetBytes: UInt64, footprintBytes: UInt64, peakFootprintBytes: UInt64,
+        entryFootprintBytes: UInt64?, stage: RunGenerationStage = .decode
+    ) -> RunTelemetry {
+        RunTelemetry(
+            at: Date(), elapsed: 60, phase: stage == .terminal ? "finished" : "decode token 15",
+            tokensPerSecond: 0.2,
+            generationStage: stage,
+            bytes: ByteAccounting(totalBytesRead: 1),
+            bytesPerSecond: nil, bytesPerToken: nil,
+            declaredBudgetBytes: declaredBudgetBytes,
+            footprintBytes: footprintBytes,
+            peakFootprintBytes: peakFootprintBytes,
+            entryFootprintBytes: entryFootprintBytes,
+            residentBytes: footprintBytes, availableBytes: nil, mlxActiveBytes: 0,
+            mlxCacheBytes: 0, mlxPeakBytes: 0, thermalState: .nominal,
+            lowPowerMode: false, batteryLevel: nil)
+    }
+
+    /// The panel's own mapping, so these assertions read the row the panel
+    /// draws rather than a second transcription of it.
+    private func gauge(for telemetry: RunTelemetry, latchedBreach: Bool = false) -> BudgetGauge {
+        BudgetGauge(telemetry: telemetry, latchedBreach: latchedBreach)
+    }
+
+    /// A V4.1-shaped sample from the owner's Mac: a 14.9 GB Balanced budget
+    /// that bounds what the run adds (ADR 0021), a process holding 23.7 GB
+    /// because a complete 517 GB verification ran first and left ~10.8 GB
+    /// behind, and a run that had not breached anything.
+    ///
+    /// The row read `23.7 GB of 14.9 GB · peak 14.7 GB · 0 MB spare` with the
+    /// bar full, because it took the absolute figure as the current value and
+    /// the added-basis budget as its ceiling. Two measurements, one sentence.
+    func testTheFootprintRowReadsOnTheBasisTheRuntimeDeclared() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 14_900_000_000,
+            footprintBytes: 23_700_000_000,
+            peakFootprintBytes: 14_700_000_000,
+            entryFootprintBytes: 10_800_000_000)
+
+        XCTAssertTrue(telemetry.budgetsWhatTheRunAdds)
+        XCTAssertEqual(telemetry.budgetedFootprintBytes, 12_900_000_000)
+        XCTAssertEqual(telemetry.budgetSpareBytes, 200_000_000)
+        XCTAssertTrue(telemetry.budgetRespected)
+
+        let row = gauge(for: telemetry)
+        XCTAssertEqual(row.title, "Footprint added")
+        XCTAssertEqual(row.label, "12.9 GB of 14.9 GB · peak 14.7 GB · 200 MB spare")
+        XCTAssertEqual(row.caption, "Process 23.7 GB · 10.8 GB before this run")
+        XCTAssertFalse(row.breached)
+        XCTAssertLessThan(
+            row.fillFraction, 1,
+            "the bar must not read full while the run is inside its budget")
+        XCTAssertTrue(
+            row.spoken.contains("10.8 GB was already held before this run"),
+            "VoiceOver gets the caption too, not a number with no basis")
+    }
+
+    /// The same V4.1 chat one sample later — the run's last, which both product
+    /// engines take *after* teardown has released the workload, the security
+    /// scope and the MLX cache.
+    ///
+    /// Observed on the owner's Mac: the row that had read
+    /// `13.0 GB of 14.9 GB · peak 14.7 GB · 176 MB spare` /
+    /// `Process 23.8 GB · 10.8 GB before this run` finished reading
+    /// `0 MB of 14.9 GB · peak 14.7 GB · 170 MB spare` under
+    /// `Process 161 MB · 10.8 GB before this run`. Both process figures are
+    /// true and neither is a delta — teardown clears the MLX cache, and the
+    /// 10.8 GB floor went with it — but they are a whole teardown apart, so
+    /// subtracting the floor from the later one produced a run that had used
+    /// nothing, and the caption put the two moments in one sentence with no
+    /// clue that they were different moments.
+    func testTheFinishedRowStatesThePeakRatherThanAFootprintTheRunNoLongerHolds() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 14_900_000_000,
+            footprintBytes: 161_000_000,
+            peakFootprintBytes: 14_730_000_000,
+            entryFootprintBytes: 10_800_000_000,
+            stage: .terminal)
+
+        // Nothing about the record changed: the sample still carries the
+        // absolute figure and the floor, and the kit still subtracts them.
+        XCTAssertEqual(telemetry.budgetedFootprintBytes, 0)
+
+        let row = gauge(for: telemetry)
+        XCTAssertEqual(row.title, "Footprint added")
+        XCTAssertEqual(row.label, "peak 14.7 GB of 14.9 GB · 170 MB spare")
+        XCTAssertFalse(
+            row.label.contains("0 MB of"),
+            "a finished run must not report that it added nothing")
+        XCTAssertEqual(
+            row.caption, "Process 161 MB after the run · 10.8 GB before this run")
+        XCTAssertEqual(
+            row.fillFraction, Double(14_730_000_000) / Double(14_900_000_000), accuracy: 0.0001,
+            "the bar shows where the run got to, not a released working set")
+        XCTAssertTrue(row.spoken.contains("the process holds 161 MB after the run"))
+        XCTAssertTrue(row.spoken.contains("held 10.8 GB before it began"))
+        XCTAssertFalse(row.breached)
+    }
+
+    /// A finished run on the absolute basis has the same problem in a milder
+    /// form — the current value is a post-teardown reading — and gets the same
+    /// answer, plus the process figure the label no longer carries.
+    func testAFinishedAbsoluteRunAlsoStatesItsPeakAndSaysWhenItsProcessFigureIsFrom() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 8_000_000_000,
+            footprintBytes: 161_000_000,
+            peakFootprintBytes: 7_150_000_000,
+            entryFootprintBytes: nil,
+            stage: .terminal)
+
+        let row = gauge(for: telemetry)
+        XCTAssertEqual(row.title, "Footprint")
+        XCTAssertEqual(row.label, "peak 7.15 GB of 8.00 GB · 850 MB spare")
+        XCTAssertEqual(row.caption, "Process 161 MB after the run")
+        XCTAssertFalse(
+            row.caption?.contains("before this run") ?? true,
+            "no floor was declared, so there is no earlier figure to name")
+    }
+
+    /// A breach is still the first thing the finished row says, and its spare
+    /// is still zero rather than headroom the run did not have.
+    func testAFinishedBreachedRunKeepsItsBreach() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 14_900_000_000,
+            footprintBytes: 161_000_000,
+            peakFootprintBytes: 15_200_000_000,
+            entryFootprintBytes: 10_800_000_000,
+            stage: .terminal)
+
+        let row = gauge(for: telemetry, latchedBreach: true)
+        XCTAssertTrue(row.breached)
+        XCTAssertEqual(row.label, "peak 15.2 GB of 14.9 GB · 0 MB spare")
+        XCTAssertEqual(row.fillFraction, 1, accuracy: 0.0001)
+        XCTAssertTrue(row.spoken.hasSuffix("the stated budget was exceeded"))
+    }
+
+    /// The absolute basis is untouched, down to the string the specification
+    /// prints. Nothing here consults a model id; the runtime either declared a
+    /// floor or it did not.
+    func testTheAbsoluteBasisRowIsUnchangedWhenNoFloorIsDeclared() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 8_000_000_000,
+            footprintBytes: 7_150_000_000,
+            peakFootprintBytes: 7_150_000_000,
+            entryFootprintBytes: nil)
+
+        XCTAssertFalse(telemetry.budgetsWhatTheRunAdds)
+        XCTAssertEqual(telemetry.budgetedFootprintBytes, 7_150_000_000)
+
+        let row = gauge(for: telemetry)
+        XCTAssertEqual(row.title, "Footprint")
+        XCTAssertEqual(row.label, "7.15 GB of 8.00 GB · peak 7.15 GB · 850 MB spare")
+        XCTAssertNil(row.caption)
+    }
+
+    /// Zero is a footprint the platform could not report, not a floor somebody
+    /// started from. It must not become a basis declaration — a V4.1 sample
+    /// taken before `prepareForExecution()` sets the floor is still absolute,
+    /// and its peak is absolute with it.
+    func testAnUnreportedEntryFootprintIsNotABasisDeclaration() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 8_000_000_000,
+            footprintBytes: 3_000_000_000,
+            peakFootprintBytes: 3_000_000_000,
+            entryFootprintBytes: 0)
+
+        XCTAssertNil(telemetry.entryFootprintBytes)
+        XCTAssertFalse(telemetry.budgetsWhatTheRunAdds)
+        XCTAssertEqual(telemetry.budgetedFootprintBytes, 3_000_000_000)
+        XCTAssertNil(gauge(for: telemetry).caption)
+    }
+
+    /// A breach still reads as a breach on the added basis, and the spare it
+    /// reports is zero rather than a negative number dressed as headroom.
+    func testABreachOnTheAddedBasisStillLatchesAndReportsNoSpare() {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 14_900_000_000,
+            footprintBytes: 26_000_000_000,
+            peakFootprintBytes: 15_200_000_000,
+            entryFootprintBytes: 10_800_000_000)
+
+        XCTAssertFalse(telemetry.budgetRespected)
+        XCTAssertEqual(telemetry.budgetSpareBytes, 0)
+
+        let row = gauge(for: telemetry, latchedBreach: true)
+        XCTAssertTrue(row.breached)
+        XCTAssertEqual(row.label, "15.2 GB of 14.9 GB · peak 15.2 GB · 0 MB spare")
+        XCTAssertEqual(row.fillFraction, 1, accuracy: 0.0001)
+        XCTAssertTrue(row.spoken.hasSuffix("the stated budget was exceeded"))
+    }
+
+    /// Old records have no entry footprint, and decoding one must leave them on
+    /// the absolute basis they were written with.
+    func testARecordWrittenBeforeTheBasisFieldDecodesAsAbsolute() throws {
+        let telemetry = footprintTelemetry(
+            declaredBudgetBytes: 8_000_000_000,
+            footprintBytes: 7_150_000_000,
+            peakFootprintBytes: 7_150_000_000,
+            entryFootprintBytes: nil)
+        var object = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(telemetry))
+                as? [String: Any])
+        object.removeValue(forKey: "entryFootprintBytes")
+
+        let decoded = try JSONDecoder().decode(
+            RunTelemetry.self,
+            from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(decoded.entryFootprintBytes)
+        XCTAssertFalse(decoded.budgetsWhatTheRunAdds)
+        XCTAssertEqual(decoded.budgetedFootprintBytes, 7_150_000_000)
+    }
+
+    // MARK: Three counts, three subjects
+
+    /// The stage header said `Token 15 · 30 complete · layer 31 of 40` beside a
+    /// pace line that said `13 tokens`. All three are right and none of them
+    /// counted the same thing; the bare `30` took its subject from the nearest
+    /// noun, which was a token. Each says what it counts now.
+    func testTheHeaderCountsNameWhatTheyCount() {
+        let cells = (0..<40).map { index in
+            LayerCell(
+                index: index,
+                status: index < 30 ? .done : (index == 30 ? .computing : .pending),
+                storedBytes: 10, widenedBytes: 20, wallSeconds: nil, wasStaged: false)
+        }
+        XCTAssertEqual(
+            LayerLadderAccessibility.visibleSummary(for: cells),
+            "30 layers done · layer 31 of 40")
+
+        var snapshot = RunSnapshot()
+        snapshot.state = .running
+        snapshot.ladder = cells
+        snapshot.phase = RunPhase(
+            name: "decode token 15", generationStage: .decode, fraction: 0.75,
+            detail: "reading blocks")
+        snapshot.telemetry = RunTelemetry(
+            at: Date(), elapsed: 600, phase: "decode token 15", tokensPerSecond: 0.03,
+            generationStage: .decode,
+            bytes: ByteAccounting(totalBytesRead: 1), bytesPerSecond: nil, bytesPerToken: nil,
+            decodeSeconds: 420, decodeTokensCompleted: 13,
+            declaredBudgetBytes: 14_900_000_000, footprintBytes: 23_700_000_000,
+            peakFootprintBytes: 14_700_000_000, entryFootprintBytes: 10_800_000_000,
+            residentBytes: 1, availableBytes: nil, mlxActiveBytes: 0, mlxCacheBytes: 0,
+            mlxPeakBytes: 0, thermalState: .nominal, lowPowerMode: false, batteryLevel: nil)
+
+        let panel = InstrumentPanelView(snapshot: snapshot)
+        XCTAssertEqual(panel.stageTitle, "Decode")
+        XCTAssertEqual(panel.stageDetail, "Token 15", "the token being generated")
+        XCTAssertEqual(panel.layerProgress, "30 layers done · layer 31 of 40")
+        XCTAssertEqual(
+            panel.rateProvenance, "7:00 decode · 13 tokens done",
+            "the pace line counts completed decode passes, which is not the token index")
+        XCTAssertEqual(snapshot.decodeTokensCompleted, 13)
+    }
+
     private func prefillTelemetry(
         elapsed: TimeInterval, totalBytesRead: UInt64, bytesPerSecond: Double
     ) -> RunTelemetry {
@@ -1419,12 +1682,24 @@ final class SpeedProjectionTests: XCTestCase {
 
     private let entry = CatalogFixtures.kimiK3
 
+    /// **The reference rig's profile, named rather than inherited.**
+    ///
+    /// Every projection below is checked against the 5:57-a-token pass measured
+    /// on the development Mac, at budgets chosen around the Mac's 8.00 GB
+    /// boundary and its 2.58 GB working reserve. `entry.memory` is priced by
+    /// whichever platform hosts the suite, and the iPhone tier's reserve is
+    /// 1.60 GB smaller, so on the simulator the staged pair already fitted at
+    /// 8.00 GB and the step this suite exists to find was gone.
+    private var memory: MemoryProfile {
+        CatalogFixtures.k3Memory(policy: K3ProductMemoryBudget.macOSProductPolicy)
+    }
+
     /// A 32 GiB ceiling, which is the development Mac's. It has to be at least
     /// that for the pinned tier to have anywhere to go: at 12 GiB the ladder
     /// gets five layers in and the curve has no interesting range left.
     private func plan(budget: UInt64, readAhead: Int) -> BudgetPlan {
         BudgetPlan(
-            model: .kimiK3, modelName: "Kimi K3", profile: entry.memory,
+            model: .kimiK3, modelName: "Kimi K3", profile: memory,
             budgetBytes: budget, maximumNewTokens: 64,
             deviceCeilingBytes: 32 << 30, readAheadDepth: readAhead)
     }
@@ -1524,7 +1799,7 @@ final class SpeedProjectionTests: XCTestCase {
                 "an expert was pinned at \(budget), below full deterministic residency")
         }
         XCTAssertGreaterThan(
-            entry.memory.firstExpertBudgetBytes, 116_129_117_440,
+            memory.firstExpertBudgetBytes, 116_129_117_440,
             "the first expert cannot be reachable before every layer is resident")
     }
 

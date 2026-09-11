@@ -327,6 +327,16 @@ public enum RunPhaseTermName {
     /// any of it to run. Added 2026-08-17 beside ``gpuWait``.
     public static let gpuSubmit = "gpuSubmit"
 
+    /// V4.1 only: the decode thread blocking on Engram page reads.
+    ///
+    /// Its own term rather than part of ``deterministicRead`` because it is a
+    /// different quantity read a different way — forty-eight random 4 KiB pages
+    /// per token out of two ~100 GB tables, issued before block 0 and addressed
+    /// by token ids rather than by layer — and folding it into the weight-read
+    /// bracket would make a V4.1 pass look like a V4 pass that reads more
+    /// weights.
+    public static let engramPageRead = "engramPageRead"
+
     /// Both engines: returning pages at a boundary.
     public static let reclaim = "reclaim"
 
@@ -338,6 +348,7 @@ public enum RunPhaseTermName {
         expertIOWait: "Waiting for expert weights",
         expertGatherCompute: "Expert gather",
         expertOther: "Expert bookkeeping",
+        engramPageRead: "Engram page reads",
         attentionBarrier: "Attention barrier",
         layerTotal: "Layers (contains the terms above)",
         tileDigest: "Tile digests",

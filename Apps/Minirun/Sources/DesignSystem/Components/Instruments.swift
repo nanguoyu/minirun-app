@@ -9,21 +9,67 @@ import SwiftUI
 /// If the peak passes the stated budget the whole gauge turns `refuse` and
 /// stays refused for the rest of the run. `budgetRespected == false` is a
 /// permanent fact about a run, not a transient alarm.
+///
+/// ## One basis, stated
+///
+/// Every number in this row — fill, watermark, budget mark, and all three
+/// values in the label — is on the basis the runtime declared, and the runtime
+/// declares it by publishing an entry footprint or not (`RunTelemetry`'s
+/// `entryFootprintBytes`; nothing here looks at a model id). On the absolute
+/// basis the row is what it always was. On V4.1's added-above-entry basis the
+/// heading says **Footprint added**, the values are what this run added, and a
+/// caption underneath prints the absolute process figure and the part of it
+/// that predates the run, so the bigger number is visible rather than
+/// contradicted.
+///
+/// The bug this replaces: the row took the absolute process footprint as the
+/// current value and the added-basis budget as its ceiling, and read
+/// `23.7 GB of 14.9 GB · peak 14.7 GB · 0 MB spare` with the bar full while the
+/// run was comfortably inside its budget.
 struct BudgetGauge: View {
+    /// The current footprint **on the budget's basis**. Callers pass
+    /// `telemetry.budgetedFootprintBytes`, never `telemetry.footprintBytes`.
     let footprintBytes: UInt64
+    /// The high-water mark on that same basis — the number the runtime
+    /// enforces.
     let peakBytes: UInt64
     let declaredBudgetBytes: UInt64
+    /// The absolute process footprint and the floor this run started from, when
+    /// the budget bounds what the run added. Nil on the absolute basis while a
+    /// run is live, where there is no second number to print.
+    var processBytes: UInt64?
+    var entryFootprintBytes: UInt64?
     var latchedBreach: Bool = false
+    /// This is the run's **last** sample, taken after the runtime released the
+    /// run's working set.
+    ///
+    /// A current value is then a fact about the process after the run rather
+    /// than a footprint this run is holding, and on the added-above-entry basis
+    /// it is not even arithmetic: the entry floor describes a moment before the
+    /// run and the process figure a moment after it, so subtracting one from
+    /// the other clamped to zero and printed `0 MB of 14.9 GB` under a caption
+    /// reading `Process 161 MB · 10.8 GB before this run` — a run that had just
+    /// held 13.0 GB. So a finished row states the **peak**, which is the number
+    /// the budget was kept against and the one fact that outlives the run, and
+    /// the caption says when each process figure was taken.
+    var isTerminalSample: Bool = false
 
-    private var breached: Bool { latchedBreach || peakBytes > declaredBudgetBytes }
-    private var spareBytes: UInt64 {
-        declaredBudgetBytes > footprintBytes ? declaredBudgetBytes - footprintBytes : 0
+    // The four strings below are internal, not private: the row's promise is
+    // what it says, so what it says is what the suite reads.
+    var breached: Bool { latchedBreach || peakBytes > declaredBudgetBytes }
+    /// Measured from the watermark, not from the current value: the peak only
+    /// ever moves right, so this is the room the run still has before the
+    /// promise breaks.
+    var spareBytes: UInt64 {
+        declaredBudgetBytes > peakBytes ? declaredBudgetBytes - peakBytes : 0
     }
+    var budgetsWhatTheRunAdds: Bool { entryFootprintBytes != nil }
+    var title: String { budgetsWhatTheRunAdds ? "Footprint added" : "Footprint" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MRSpace.s2) {
             HStack {
-                Text("Footprint").mrLabel()
+                Text(title).mrLabel()
                 Spacer()
                 if breached {
                     StatusChip(text: "budget not held", tone: .refuse)
@@ -33,7 +79,7 @@ struct BudgetGauge: View {
             GeometryReader { geometry in
                 let width = geometry.size.width
                 let denominator = Double(max(1, max(declaredBudgetBytes, peakBytes)))
-                let fill = CGFloat(Double(footprintBytes) / denominator) * width
+                let fill = CGFloat(fillFraction) * width
                 let watermark = CGFloat(Double(peakBytes) / denominator) * width
                 let budgetMark = CGFloat(Double(declaredBudgetBytes) / denominator) * width
 
@@ -59,23 +105,113 @@ struct BudgetGauge: View {
                 .font(MRType.micro)
                 .foregroundStyle(breached ? MRColor.refuse : MRColor.secondary)
                 .animation(nil, value: label)
+            if let caption {
+                Text(caption)
+                    .font(MRType.micro)
+                    .foregroundStyle(MRColor.tertiary)
+                    .animation(nil, value: caption)
+            }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("footprint against stated budget")
+        .accessibilityLabel(
+            budgetsWhatTheRunAdds
+                ? "footprint added by this run, against stated budget"
+                : "footprint against stated budget")
         .accessibilityValue(spoken)
     }
 
-    private var label: String {
-        "\(MRFormat.bytesDecimal(footprintBytes)) of "
+    /// The fraction of the ceiling the bar has filled, clamped so a breach
+    /// fills the bar and never overruns it. Exposed for the test that holds the
+    /// row to its promise: while a run is inside its budget this is < 1.
+    var fillFraction: Double {
+        let ceiling = Double(max(1, max(declaredBudgetBytes, peakBytes)))
+        // After the run the bar shows where it got to, not where the process
+        // happens to sit now: a released working set would otherwise empty a
+        // bar that had just been three-quarters full.
+        return min(1, Double(isTerminalSample ? peakBytes : footprintBytes) / ceiling)
+    }
+
+    var label: String {
+        if isTerminalSample {
+            return "peak \(MRFormat.bytesDecimal(peakBytes)) of "
+                + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) · "
+                + "\(MRFormat.bytesDecimal(spareBytes)) spare"
+        }
+        return "\(MRFormat.bytesDecimal(footprintBytes)) of "
             + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) · peak "
             + "\(MRFormat.bytesDecimal(peakBytes)) · \(MRFormat.bytesDecimal(spareBytes)) spare"
     }
 
-    private var spoken: String {
-        "footprint \(MRFormat.bytesDecimal(footprintBytes)) of "
+    /// What the process holds, and how much of that this run did not put there.
+    /// On the added-above-entry basis the absolute figure would otherwise be
+    /// missing from a row that is not reporting it; after the run both figures
+    /// carry the moment they were taken, because they are minutes and a whole
+    /// teardown apart.
+    var caption: String? {
+        guard let processBytes else { return nil }
+        if isTerminalSample {
+            let now = "Process \(MRFormat.bytesDecimal(processBytes)) after the run"
+            guard let entryFootprintBytes else { return now }
+            return now + " · \(MRFormat.bytesDecimal(entryFootprintBytes)) before this run"
+        }
+        guard let entryFootprintBytes else { return nil }
+        return "Process \(MRFormat.bytesDecimal(processBytes)) · "
+            + "\(MRFormat.bytesDecimal(entryFootprintBytes)) before this run"
+    }
+
+    var spoken: String {
+        var sentence: String
+        if isTerminalSample {
+            sentence =
+                "peak \(MRFormat.bytesDecimal(peakBytes)) of "
+                + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) stated, "
+                + "\(MRFormat.bytesDecimal(spareBytes)) spare"
+            if let processBytes {
+                sentence +=
+                    ", the process holds \(MRFormat.bytesDecimal(processBytes)) after the run"
+                if let entryFootprintBytes {
+                    sentence +=
+                        " and held \(MRFormat.bytesDecimal(entryFootprintBytes))"
+                        + " before it began"
+                }
+            }
+            return sentence + (breached ? ", the stated budget was exceeded" : "")
+        }
+        sentence =
+            "\(MRFormat.bytesDecimal(footprintBytes)) of "
             + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) stated, peak "
             + "\(MRFormat.bytesDecimal(peakBytes)), \(MRFormat.bytesDecimal(spareBytes)) spare"
-            + (breached ? ", the stated budget was exceeded" : "")
+        if let processBytes, let entryFootprintBytes {
+            sentence +=
+                ", the process holds \(MRFormat.bytesDecimal(processBytes)) of which "
+                + "\(MRFormat.bytesDecimal(entryFootprintBytes)) was already held before this run"
+        }
+        return sentence + (breached ? ", the stated budget was exceeded" : "")
+    }
+}
+
+extension BudgetGauge {
+    /// The one mapping from a runner sample to this row.
+    ///
+    /// It lives here rather than in the panel because every fact it decides —
+    /// which basis the run declared, whether this is the run's last sample,
+    /// and therefore which numbers are still about the run — is a property of
+    /// the sample. A screen that re-derived any of them would be a second
+    /// answer to a question the runtime already answered.
+    init(telemetry: RunTelemetry, latchedBreach: Bool) {
+        let isTerminal = telemetry.generationStage == .terminal
+        self.init(
+            footprintBytes: telemetry.budgetedFootprintBytes,
+            peakBytes: telemetry.peakFootprintBytes,
+            declaredBudgetBytes: telemetry.declaredBudgetBytes,
+            // The absolute figure belongs in the caption on the added basis at
+            // any time, and on both bases once the run has ended — the label no
+            // longer carries a current value to duplicate.
+            processBytes: telemetry.budgetsWhatTheRunAdds || isTerminal
+                ? telemetry.footprintBytes : nil,
+            entryFootprintBytes: telemetry.entryFootprintBytes,
+            latchedBreach: latchedBreach,
+            isTerminalSample: isTerminal)
     }
 }
 
@@ -125,13 +261,23 @@ enum LayerLadderAccessibility {
         cells.filter { $0.status == .done }.count
     }
 
+    /// Layers, and the word "layers" is in it.
+    ///
+    /// It read `30 complete · layer 31 of 40` on a header whose other half said
+    /// `Token 15`, beside a pace line that said `13 tokens`. Three counts of
+    /// three different things, only one of which named what it counted; the
+    /// bare leading number took its subject from the nearest one, which was a
+    /// token. The counts are all correct — token 15 is the token being
+    /// generated, 13 decode passes have completed behind it, and 30 of this
+    /// pass's 40 layers are done — so each of them now says so.
     static func visibleSummary(for cells: [LayerCell]) -> String {
         guard !cells.isEmpty else { return "Not reported" }
         let done = completedCount(in: cells)
+        let noun = done == 1 ? "layer" : "layers"
         if let current = cells.first(where: { $0.status == .computing }) {
-            return "\(done) complete · layer \(current.index + 1) of \(cells.count)"
+            return "\(done) \(noun) done · layer \(current.index + 1) of \(cells.count)"
         }
-        return "\(done) of \(cells.count) complete"
+        return "\(done) of \(cells.count) layers done"
     }
 
     static func spokenValue(for cells: [LayerCell]) -> String {

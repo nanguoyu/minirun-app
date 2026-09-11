@@ -256,7 +256,7 @@ enum DeepSeekV4ProductRuntimeProvider {
                     // a failure to run: V4 runs at the product floor with
                     // nothing pinned, and a dial with no ladder simply offers
                     // no pinned tier.
-                    deepSeekV4Ladder: try? DeepSeekV4MemoryDialInputs.inspect(artifact),
+                    deepSeekLadder: try? DeepSeekV4MemoryDialInputs.inspect(artifact),
                     progressLayerCount: configuration.numberOfLayers)
             },
             makeTokenizer: { try DeepSeekV4ProductTokenizer(artifact: $0) },

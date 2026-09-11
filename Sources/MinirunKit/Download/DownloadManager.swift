@@ -66,12 +66,31 @@ public protocol DownloadManaging: Sendable {
     /// return as paused and require an explicit `resume`; even a previously
     /// finished record must re-establish its digest evidence after a relaunch.
     func restorePersistedJobs() async throws -> DownloadRestoreReport
+    /// What of `plan` is still in `directory`, by size only.
+    ///
+    /// A stopped job's progress snapshot is a memory of the last event, not a
+    /// statement about the drive. Anything that wants to say "kept on disk"
+    /// asks this instead, and it is cheap enough to ask on every appearance of
+    /// a screen: two `lstat` calls per planned file, no digest, no file body.
+    func keptFiles(of plan: DownloadPlan, in directory: URL) async -> KeptFiles
+    /// The same reconciliation for a job this manager knows, examined through
+    /// the destination access that job persisted. In a sandbox the recorded
+    /// path alone may be unreadable while the job's own bookmark still opens
+    /// it; a caller with a job id should prefer this. `nil` when the job is
+    /// unknown.
+    func keptFiles(ofJob job: DownloadJobID) async -> KeptFiles?
 }
 
 extension DownloadManaging {
     public func restorePersistedJobs() async throws -> DownloadRestoreReport {
         DownloadRestoreReport()
     }
+
+    public func keptFiles(of plan: DownloadPlan, in directory: URL) async -> KeptFiles {
+        KeptFiles.measuring(plan, in: directory)
+    }
+
+    public func keptFiles(ofJob job: DownloadJobID) async -> KeptFiles? { nil }
 }
 
 /// Fetches an artifact, resumably, and checks every byte it wrote.
@@ -245,7 +264,7 @@ public actor DownloadManager: DownloadManaging {
         let info = storage.describe(destination.directory)
         var refusals: [DownloadError] = []
 
-        let present = alreadyPresentBytes(plan, pathsByFile: validated.pathsByFile)
+        let present = keptFiles(plan, pathsByFile: validated.pathsByFile).completeBytes
         let required = validated.totalBytes - present
         try Self.validateCapacityArithmetic(
             requiredBytes: required, headroomBytes: options.freeSpaceHeadroomBytes)
@@ -281,18 +300,84 @@ public actor DownloadManager: DownloadManaging {
             estimatedDuration: nil)
     }
 
-    /// Bytes of the plan already on disk at the right size. Size only: this runs
-    /// before a transfer starts and must not read a terabyte to answer.
-    private func alreadyPresentBytes(
+    /// What the plan already has on disk, at the right size. Size only: this
+    /// runs before a transfer starts and must not read a terabyte to answer.
+    ///
+    /// The same helper answers the product's "what is still kept?" question
+    /// after a job has stopped, so a preflight and a cancelled card can never
+    /// disagree about what the directory holds.
+    private func keptFiles(
         _ plan: DownloadPlan, pathsByFile: [String: ArtifactPaths]
-    ) -> UInt64 {
-        var total: UInt64 = 0
+    ) -> KeptFiles {
+        var completeCount = 0
+        var completeBytes: UInt64 = 0
+        var partialCount = 0
+        var partialBytes: UInt64 = 0
         for file in plan.files {
-            guard let url = pathsByFile[file.path]?.final else { continue }
-            guard let size = try? FileDigestComputer.byteCount(ofFileAt: url) else { continue }
-            if size == file.sizeBytes { total += size }
+            guard let paths = pathsByFile[file.path] else { continue }
+            if let size = KeptFiles.regularFileSize(paths.final), size == file.sizeBytes {
+                completeCount += 1
+                completeBytes = Self.saturatingSum(completeBytes, size)
+                continue
+            }
+            if let size = KeptFiles.regularFileSize(paths.part), size > 0 {
+                partialCount += 1
+                partialBytes = Self.saturatingSum(partialBytes, size)
+            }
         }
-        return total
+        return KeptFiles(
+            destination: .present, plannedFileCount: plan.files.count,
+            plannedBytes: plan.totalBytes, completeFileCount: completeCount,
+            completeBytes: completeBytes, partialFileCount: partialCount,
+            partialBytes: partialBytes)
+    }
+
+    /// The `DownloadManaging` reconciliation, over paths this actor has
+    /// re-validated. A destination that no longer resolves to the same
+    /// directory object reports as unreadable rather than as empty: "the root
+    /// was replaced" and "the files are gone" are different sentences.
+    public func keptFiles(of plan: DownloadPlan, in directory: URL) async -> KeptFiles {
+        let destination = KeptFiles.destinationStatus(of: directory)
+        guard case .present = destination else {
+            return KeptFiles.nothing(destination: destination, of: plan)
+        }
+        do {
+            let validated = try Self.validate(plan, at: directory)
+            return keptFiles(plan, pathsByFile: validated.pathsByFile)
+        } catch {
+            return KeptFiles.nothing(
+                destination: .unreadable(
+                    reason: (error as? DownloadError)?.description ?? "\(error)"),
+                of: plan)
+        }
+    }
+
+    public func keptFiles(ofJob job: DownloadJobID) async -> KeptFiles? {
+        guard let saved = jobs[job]?.state ?? (try? stateStore.load(job)) else { return nil }
+        let recorded = URL(fileURLWithPath: saved.destinationPath, isDirectory: true)
+        // A live job still holds its grant; a stopped or restored one has
+        // released it, and only the persisted bookmark can reopen the folder.
+        // Resolving it is what `restorePersistedJobs` does before it trusts a
+        // record; the recorded spelling is never read on its own first.
+        if let bookmark = saved.destinationBookmark,
+            let resolved = try? storage.resolveBookmarkData(bookmark)
+        {
+            defer { resolved.scope.release() }
+            let url = resolved.scope.url
+            guard url.standardizedFileURL.path == recorded.standardizedFileURL.path else {
+                return KeptFiles.nothing(
+                    destination: .unreadable(
+                        reason: "the saved destination now resolves to a different folder"),
+                    of: saved.plan)
+            }
+            return await keptFiles(of: saved.plan, in: url)
+        }
+        return await keptFiles(of: saved.plan, in: recorded)
+    }
+
+    private static func saturatingSum(_ total: UInt64, _ addition: UInt64) -> UInt64 {
+        let (sum, overflow) = total.addingReportingOverflow(addition)
+        return overflow ? .max : sum
     }
 
     // MARK: - Starting, pausing, resuming, cancelling
@@ -762,10 +847,25 @@ public actor DownloadManager: DownloadManaging {
             jobs[id]?.state.fileStates.values.allSatisfy {
                 if case .verified = $0 { return true } else { return false }
             } ?? false
+        // Which files this job has already read and matched against a published
+        // digest, file by file. With the default options that is every file in
+        // the plan, payload and metadata alike; a file merely adopted off disk
+        // is not in here, and neither is one restored from a job state written
+        // before this existed.
+        let digestedOnLanding = Set(
+            (jobs[id]?.state.fileStates ?? [:]).compactMap { path, state -> String? in
+                if case .verified = state { return path }
+                return nil
+            })
         let passDepth: VerificationDepth = everyFileWasDigested ? .sizeOnly : .digestPayload
         let passReport: VerificationReport
+        let passIdentities: [String: ArtifactFilesystemIdentity]
+        let passDigested: Set<String>
         do {
-            passReport = try await verify(id, depth: passDepth)
+            let pass = try await verifyCollectingEvidence(id, depth: passDepth)
+            passReport = pass.report
+            passIdentities = pass.identities
+            passDigested = pass.digested
         } catch let failure as DownloadError {
             if failure == .cancelled, control.isCancelled {
                 _ = finishCancelled(id, keepPartialFiles: control.keepsPartialFiles)
@@ -825,6 +925,21 @@ public actor DownloadManager: DownloadManaging {
             finishFailed(id, persistenceFailure(error, job: id))
             return
         }
+        // What this job can prove about each file it placed: the published
+        // digest it was read against, and the physical object the closing pass
+        // found it in. Both halves are required, so a file whose bytes nobody
+        // digested — or whose identity this pass could not establish — is simply
+        // absent, and the verification ledger refuses the hand-off by name
+        // instead of inheriting a claim nothing supports (ADR 0019).
+        let filesVerified = plan.files.compactMap { file -> ArtifactVerifiedFile? in
+            guard let identity = passIdentities[file.path],
+                passDigested.contains(file.path) || digestedOnLanding.contains(file.path),
+                identity.sizeBytes == file.sizeBytes
+            else { return nil }
+            return ArtifactVerifiedFile(
+                path: file.path, expectedSizeBytes: file.sizeBytes, digest: file.digest,
+                isPayload: file.isPayload, filesystem: identity)
+        }
         let summary = DownloadSummary(
             job: id, model: plan.model, repo: plan.repo,
             destinationPath: job.destination.directory.path,
@@ -833,7 +948,8 @@ public actor DownloadManager: DownloadManaging {
             wastedBytes: counters?.wastedBytes ?? 0,
             wallSeconds: elapsed,
             meanBytesPerSecond: elapsed > 0 ? Double(written) / elapsed : 0,
-            verification: report)
+            verification: report,
+            filesVerified: report.isComplete ? filesVerified : [])
         if report.isComplete {
             hub.emit(.finished(summary), for: id)
         } else {
@@ -1455,6 +1571,28 @@ public actor DownloadManager: DownloadManaging {
     public func verify(_ id: DownloadJobID, depth: VerificationDepth) async throws
         -> VerificationReport
     {
+        try await verifyCollectingEvidence(id, depth: depth).report
+    }
+
+    /// The closing pass, and the per-file facts it establishes on the way.
+    ///
+    /// `identities` holds every plan file that was present at its published
+    /// size, taken from the descriptor this pass held open; `digested` names the
+    /// files whose bytes this pass actually read and matched. Together with the
+    /// landing-time digests recorded in the job state, that is what lets a
+    /// finished transfer hand the verification ledger a complete record instead
+    /// of throwing its own work away (ADR 0019).
+    ///
+    /// A file whose identity moved while this pass was hashing it is simply left
+    /// out of `identities`: the report is unchanged — its digest did match — and
+    /// the hand-off refuses rather than recording an identity for an object that
+    /// is not the one that was read.
+    private func verifyCollectingEvidence(
+        _ id: DownloadJobID, depth: VerificationDepth
+    ) async throws -> (
+        report: VerificationReport, identities: [String: ArtifactFilesystemIdentity],
+        digested: Set<String>
+    ) {
         // Finished, paused and restored jobs have released their long-lived
         // grant. A manual verification is still an external-volume read, so
         // reacquire the job's own bookmark for exactly this operation.
@@ -1473,8 +1611,28 @@ public actor DownloadManager: DownloadManaging {
         var wrongSize: [SizeMismatch] = []
         var wrongDigest: [DigestMismatch] = []
         var unreadable: [String: String] = [:]
+        var identities: [String: ArtifactFilesystemIdentity] = [:]
+        var digested: Set<String> = []
+
+        let bytesTotal = plan.totalBytes
+        var filesChecked = 0
+        var bytesChecked: UInt64 = 0
+        hub.emit(
+            .verificationStarted(
+                depth: depth, filesTotal: plan.files.count, bytesTotal: bytesTotal),
+            for: id)
 
         for file in plan.files {
+            defer {
+                filesChecked += 1
+                let (sum, overflow) = bytesChecked.addingReportingOverflow(file.sizeBytes)
+                bytesChecked = overflow ? .max : sum
+                hub.emit(
+                    .verificationProgress(
+                        filesChecked: filesChecked, filesTotal: plan.files.count,
+                        bytesChecked: bytesChecked, bytesTotal: bytesTotal),
+                    for: id)
+            }
             if job.control.isCancelled { throw DownloadError.cancelled }
             guard validated.pathsByFile[file.path] != nil else {
                 throw Self.planRefusal(
@@ -1500,8 +1658,15 @@ public actor DownloadManager: DownloadManaging {
                 _ = Darwin.close(leaf.descriptor)
                 continue
             }
+            // Metadata identity, from the descriptor this pass is holding. It is
+            // never allowed to change the verdict — a hard link or a failed
+            // `fstat` is not a wrong digest — it only decides whether this file
+            // can appear in the evidence a finished transfer hands over.
+            let before = try? ArtifactFilesystemEvidence.identity(
+                of: leaf.descriptor, path: file.path, expectedDirectory: false)
             guard depth.digests(file) else {
                 ok.append(file.path)
+                if let before { identities[file.path] = before }
                 _ = Darwin.close(leaf.descriptor)
                 continue
             }
@@ -1509,8 +1674,14 @@ public actor DownloadManager: DownloadManaging {
                 defer { _ = Darwin.close(leaf.descriptor) }
                 let found = try await digest(
                     leaf, algorithm: file.digest.algorithm, control: job.control)
+                let after = try? ArtifactFilesystemEvidence.identity(
+                    of: leaf.descriptor, path: file.path, expectedDirectory: false)
                 if file.digest == found {
                     ok.append(file.path)
+                    if let before, let after, before == after {
+                        identities[file.path] = after
+                        digested.insert(file.path)
+                    }
                 } else {
                     wrongDigest.append(
                         DigestMismatch(
@@ -1544,7 +1715,7 @@ public actor DownloadManager: DownloadManaging {
             ok: report.ok, missing: report.missing, wrongSize: report.wrongSize,
             wrongDigest: report.wrongDigest, unreadable: report.unreadable,
             extraneous: report.extraneous, bytesToRefetch: cost)
-        return report
+        return (report, identities, digested)
     }
 
     @discardableResult
@@ -2615,6 +2786,7 @@ public actor DownloadManager: DownloadManaging {
         var inFlight: UInt64 = 0
         var remaining: UInt64 = 0
         var verifiedFiles = 0
+        var fetchedFiles = 0
         var failedFiles = 0
 
         // Each bucket is summed independently rather than one of them being
@@ -2634,6 +2806,7 @@ public actor DownloadManager: DownloadManaging {
                 inFlight += held
                 remaining += file.sizeBytes - held
             case .fetched:
+                fetchedFiles += 1
                 fetched += file.sizeBytes
             case .verified:
                 verifiedFiles += 1
@@ -2650,7 +2823,7 @@ public actor DownloadManager: DownloadManaging {
             verifiedBytes: verified, fetchedUnverifiedBytes: fetched,
             inFlightBytes: inFlight, remainingBytes: remaining,
             filesTotal: job.state.plan.files.count, filesVerified: verifiedFiles,
-            filesFailed: failedFiles,
+            filesFetchedUnverified: fetchedFiles, filesFailed: failedFiles,
             networkBytes: job.counters.networkBytes, wastedBytes: job.counters.wastedBytes,
             instantaneousBytesPerSecond: job.lastInstantaneous,
             smoothedBytesPerSecond: smoothed,

@@ -30,17 +30,30 @@ final class DownloadController {
     /// already resolved. The job is preserved; the UI labels that its immutable
     /// plan belongs to the earlier snapshot.
     private(set) var catalogEntryIsStale = false
+    /// What the destination directory holds *now*, for a job that has stopped.
+    ///
+    /// Nil means nobody has looked since the state last changed, and the UI
+    /// says so rather than reprinting the last progress event as if it were a
+    /// fact about the drive. A cancelled job whose files were deleted by hand
+    /// is the case this exists for.
+    private(set) var keptFiles: KeptFiles?
 
     private let manager: any DownloadManaging
     private var entry: CatalogEntry
     private var eventTask: Task<Void, Never>?
+    private var reconciliationTask: Task<Void, Never>?
     private var verificationTask: Task<Void, Never>?
     private var verificationToken: UUID?
     private var stateBeforeVerification: DownloadState?
     private(set) var isRepairing = false
 
     var onJobRegistered: ((DownloadJobID) -> Void)?
-    var onArtifactVerified: ((DownloadJobID, URL) -> Void)?
+    /// A transfer whose closing verification passed, the folder it wrote into,
+    /// and — when the transfer can prove it file by file — the evidence the
+    /// verification ledger can record without reading the artifact again
+    /// (ADR 0019). Nil where this job cannot prove every published file, which
+    /// is exactly when the copy must keep offering a full pass.
+    var onArtifactVerified: ((DownloadJobID, URL, DownloadVerificationProof?) -> Void)?
 
     /// Whether removing this catalog row would discard user-visible work or a
     /// plan already resolved against an earlier descriptor.
@@ -131,6 +144,19 @@ final class DownloadController {
         }
     }
 
+    /// Start writing into the artifact folder implied by `destination`.
+    ///
+    /// `destination` is the folder the operator confirmed — a volume, or any
+    /// folder — and it is the **parent**. The repository files go into
+    /// `<destination>/<repositoryName>`, created here, because the shipped
+    /// behaviour wrote them straight into the confirmed folder and a picked
+    /// volume therefore received `index.json`, `LICENSE` and `layer00/` in its
+    /// root. The one exception is a destination that already *is* that folder,
+    /// which *Continue with kept files* passes back verbatim; nesting a second
+    /// one inside it would strand the files it was meant to reuse.
+    ///
+    /// The decision lives here rather than in the sheet so that every entry
+    /// point — first start, continue, download again — obeys it.
     @discardableResult
     func start(
         destination: URL, scope: StorageScope?, options: DownloadOptions
@@ -143,6 +169,36 @@ final class DownloadController {
             scope?.release()
             return false
         }
+        guard let layout = ArtifactFolderPolicy.resolve(picked: destination, plan: plan) else {
+            scope?.release()
+            operationError =
+                "\(plan.repo.repoID) is not a repository name Minirun can turn into a folder."
+            return false
+        }
+        if let refusal = layout.state.refusal {
+            // Never beside it, never over it. The grant is closed and the sheet
+            // says which folder and why.
+            scope?.release()
+            operationError = refusal
+            return false
+        }
+        if layout.state == .absent {
+            do {
+                // Created through the parent's live grant, before the grant is
+                // handed on, so the manager's own bookmark of the child is
+                // minted inside the authority the operator gave.
+                try FileManager.default.createDirectory(
+                    at: layout.directory, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: NSNumber(value: Int16(0o755))])
+            } catch {
+                scope?.release()
+                operationError =
+                    "\(layout.directory.path) could not be created: "
+                    + (error as NSError).localizedDescription
+                return false
+            }
+        }
+        let destination = layout.directory
         destinationPath = destination.path
         volumeName = StorageManager().describe(destination).volumeName
         operationError = nil
@@ -215,12 +271,50 @@ final class DownloadController {
                     ?? ProgressSnapshot.empty(
                         totalBytes: plan.totalBytes, filesTotal: plan.files.count))
             updatedAt = Date()
+            keptFiles = nil
+            scheduleKeptFilesReconciliation()
         } catch let error as DownloadError {
             lastError = error
             operationError = error.description
         } catch {
             operationError = String(describing: error)
         }
+    }
+
+    // MARK: What is still on the drive
+
+    /// Re-measure the destination for a stopped job.
+    ///
+    /// Size only, off this actor, and cheap enough to run on every appearance
+    /// of the model screen and after every storage scan: two `lstat` calls per
+    /// planned file, no digest and no file body. Nothing else in this class may
+    /// state what is on disk — the progress snapshot a cancelled job carries is
+    /// a memory of the last event, and the drive has been reachable, and
+    /// editable, ever since.
+    func reconcileKeptFiles() async {
+        guard state.hasStopped, let plan, let destinationPath else {
+            keptFiles = nil
+            return
+        }
+        let directory = URL(fileURLWithPath: destinationPath, isDirectory: true)
+        // Through the job's own persisted grant when there is a job: inside
+        // the sandbox the bare path is not readable, the bookmark is.
+        let measured: KeptFiles
+        if let jobID, let scoped = await manager.keptFiles(ofJob: jobID) {
+            measured = scoped
+        } else {
+            measured = await manager.keptFiles(of: plan, in: directory)
+        }
+        // The state may have moved on while the directory was being read; a
+        // late answer about a job that has resumed is not evidence about it.
+        guard state.hasStopped, self.plan == plan, self.destinationPath == destinationPath
+        else { return }
+        keptFiles = measured
+    }
+
+    private func scheduleKeptFilesReconciliation() {
+        reconciliationTask?.cancel()
+        reconciliationTask = Task { [weak self] in await self?.reconcileKeptFiles() }
     }
 
     /// The manager currently reports a final file report but no intermediate
@@ -254,8 +348,12 @@ final class DownloadController {
                 self.verificationToken = nil
                 self.stateBeforeVerification = nil
                 if outcome.isComplete, let destinationPath = self.destinationPath {
+                    // A manual re-check produces a report, not a per-file proof:
+                    // the manager's own evidence is assembled once, when a job
+                    // finishes. So this hands over the folder and nothing else,
+                    // and the ledger is left to the artifact verifier.
                     self.onArtifactVerified?(
-                        jobID, URL(fileURLWithPath: destinationPath, isDirectory: true))
+                        jobID, URL(fileURLWithPath: destinationPath, isDirectory: true), nil)
                 }
             } catch is CancellationError {
                 guard self.verificationToken == token else { return }
@@ -333,10 +431,36 @@ final class DownloadController {
             volumeName = volumeName ?? "MINIRUN-NVME"
             state = .ready(measuredBytes: plan.totalBytes, fileCount: plan.files.count)
         }
+
+        /// Place this controller in one exact state, for a preview or for a
+        /// screenshot test, without a manager and without moving a byte.
+        ///
+        /// The alternative is driving `MockDownloadManager` until it happens to
+        /// be 47.6 GB into a 517 GB transfer, which is a race dressed up as a
+        /// fixture. Nothing here is compiled into Release, and the states it
+        /// can set are exactly the states the real event stream produces.
+        /// `job` gives the controller the durable identity the transfer lists
+        /// are lists *of*: Downloads and Download details both key on it, and
+        /// Forget is offered only for a record that has one.
+        func markStateForPreview(
+            _ state: DownloadState, destinationPath: String? = nil,
+            volumeName: String? = nil, keptFiles: KeptFiles? = nil,
+            job: DownloadJobID? = nil
+        ) {
+            self.plan = self.plan ?? PlanBuilder.plan(for: entry)
+            if let destinationPath { self.destinationPath = destinationPath }
+            if let volumeName { self.volumeName = volumeName }
+            if let keptFiles { self.keptFiles = keptFiles }
+            if let job { self.jobID = job }
+            self.state = state
+        }
     #endif
 
     func reset() {
         eventTask?.cancel()
+        reconciliationTask?.cancel()
+        reconciliationTask = nil
+        keptFiles = nil
         verificationTask?.cancel()
         verificationTask = nil
         verificationToken = nil
@@ -363,6 +487,11 @@ final class DownloadController {
 
     private func apply(_ event: DownloadEvent, plan: DownloadPlan) {
         updatedAt = Date()
+        // Any event invalidates the last look at the drive. A job that stops
+        // schedules a new one below; a job that keeps running has no business
+        // showing kept-file counts at all.
+        keptFiles = nil
+        defer { if state.hasStopped { scheduleKeptFilesReconciliation() } }
         switch event {
         case .planned:
             state = .active(
@@ -431,10 +560,33 @@ final class DownloadController {
                 return
             }
             if summary.verification.isComplete {
+                // The proof is refused rather than approximated: a summary that
+                // cannot account for every published file with a digest this
+                // job read produces nothing, and the copy keeps offering the
+                // full pass it would need.
+                let proof = try? DownloadVerificationProof(plan: plan, summary: summary)
                 onArtifactVerified?(
                     summary.job,
-                    URL(fileURLWithPath: summary.destinationPath, isDirectory: true))
+                    URL(fileURLWithPath: summary.destinationPath, isDirectory: true),
+                    proof)
             }
+
+        case .verificationStarted(_, let filesTotal, let bytesTotal):
+            let snapshot = state.progress ?? ProgressSnapshot.empty(
+                totalBytes: plan.totalBytes, filesTotal: plan.files.count)
+            state = .verifying(
+                .checking(filesChecked: 0, filesTotal: filesTotal, bytesChecked: 0, bytesTotal: bytesTotal),
+                snapshot)
+
+        case .verificationProgress(let filesChecked, let filesTotal, let bytesChecked, let bytesTotal):
+            // A late count after the pass has ended is not evidence about the
+            // job; only a pass still under way takes it.
+            guard case .verifying(_, let snapshot) = state else { return }
+            state = .verifying(
+                .checking(
+                    filesChecked: filesChecked, filesTotal: filesTotal,
+                    bytesChecked: bytesChecked, bytesTotal: bytesTotal),
+                snapshot)
 
         case .verificationFinished(let outcome):
             guard let jobID else {
@@ -572,7 +724,12 @@ final class DownloadController {
             return ProgressSnapshot.empty(
                 totalBytes: plan.totalBytes, filesTotal: plan.files.count)
         }
-        let filesDone = min(max(0, progress.filesVerified), plan.files.count)
+        // A resumed job carries its earlier files in as fetched-unverified;
+        // they are on the drive and count as done for the position line. The
+        // closing verification re-reads them before the job can finish.
+        let filesDone = min(
+            max(0, progress.filesVerified) + max(0, progress.filesFetchedUnverified),
+            plan.files.count)
         let index = min(filesDone, max(0, plan.files.count - 1))
         let bytesPerSecond = progress.smoothedBytesPerSecond.isFinite
             && progress.smoothedBytesPerSecond >= 0

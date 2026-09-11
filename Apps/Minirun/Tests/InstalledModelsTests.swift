@@ -158,12 +158,29 @@ final class InstalledModelsTests: XCTestCase {
             .write(to: directory.appendingPathComponent("global/embed_tokens.bin"))
     }
 
+    /// Waits for a condition the app reaches through a detached task. Generous,
+    /// because the machine may be running another suite at the same time, and
+    /// named, because a hang that reports as a wrong value is a wasted hour.
+    private func waitUntilTrue(
+        _ message: String, timeout: TimeInterval = 10,
+        _ condition: @MainActor () -> Bool,
+        file: StaticString = #filePath, line: UInt = #line
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail(message, file: file, line: line)
+    }
+
     /// Waits for the detached scan. The scan runs off the main actor on purpose
     /// — walking a real volume is half a second of `stat` calls — so the test
     /// has to wait for it rather than read a value that is not there yet.
     private func scan() async throws {
         installed.refresh()
-        for _ in 0..<200 {
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
             if !installed.isScanning && installed.scanCount > 0 { return }
             try await Task.sleep(for: .milliseconds(10))
         }
@@ -183,6 +200,143 @@ final class InstalledModelsTests: XCTestCase {
         XCTAssertTrue(installed.isRunnableHere(.kimiK3), "the fixture directory is mounted")
         XCTAssertEqual(installed.installedCount, 1)
         XCTAssertFalse(installed.isInstalled(.deepseekV4Flash))
+    }
+
+    /// The bug the owner saw after a 517 GB download finished: the same copy
+    /// listed twice under *Copies on this device*, both rows *624 files · Not
+    /// verified*, and one press of *Verify all files* starting two passes over
+    /// the same drive.
+    ///
+    /// The transfer had registered the folder it wrote into as a second
+    /// location, inside the drive that was already registered. A destination
+    /// inside a registered location is not a new location.
+    func testAFinishedTransferDoesNotRegisterAFolderInsideARegisteredLocation() async throws {
+        try makeK3Artifact()
+        installed.addLocation(root)
+        try await scan()
+        XCTAssertEqual(installed.locationKeys.count, 1)
+
+        let destination = root.appendingPathComponent("k3-artifact")
+        installed.registerDownloadDestination(destination)
+        try await scan()
+
+        XCTAssertEqual(installed.locationKeys.count, 1, "the drive already covers this folder")
+        XCTAssertEqual(installed.lastAddOutcome, .alreadyRegistered(path: root.path))
+        XCTAssertEqual(installed.installations(of: .kimiK3).count, 1)
+        XCTAssertEqual(installed.coveringLocationPath(of: destination), root.path)
+    }
+
+    /// A folder nothing covers is still a location worth remembering.
+    func testATransferOntoAnUnregisteredDriveStillAddsALocation() async throws {
+        try makeK3Artifact()
+        let destination = root.appendingPathComponent("k3-artifact")
+        XCTAssertNil(installed.coveringLocationPath(of: destination))
+
+        installed.registerDownloadDestination(destination)
+        try await scan()
+
+        XCTAssertEqual(installed.locationKeys.count, 1)
+        XCTAssertEqual(installed.lastAddOutcome, .added(path: destination.path))
+        XCTAssertEqual(installed.installations(of: .kimiK3).count, 1)
+    }
+
+    /// And where two nested locations are already registered — the shape an
+    /// operator can reach by hand, and the shape older builds left behind — the
+    /// page still sees one copy, through the location that covers it.
+    func testTwoNestedRegisteredLocationsStillShowOneCopy() async throws {
+        try makeK3Artifact()
+        installed.addLocation(root)
+        installed.addLocation(root.appendingPathComponent("k3-artifact"))
+        try await scan()
+
+        XCTAssertEqual(installed.locationKeys.count, 2, "both grants are real and are kept")
+        let copies = installed.installations(of: .kimiK3)
+        XCTAssertEqual(copies.count, 1)
+        XCTAssertEqual(copies.first?.locationPath, root.path)
+        XCTAssertEqual(installed.installedCount, 1)
+        XCTAssertNotNil(installed.preferredArtifact(for: .kimiK3))
+    }
+
+    /// The hand-off, from the app's side: a finished transfer's proof turns the
+    /// copy fully verified, and no verification pass runs to do it (ADR 0019).
+    func testAFinishedTransferFlipsTheCopyToVerifiedWithoutAVerifierPass() async throws {
+        let ledger = PermissiveVerificationLedger()
+        installed = InstalledModels(
+            storage: storage, catalog: ModelCatalog.bundled, ledger: ledger,
+            verificationOperation: { _, _, _, _, _ in
+                XCTFail("the copy must not be re-read to record what the transfer proved")
+                throw CocoaError(.fileReadUnknown)
+            },
+            downloadEvidenceOperation: { proof, _, authority in
+                XCTAssertEqual(
+                    authority.rootURL.standardized.path,
+                    URL(fileURLWithPath: proof.rootPath).standardized.path)
+                let record = ArtifactVerificationRecord(
+                    rootPath: proof.rootPath, state: .fullyVerified,
+                    checkedAt: proof.checkedAt,
+                    detail: "every published file matched the digests kimi-k3 publishes.")
+                ledger.record(record)
+                return record
+            })
+        try makeK3Artifact()
+        installed.addLocation(root)
+        try await scan()
+        let before = try XCTUnwrap(installed.installations(of: .kimiK3).first)
+        XCTAssertEqual(before.verification, .unverified)
+
+        let checkedAt = Date(timeIntervalSince1970: 1_786_000_000)
+        installed.recordDownloadVerification(
+            DownloadVerificationProof(
+                model: .kimiK3,
+                repository: HuggingFaceRepoRef(
+                    repoID: "nanguoyu/Kimi-K3-minirun", revision: String(repeating: "a", count: 40)),
+                rootPath: before.rootPath, files: [], checkedAt: checkedAt))
+        try await waitUntilTrue("the hand-off never reached the row") {
+            self.installed.installations(of: .kimiK3).first?.verification == .fullyVerified
+        }
+        // And it survives the rescan the hand-off itself triggers: the state on
+        // the row is what the ledger says, not a value held in front of it.
+        try await waitUntilTrue("the follow-up scan never settled") {
+            !self.installed.isScanning
+        }
+
+        let after = try XCTUnwrap(installed.installations(of: .kimiK3).first)
+        XCTAssertEqual(after.verification, .fullyVerified)
+        XCTAssertEqual(after.verifiedAt, checkedAt)
+        XCTAssertNil(installed.verificationInFlight)
+    }
+
+    /// A refused hand-off writes nothing and says why on the row. The copy is
+    /// exactly as the scan found it, and still offers the full pass.
+    func testARefusedHandOffLeavesTheCopyUnverifiedAndNamesTheReason() async throws {
+        struct Refusal: Error, CustomStringConvertible {
+            var description: String { "the transfer never digested 'index.json'" }
+        }
+        installed = InstalledModels(
+            storage: storage, catalog: ModelCatalog.bundled,
+            ledger: InMemoryVerificationLedger(),
+            downloadEvidenceOperation: { _, _, _ in throw Refusal() })
+        try makeK3Artifact()
+        installed.addLocation(root)
+        try await scan()
+        let row = try XCTUnwrap(installed.installations(of: .kimiK3).first)
+
+        installed.recordDownloadVerification(
+            DownloadVerificationProof(
+                model: .kimiK3,
+                repository: HuggingFaceRepoRef(
+                    repoID: "nanguoyu/Kimi-K3-minirun", revision: String(repeating: "a", count: 40)),
+                rootPath: row.rootPath, files: [], checkedAt: Date()))
+        try await waitUntilTrue("the refusal never reached the row") {
+            self.installed.verificationOutcome[row.rootPath] != nil
+        }
+
+        XCTAssertEqual(
+            installed.verificationOutcome[row.rootPath],
+            "The transfer's own check could not be recorded: "
+                + "the transfer never digested 'index.json'")
+        XCTAssertEqual(
+            installed.installations(of: .kimiK3).first?.verification, .unverified)
     }
 
     func testRemovingTheLocationTakesTheModelWithIt() async throws {
@@ -1247,6 +1401,43 @@ private actor VerificationCancellationProbe {
     }
 
     func markCancelled() { cancelled = true }
+}
+
+/// A ledger that answers with whatever was filed under a path.
+///
+/// It deliberately does not re-check evidence: whether the record a hand-off
+/// writes is genuine is `MinirunKitTests`' question, and it is asked there with
+/// a real verifier against real files. What is under test here is what the app
+/// does once a genuine record exists — the row flips, and nobody reads 517 GB.
+private final class PermissiveVerificationLedger: ArtifactVerificationLedger, @unchecked Sendable {
+    private let lock = NSLock()
+    private var records: [String: ArtifactVerificationRecord] = [:]
+
+    /// The kit's ledgers file a record under a canonical spelling, because a
+    /// rooted capability opens `/private/var/...` while a scan walks
+    /// `/var/...` and those are one directory. A test ledger that skipped this
+    /// would report a bug the shipping ledgers do not have.
+    private static func key(_ path: String) -> String {
+        URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+
+    func record(_ record: ArtifactVerificationRecord) {
+        lock.lock()
+        records[Self.key(record.rootPath)] = record
+        lock.unlock()
+    }
+
+    func record(matching lookup: ArtifactVerificationLookup) -> ArtifactVerificationRecord? {
+        lock.lock()
+        defer { lock.unlock() }
+        return records[Self.key(lookup.rootPath)]
+    }
+
+    func forget(rootPath: String) {
+        lock.lock()
+        records.removeValue(forKey: Self.key(rootPath))
+        lock.unlock()
+    }
 }
 
 private final class RecordingVerificationLedger: ArtifactVerificationLedger, @unchecked Sendable {

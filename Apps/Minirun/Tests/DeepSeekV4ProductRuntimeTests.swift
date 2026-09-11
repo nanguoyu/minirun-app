@@ -76,7 +76,7 @@ final class DeepSeekV4ProductRuntimeTests: XCTestCase {
                 ModelRuntimeRegistry.product.runtime(for: .deepseekV4Flash))
             XCTAssertEqual(
                 ModelRuntimeRegistry.product.registeredModelIDs,
-                [.kimiK3, .deepseekV4Flash])
+                [.kimiK3, .deepseekV4Flash, .deepseekV41Flash])
             XCTAssertEqual(
                 runtime.capabilities.minimumBudgetBytes,
                 DeepSeekV4ProductMemoryBudget.minimumBudgetBytes)

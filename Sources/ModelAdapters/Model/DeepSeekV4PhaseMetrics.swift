@@ -177,6 +177,8 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     public var expertAcquireCount: Int = 0
     /// `logitChunkRows` windows walked over the head.
     public var outputHeadWindowCount: Int = 0
+    /// V4.1 only: Engram page reads issued, one per *distinct* 4 KiB page.
+    public var engramPageReadCount: Int = 0
     public var reclaimCount: Int = 0
     /// Expert backends built. One per layer per pass under the current
     /// per-layer lifecycle; the matching `shutdown()` is charged to the same
@@ -227,6 +229,10 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     /// Wall time the decode thread spent inside the routed-expert gather.
     /// Contains ``expertIOWaitSeconds`` and ``expertGatherComputeSeconds``.
     public var expertPhaseSeconds: Double = 0
+    /// V4.1 only: the decode thread blocked on Engram page reads. Zero for
+    /// every V4 pass, which is why a record written before this term existed
+    /// reads the same numbers with it.
+    public var engramPageReadSeconds: Double = 0
     public var outputHeadReadSeconds: Double = 0
     public var outputHeadComputeSeconds: Double = 0
     public var reclaimSeconds: Double = 0
@@ -269,6 +275,72 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     /// Of ``expertPhaseSeconds``, blocked in `eval` forcing the gather graph.
     public var expertGatherComputeSeconds: Double = 0
 
+    // MARK: Inside the expert phase, the gather's own host work (V4.1, 2026-09-11)
+    //
+    // The phase 3 record's third open item is that 35.9 s of a pinned V4.1
+    // decode's 57.8 s is the gather's *host* work against 12.4 s of storage
+    // wait, and that nothing said which part of it. These six terms say. They
+    // sit inside ``expertPhaseSeconds`` exactly as the two above do, are
+    // disjoint from each other and from those two, and are zero for every V4
+    // pass — so a record written before they existed reads the same numbers,
+    // which is the rule ``engramPageReadSeconds`` was added under.
+
+    /// Of ``expertPhaseSeconds``, `DeepSeekV41Router.route`: the score
+    /// expression, the host pull of the scores, the top-k per token, and the
+    /// re-upload of the gathered weights. V4 records the same work in
+    /// ``routingSelectSeconds``, which is a *pass* term; V4.1's router runs
+    /// inside the phase bracket, so charging it there too would double-count.
+    public var expertRouteSeconds: Double = 0
+    /// Of ``expertPhaseSeconds``, `prefetch`: the pool lock, the residency
+    /// test, and the dispatch of the block's reads. Waits for none of them.
+    public var expertPrefetchSeconds: Double = 0
+    /// Of ``expertPhaseSeconds``, copying half tiles out of the pool's own
+    /// buffers into the stack the gather multiplies. Zero under expert tile
+    /// adoption, where no such copy exists — which is why it is reported
+    /// separately from the operand build it would otherwise hide inside.
+    public var expertStackCopySeconds: Double = 0
+    /// Of ``expertPhaseSeconds``, turning those bytes into an `MXFP4Weights`:
+    /// MLX's own copy into array storage under the copying path, and the
+    /// `MLXArray(rawPointer:)` wrap under adoption.
+    public var expertOperandBuildSeconds: Double = 0
+    /// Of ``expertPhaseSeconds``, the E4M3 round trip the reference applies to
+    /// every quantized GEMM's left operand, **including** the host sync inside
+    /// it. Deliberately not ``activationScaleSyncSeconds``: that is a pass term
+    /// and this work is inside the phase bracket.
+    public var expertActivationRoundSeconds: Double = 0
+    /// Of ``expertPhaseSeconds``, expressing one token's gather arithmetic —
+    /// the three `mxfp4GatherMM`s, the clamps, the SwiGLU, the reshapes. It
+    /// forces nothing, so this is the cost of *building* the graph.
+    public var expertExpressionSeconds: Double = 0
+
+    /// `DeepSeekV41Router.route` entries inside the expert phase.
+    public var expertRouteCount: Int = 0
+    /// `prefetch` calls. One per block per pass.
+    public var expertPrefetchCount: Int = 0
+    /// Half tiles copied out of the pool. Zero under adoption.
+    public var expertStackCopyCount: Int = 0
+    /// `MXFP4Weights` operands built. One per projection per token per block.
+    public var expertOperandBuildCount: Int = 0
+    /// Operands that were **adopted** rather than copied — of
+    /// ``expertOperandBuildCount``, the ones that duplicated no bytes. Stated
+    /// for the reason ``tileDigestSkippedUnderAuthorityCount`` is: a fallen
+    /// ``expertStackCopySeconds`` should read as "the copy stopped happening"
+    /// rather than as an unexplained speedup.
+    public var expertOperandAdoptedCount: Int = 0
+    /// Activation round trips inside the gather. Two per token per block.
+    public var expertActivationRoundCount: Int = 0
+    /// Tokens whose arithmetic was expressed. One per token per block.
+    public var expertExpressionCount: Int = 0
+
+    /// Decode tokens whose routed set named **both** halves of some pair tile,
+    /// summed over blocks — phase 2's 3.92% uniform-draw arithmetic, measured.
+    ///
+    /// Counted per `(block, pass)`: a block whose six experts collide in two
+    /// distinct tiles counts two. ``expertRoutedSetCount`` is the denominator.
+    public var expertTileCollisionCount: Int = 0
+    /// Routed sets seen, one per block per pass — the denominator above.
+    public var expertRoutedSetCount: Int = 0
+
     /// Sticky. Saturated nanosecond totals cannot prove the identity above.
     public var timingAccountingOverflowed: Bool = false
     /// Sticky. Saturated event counts cannot prove a per-call rate either.
@@ -292,9 +364,10 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
 
     // MARK: Derived
 
-    /// The sixteen disjoint terms. Never stored, so it cannot drift.
+    /// The seventeen disjoint terms. Never stored, so it cannot drift.
     public var attributedSeconds: Double {
         deterministicReadSeconds + tileDigestSeconds + expertPhaseSeconds
+            + engramPageReadSeconds
             + outputHeadReadSeconds + outputHeadComputeSeconds + reclaimSeconds
             + expertBackendLifecycleSeconds + layerArtifactSetupSeconds
             + tileAdoptionSeconds
@@ -346,15 +419,28 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         passSeconds.map { $0 - attributedSeconds }
     }
 
-    /// The expert phase minus its two measured halves: expression building,
-    /// tile adoption/copy, `TilePlan` construction, slot bookkeeping.
+    /// Of the expert phase, the gather's own host work, named.
+    ///
+    /// Zero for every V4 pass: these six brackets are on V4.1's gather, and V4
+    /// records the same kinds of work in the pass-level terms above.
+    public var expertGatherHostSeconds: Double {
+        expertRouteSeconds + expertPrefetchSeconds + expertStackCopySeconds
+            + expertOperandBuildSeconds + expertActivationRoundSeconds
+            + expertExpressionSeconds
+    }
+
+    /// The expert phase minus every measured piece of it: what is left is the
+    /// shared expert, the per-slot sum, `TilePlan` construction and slot
+    /// bookkeeping.
     public var expertUnattributedSeconds: Double {
         expertPhaseSeconds - expertIOWaitSeconds - expertGatherComputeSeconds
+            - expertGatherHostSeconds
     }
 
     /// Everything the pass spent waiting on storage, deterministic and routed.
     public var storageWaitSeconds: Double {
         deterministicReadSeconds + expertIOWaitSeconds + outputHeadReadSeconds
+            + engramPageReadSeconds
     }
 
     public func fraction(of seconds: Double) -> Double? {
@@ -369,6 +455,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         guard !timingAccountingOverflowed else { return false }
         let terms = [
             deterministicReadSeconds, tileDigestSeconds, expertPhaseSeconds,
+            engramPageReadSeconds,
             outputHeadReadSeconds, outputHeadComputeSeconds, reclaimSeconds,
             expertBackendLifecycleSeconds, layerArtifactSetupSeconds,
             tileAdoptionSeconds,
@@ -377,6 +464,9 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             lightningIndexerSeconds,
             gpuWaitSeconds, gpuSubmitSeconds,
             expertIOWaitSeconds, expertGatherComputeSeconds,
+            expertRouteSeconds, expertPrefetchSeconds, expertStackCopySeconds,
+            expertOperandBuildSeconds, expertActivationRoundSeconds,
+            expertExpressionSeconds,
         ]
         guard terms.allSatisfy({ $0 >= 0 }) else { return false }
         guard expertUnattributedSeconds >= -1e-6 else { return false }
@@ -413,6 +503,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         var result = DeepSeekV4PhaseMetrics()
         let seconds: [WritableKeyPath<DeepSeekV4PhaseMetrics, Double>] = [
             \.deterministicReadSeconds, \.tileDigestSeconds, \.expertPhaseSeconds,
+            \.engramPageReadSeconds,
             \.outputHeadReadSeconds, \.outputHeadComputeSeconds, \.reclaimSeconds,
             \.expertBackendLifecycleSeconds, \.layerArtifactSetupSeconds,
             \.tileAdoptionSeconds,
@@ -421,6 +512,9 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             \.lightningIndexerSeconds,
             \.gpuWaitSeconds, \.gpuSubmitSeconds,
             \.expertIOWaitSeconds, \.expertGatherComputeSeconds,
+            \.expertRouteSeconds, \.expertPrefetchSeconds,
+            \.expertStackCopySeconds, \.expertOperandBuildSeconds,
+            \.expertActivationRoundSeconds, \.expertExpressionSeconds,
         ]
         for path in seconds {
             let current = self[keyPath: path]
@@ -432,13 +526,18 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             \.deterministicReadCount, \.tileDigestCount,
             \.tileDigestSkippedUnderAuthorityCount, \.pinnedServedCount,
             \.expertGatherCallCount,
-            \.expertAcquireCount, \.outputHeadWindowCount, \.reclaimCount,
+            \.expertAcquireCount, \.outputHeadWindowCount, \.engramPageReadCount,
+            \.reclaimCount,
             \.expertBackendLifecycleCount, \.layerArtifactSetupCount,
             \.tileAdoptionCount, \.packedFinitenessMemoHitCount,
             \.activationScaleSyncCount, \.finitenessSweepCount,
             \.routingSelectCount, \.sparseAttentionCount,
             \.lightningIndexerCount,
             \.gpuWaitCount, \.gpuSubmitCount,
+            \.expertRouteCount, \.expertPrefetchCount, \.expertStackCopyCount,
+            \.expertOperandBuildCount, \.expertOperandAdoptedCount,
+            \.expertActivationRoundCount, \.expertExpressionCount,
+            \.expertTileCollisionCount, \.expertRoutedSetCount,
         ]
         for path in counts {
             let current = self[keyPath: path]
@@ -488,6 +587,9 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
                 seconds: expertGatherComputeSeconds, count: expertGatherCallCount),
             RunPhaseTerm(
                 name: RunPhaseTermName.expertOther, seconds: max(0, expertUnattributedSeconds)),
+            RunPhaseTerm(
+                name: RunPhaseTermName.engramPageRead,
+                seconds: engramPageReadSeconds, count: engramPageReadCount),
             RunPhaseTerm(
                 name: RunPhaseTermName.outputHeadRead,
                 seconds: outputHeadReadSeconds, count: outputHeadWindowCount),
@@ -545,6 +647,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
                 + "+ %.1f s reclaim + %.1f s backend + %.1f s layer setup "
                 + "+ %.1f s adoption + %.1f s scale sync + %.1f s finiteness + %.1f s routing "
                 + "+ %.1f s sparse attn + %.1f s indexer "
+                + "+ %.1f s engram pages "
                 + "+ %.1f s gpu wait + %.1f s gpu submit + %@ other; "
                 + "%d det reads, %d pinned, %d digests, "
                 + "%d loads trusted, %d gathers, %d acquires, %d head windows, "
@@ -552,7 +655,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
                 + "(%d finiteness memo hits), "
                 + "%d scale syncs, "
                 + "%d sweeps, %d routes, %d sparse attns, %d indexer selects, "
-                + "%d gpu waits, %d gpu submits",
+                + "%d gpu waits, %d gpu submits, %d engram pages",
             passSeconds.map { String(format: "%.1f s", $0) } ?? "unstated",
             deterministicReadSeconds, tileDigestSeconds, expertPhaseSeconds,
             expertIOWaitSeconds, expertGatherComputeSeconds,
@@ -561,6 +664,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             tileAdoptionSeconds,
             activationScaleSyncSeconds, finitenessSweepSeconds,
             routingSelectSeconds, sparseAttentionSeconds, lightningIndexerSeconds,
+            engramPageReadSeconds,
             gpuWaitSeconds, gpuSubmitSeconds,
             unattributedSeconds.map { String(format: "%.1f s", $0) } ?? "unknown",
             deterministicReadCount, pinnedServedCount, tileDigestCount,
@@ -570,7 +674,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
             tileAdoptionCount, packedFinitenessMemoHitCount,
             activationScaleSyncCount, finitenessSweepCount, routingSelectCount,
             sparseAttentionCount, lightningIndexerCount,
-            gpuWaitCount, gpuSubmitCount)
+            gpuWaitCount, gpuSubmitCount, engramPageReadCount)
     }
 
     /// The census line, when the run armed one. Separate from
@@ -578,12 +682,37 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
     /// written without the census must read exactly as it did before.
     public var evalCensusLine: String? { evalCensus?.summaryLine }
 
+    /// Where the gather's own host work went, when a V4.1 pass measured it.
+    ///
+    /// Its own line rather than a wider ``summaryLine`` for the same reason the
+    /// census has one: a V4 pass measures none of this, and a V4 record must
+    /// read exactly as it did before. Nil when nothing was bracketed.
+    public var expertGatherLine: String? {
+        guard expertExpressionCount > 0 || expertOperandBuildCount > 0 else { return nil }
+        return String(
+            format: "[v41 gather] expert phase %.2f s = %.2f s io wait + %.2f s route "
+                + "+ %.2f s prefetch + %.2f s stack copy + %.2f s operand build "
+                + "+ %.2f s activation round + %.2f s expression + %.2f s other; "
+                + "%d routes, %d prefetches, %d copies, %d operands (%d adopted), "
+                + "%d activation rounds, %d tokens expressed; "
+                + "tile collisions %d of %d routed sets",
+            expertPhaseSeconds, expertIOWaitSeconds, expertRouteSeconds,
+            expertPrefetchSeconds, expertStackCopySeconds, expertOperandBuildSeconds,
+            expertActivationRoundSeconds, expertExpressionSeconds,
+            expertUnattributedSeconds + expertGatherComputeSeconds,
+            expertRouteCount, expertPrefetchCount, expertStackCopyCount,
+            expertOperandBuildCount, expertOperandAdoptedCount,
+            expertActivationRoundCount, expertExpressionCount,
+            expertTileCollisionCount, expertRoutedSetCount)
+    }
+
     enum CodingKeys: String, CodingKey {
         case deterministicReadCount, tileDigestCount
         case tileDigestSkippedUnderAuthorityCount
         case pinnedServedCount
         case expertGatherCallCount
         case expertAcquireCount, outputHeadWindowCount, reclaimCount
+        case engramPageReadCount
         case expertBackendLifecycleCount, layerArtifactSetupCount, tileAdoptionCount
         case packedFinitenessMemoHitCount
         case activationScaleSyncCount, finitenessSweepCount
@@ -592,17 +721,25 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         case passSeconds
         case deterministicReadSeconds, tileDigestSeconds, expertPhaseSeconds
         case outputHeadReadSeconds, outputHeadComputeSeconds, reclaimSeconds
+        case engramPageReadSeconds
         case expertBackendLifecycleSeconds, layerArtifactSetupSeconds
         case tileAdoptionSeconds
         case activationScaleSyncSeconds, finitenessSweepSeconds
         case routingSelectSeconds, sparseAttentionSeconds, lightningIndexerSeconds
         case gpuWaitSeconds, gpuSubmitSeconds
         case expertIOWaitSeconds, expertGatherComputeSeconds
+        case expertRouteSeconds, expertPrefetchSeconds, expertStackCopySeconds
+        case expertOperandBuildSeconds, expertActivationRoundSeconds
+        case expertExpressionSeconds
+        case expertRouteCount, expertPrefetchCount, expertStackCopyCount
+        case expertOperandBuildCount, expertOperandAdoptedCount
+        case expertActivationRoundCount, expertExpressionCount
+        case expertTileCollisionCount, expertRoutedSetCount
         case timingAccountingOverflowed, eventAccountingOverflowed
         case evalCensus
         case attributedSeconds, unattributedSeconds, expertUnattributedSeconds
         case storageWaitSeconds, residualBracketSeconds, hostSyncSeconds
-        case blockingGPUWaitSeconds
+        case blockingGPUWaitSeconds, expertGatherHostSeconds
     }
 
     public init(from decoder: Decoder) throws {
@@ -620,6 +757,10 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         expertGatherCallCount = try container.decode(Int.self, forKey: .expertGatherCallCount)
         expertAcquireCount = try container.decode(Int.self, forKey: .expertAcquireCount)
         outputHeadWindowCount = try container.decode(Int.self, forKey: .outputHeadWindowCount)
+        // Added with V4.1; a record written before it carries neither key and
+        // decodes to the zero every V4 pass measures.
+        engramPageReadCount = try container.decodeIfPresent(
+            Int.self, forKey: .engramPageReadCount) ?? 0
         reclaimCount = try container.decode(Int.self, forKey: .reclaimCount)
         // Absent from every record written before the residual got its own
         // brackets. Zero is what those runs measured for these terms — they
@@ -655,6 +796,8 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         tileDigestSeconds = try container.decode(Double.self, forKey: .tileDigestSeconds)
         expertPhaseSeconds = try container.decode(Double.self, forKey: .expertPhaseSeconds)
         outputHeadReadSeconds = try container.decode(Double.self, forKey: .outputHeadReadSeconds)
+        engramPageReadSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .engramPageReadSeconds) ?? 0
         outputHeadComputeSeconds = try container.decode(
             Double.self, forKey: .outputHeadComputeSeconds)
         reclaimSeconds = try container.decode(Double.self, forKey: .reclaimSeconds)
@@ -681,6 +824,40 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         expertIOWaitSeconds = try container.decode(Double.self, forKey: .expertIOWaitSeconds)
         expertGatherComputeSeconds = try container.decode(
             Double.self, forKey: .expertGatherComputeSeconds)
+        // Added with the V4.1 gather split (2026-09-11). Absent from every
+        // record written before it, and zero is exactly what those runs
+        // attributed here — the seconds were all inside `expertPhaseSeconds`,
+        // which they still are.
+        expertRouteSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertRouteSeconds) ?? 0
+        expertPrefetchSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertPrefetchSeconds) ?? 0
+        expertStackCopySeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertStackCopySeconds) ?? 0
+        expertOperandBuildSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertOperandBuildSeconds) ?? 0
+        expertActivationRoundSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertActivationRoundSeconds) ?? 0
+        expertExpressionSeconds = try container.decodeIfPresent(
+            Double.self, forKey: .expertExpressionSeconds) ?? 0
+        expertRouteCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertRouteCount) ?? 0
+        expertPrefetchCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertPrefetchCount) ?? 0
+        expertStackCopyCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertStackCopyCount) ?? 0
+        expertOperandBuildCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertOperandBuildCount) ?? 0
+        expertOperandAdoptedCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertOperandAdoptedCount) ?? 0
+        expertActivationRoundCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertActivationRoundCount) ?? 0
+        expertExpressionCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertExpressionCount) ?? 0
+        expertTileCollisionCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertTileCollisionCount) ?? 0
+        expertRoutedSetCount = try container.decodeIfPresent(
+            Int.self, forKey: .expertRoutedSetCount) ?? 0
         timingAccountingOverflowed = try container.decodeIfPresent(
             Bool.self, forKey: .timingAccountingOverflowed) ?? false
         eventAccountingOverflowed = try container.decodeIfPresent(
@@ -736,6 +913,23 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(gpuSubmitSeconds, forKey: .gpuSubmitSeconds)
         try container.encode(expertIOWaitSeconds, forKey: .expertIOWaitSeconds)
         try container.encode(expertGatherComputeSeconds, forKey: .expertGatherComputeSeconds)
+        try container.encode(expertRouteSeconds, forKey: .expertRouteSeconds)
+        try container.encode(expertPrefetchSeconds, forKey: .expertPrefetchSeconds)
+        try container.encode(expertStackCopySeconds, forKey: .expertStackCopySeconds)
+        try container.encode(expertOperandBuildSeconds, forKey: .expertOperandBuildSeconds)
+        try container.encode(
+            expertActivationRoundSeconds, forKey: .expertActivationRoundSeconds)
+        try container.encode(expertExpressionSeconds, forKey: .expertExpressionSeconds)
+        try container.encode(expertRouteCount, forKey: .expertRouteCount)
+        try container.encode(expertPrefetchCount, forKey: .expertPrefetchCount)
+        try container.encode(expertStackCopyCount, forKey: .expertStackCopyCount)
+        try container.encode(expertOperandBuildCount, forKey: .expertOperandBuildCount)
+        try container.encode(expertOperandAdoptedCount, forKey: .expertOperandAdoptedCount)
+        try container.encode(
+            expertActivationRoundCount, forKey: .expertActivationRoundCount)
+        try container.encode(expertExpressionCount, forKey: .expertExpressionCount)
+        try container.encode(expertTileCollisionCount, forKey: .expertTileCollisionCount)
+        try container.encode(expertRoutedSetCount, forKey: .expertRoutedSetCount)
         try container.encode(timingAccountingOverflowed, forKey: .timingAccountingOverflowed)
         try container.encode(eventAccountingOverflowed, forKey: .eventAccountingOverflowed)
         // Omitted entirely when the census was not armed, which is what every
@@ -750,6 +944,7 @@ public struct DeepSeekV4PhaseMetrics: Codable, Sendable, Equatable {
         try container.encode(residualBracketSeconds, forKey: .residualBracketSeconds)
         try container.encode(hostSyncSeconds, forKey: .hostSyncSeconds)
         try container.encode(blockingGPUWaitSeconds, forKey: .blockingGPUWaitSeconds)
+        try container.encode(expertGatherHostSeconds, forKey: .expertGatherHostSeconds)
     }
 }
 
@@ -866,6 +1061,7 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
 
     private let lock = NSLock()
     private var deterministicRead = Bracket()
+    private var engramPageRead = Bracket()
     private var tileDigest = Bracket()
     /// A count with no bracket, because a skipped digest has no duration to
     /// measure. Charging it a zero-length bracket would put it in a timing
@@ -881,6 +1077,22 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
     private var expertPhase = Bracket()
     private var expertIOWait = Bracket()
     private var expertGatherCompute = Bracket()
+    /// The V4.1 gather's own host work, split. All six are *inside*
+    /// `expertPhase`, disjoint from each other and from the two above.
+    private var expertRoute = Bracket()
+    private var expertPrefetch = Bracket()
+    private var expertStackCopy = Bracket()
+    private var expertOperandBuild = Bracket()
+    private var expertActivationRound = Bracket()
+    private var expertExpression = Bracket()
+    /// Counts with no bracket of their own: an adopted operand's time is
+    /// already inside `expertOperandBuild`, and a collision is a property of a
+    /// routed set rather than a duration.
+    private var expertOperandAdopted = 0
+    private var expertOperandAdoptedOverflowed = false
+    private var expertTileCollisions = 0
+    private var expertRoutedSets = 0
+    private var expertCollisionOverflowed = false
     private var outputHeadRead = Bracket()
     private var outputHeadCompute = Bracket()
     private var reclaim = Bracket()
@@ -951,6 +1163,7 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.expertGatherCallCount = expertPhase.count
         metrics.expertAcquireCount = expertIOWait.count
         metrics.outputHeadWindowCount = outputHeadRead.count
+        metrics.engramPageReadCount = engramPageRead.count
         metrics.reclaimCount = reclaim.count
         metrics.expertBackendLifecycleCount = expertBackendBuild.count
         metrics.layerArtifactSetupCount = layerArtifactSetup.count
@@ -978,17 +1191,36 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.tileDigestSeconds = tileDigest.seconds
         metrics.expertPhaseSeconds = expertPhase.seconds
         metrics.outputHeadReadSeconds = outputHeadRead.seconds
+        metrics.engramPageReadSeconds = engramPageRead.seconds
         metrics.outputHeadComputeSeconds = outputHeadCompute.seconds
         metrics.reclaimSeconds = reclaim.seconds
         metrics.expertIOWaitSeconds = expertIOWait.seconds
         metrics.expertGatherComputeSeconds = expertGatherCompute.seconds
+        metrics.expertRouteSeconds = expertRoute.seconds
+        metrics.expertPrefetchSeconds = expertPrefetch.seconds
+        metrics.expertStackCopySeconds = expertStackCopy.seconds
+        metrics.expertOperandBuildSeconds = expertOperandBuild.seconds
+        metrics.expertActivationRoundSeconds = expertActivationRound.seconds
+        metrics.expertExpressionSeconds = expertExpression.seconds
+        metrics.expertRouteCount = expertRoute.count
+        metrics.expertPrefetchCount = expertPrefetch.count
+        metrics.expertStackCopyCount = expertStackCopy.count
+        metrics.expertOperandBuildCount = expertOperandBuild.count
+        metrics.expertOperandAdoptedCount = expertOperandAdopted
+        metrics.expertActivationRoundCount = expertActivationRound.count
+        metrics.expertExpressionCount = expertExpression.count
+        metrics.expertTileCollisionCount = expertTileCollisions
+        metrics.expertRoutedSetCount = expertRoutedSets
         for bracket in [
             deterministicRead, tileDigest, expertPhase, expertIOWait,
-            expertGatherCompute, outputHeadRead, outputHeadCompute, reclaim,
+            expertGatherCompute, engramPageRead, outputHeadRead, outputHeadCompute,
+            reclaim,
             expertBackendBuild, expertBackendShutdown, layerArtifactSetup,
             tileAdoption,
             activationScaleSync, finitenessSweep, routingSelect,
             sparseAttention, lightningIndexer, gpuWait, gpuSubmit,
+            expertRoute, expertPrefetch, expertStackCopy, expertOperandBuild,
+            expertActivationRound, expertExpression,
         ] {
             metrics.timingAccountingOverflowed =
                 metrics.timingAccountingOverflowed || bracket.nanoseconds.didOverflow
@@ -998,6 +1230,7 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         metrics.eventAccountingOverflowed =
             metrics.eventAccountingOverflowed || tileDigestSkippedOverflowed
                 || pinnedServedOverflowed || packedFinitenessMemoOverflowed
+                || expertOperandAdoptedOverflowed || expertCollisionOverflowed
         // Nil when the census is off. Deliberately not folded into
         // `eventAccountingOverflowed`: a saturated census says the sync counts
         // are unusable, not that the seconds are.
@@ -1031,6 +1264,18 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
         let next = tileDigestSkippedUnderAuthority.addingReportingOverflow(1)
         tileDigestSkippedUnderAuthority = next.overflow ? .max : next.partialValue
         tileDigestSkippedOverflowed = tileDigestSkippedOverflowed || next.overflow
+        lock.unlock()
+    }
+
+    /// One Engram page read, or a batch of them: the decode thread blocked on
+    /// storage before block 0. `pages` is the number of *distinct* 4 KiB pages,
+    /// because that is the number of reads that happened.
+    func recordEngramPageRead(nanoseconds: UInt64, pages: Int) {
+        lock.lock()
+        engramPageRead.nanoseconds.add(nanoseconds)
+        let next = engramPageRead.count.addingReportingOverflow(pages)
+        engramPageRead.count = next.overflow ? .max : next.partialValue
+        engramPageRead.countOverflowed = engramPageRead.countOverflowed || next.overflow
         lock.unlock()
     }
 
@@ -1078,6 +1323,86 @@ public final class DeepSeekV4PhaseAccounting: @unchecked Sendable {
     func recordTileAdoption(nanoseconds: UInt64) {
         lock.lock()
         tileAdoption.add(nanoseconds)
+        lock.unlock()
+    }
+
+    // MARK: The V4.1 gather's own host work
+
+    func recordExpertRoute(nanoseconds: UInt64) {
+        lock.lock()
+        expertRoute.add(nanoseconds)
+        lock.unlock()
+    }
+
+    func recordExpertPrefetch(nanoseconds: UInt64) {
+        lock.lock()
+        expertPrefetch.add(nanoseconds)
+        lock.unlock()
+    }
+
+    /// One half tile copied out of the pool's buffer into a gather operand.
+    func recordExpertStackCopy(nanoseconds: UInt64) {
+        lock.lock()
+        expertStackCopy.add(nanoseconds)
+        lock.unlock()
+    }
+
+    /// One `MXFP4Weights` built. `adopted` says whether it duplicated bytes.
+    func recordExpertOperandBuild(nanoseconds: UInt64, adopted: Bool) {
+        lock.lock()
+        expertOperandBuild.add(nanoseconds)
+        if adopted {
+            let next = expertOperandAdopted.addingReportingOverflow(1)
+            expertOperandAdopted = next.overflow ? .max : next.partialValue
+            expertOperandAdoptedOverflowed = expertOperandAdoptedOverflowed || next.overflow
+        }
+        lock.unlock()
+    }
+
+    func recordExpertActivationRound(nanoseconds: UInt64) {
+        lock.lock()
+        expertActivationRound.add(nanoseconds)
+        lock.unlock()
+    }
+
+    /// One token's gather expression, less every bracket entered inside it.
+    ///
+    /// The exclusion is read from the accounting itself rather than passed in,
+    /// exactly as ``recordLayerArtifactSetup(nanoseconds:excluding:)`` does, so
+    /// it cannot drift from what those brackets recorded. Saturating, so every
+    /// stored term stays non-negative and the identity can still be asserted.
+    func recordExpertExpression(nanoseconds: UInt64, excluding excluded: UInt64) {
+        lock.lock()
+        expertExpression.add(nanoseconds > excluded ? nanoseconds &- excluded : 0)
+        lock.unlock()
+    }
+
+    /// The totals of every bracket that can be entered inside one token's
+    /// gather expression: the tile waits, the prefetch submit, the copy, the
+    /// operand build and the activation round trip.
+    var expertNestedNanoseconds: UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        return expertIOWait.nanoseconds.value &+ expertPrefetch.nanoseconds.value
+            &+ expertStackCopy.nanoseconds.value
+            &+ expertOperandBuild.nanoseconds.value
+            &+ expertActivationRound.nanoseconds.value
+    }
+
+    /// One routed set, and how many of its pair tiles it named both halves of.
+    ///
+    /// A count rather than a bracket for the reason the digest-skip count is:
+    /// a collision is a property of the routing decision and has no duration.
+    /// Phase 2 put the rate at 3.92% from a uniform draw; this is the measured
+    /// number over a skewed router (phase 3's eighth open item).
+    func recordExpertRoutedSet(collisions: Int) {
+        lock.lock()
+        let sets = expertRoutedSets.addingReportingOverflow(1)
+        expertRoutedSets = sets.overflow ? .max : sets.partialValue
+        let hits = expertTileCollisions.addingReportingOverflow(collisions)
+        expertTileCollisions = hits.overflow ? .max : hits.partialValue
+        expertCollisionOverflowed =
+            expertCollisionOverflowed || sets.overflow || hits.overflow
         lock.unlock()
     }
 
@@ -1190,6 +1515,32 @@ func measuringLayerArtifactSetup<Result>(
             (accounting.nestedReadNanoseconds &- nestedAtStart)
             &+ (accounting.gpuBoundaryNanoseconds &- boundaryAtStart)
         accounting.recordLayerArtifactSetup(
+            nanoseconds: MonotonicClock.now() &- start, excluding: nested)
+    }
+    return try body()
+}
+
+/// Bracket one token's routed-expert expression, excluding the tile waits, the
+/// prefetch submit, the copy, the operand build, the activation round trip and
+/// any accounted GPU boundary inside it.
+///
+/// What is left is the thing phase 3's third open item could not name: building
+/// the gather's graph. It forces nothing, so it is CPU in MLX's expression
+/// machinery and in this loop, and nothing else.
+@inline(__always)
+func measuringExpertExpression<Result>(
+    _ accounting: DeepSeekV4PhaseAccounting?,
+    _ body: () throws -> Result
+) rethrows -> Result {
+    guard let accounting else { return try body() }
+    let nestedAtStart = accounting.expertNestedNanoseconds
+    let boundaryAtStart = accounting.gpuBoundaryNanoseconds
+    let start = MonotonicClock.now()
+    defer {
+        let nested =
+            (accounting.expertNestedNanoseconds &- nestedAtStart)
+            &+ (accounting.gpuBoundaryNanoseconds &- boundaryAtStart)
+        accounting.recordExpertExpression(
             nanoseconds: MonotonicClock.now() &- start, excluding: nested)
     }
     return try body()

@@ -81,6 +81,27 @@ public enum MRColor {
     public static let caution = dyn(0xE8A33D, 0x8A5A00)  // thermal .fair, low power
     public static let refuse = dyn(0xF2686C, 0xC62A2F)  // refusal, .serious/.critical
     public static let verify = dyn(0xA78BFA, 0x6B3ED8)  // integrity verification
+
+    // MARK: The product accent
+    //
+    // One indigo, and it means exactly one thing: *this is moving, or this is
+    // something to press*. The transfer bar, the status dot of a running job,
+    // and every text link on a product page.
+    //
+    // It is not `tierPinned`. The dial's five tier colours are a legend for a
+    // bar chart of memory, and the download card borrowed the pinned blue for
+    // its progress tint because it was the nearest blue in the file — which
+    // made a transfer look like a memory tier. The dial keeps its palette; a
+    // product page uses this.
+    public static let accent = dyn(0x6D8FF0, 0x2F5BD7)
+
+    /// The accent as a wash: the halo around a live status dot, a selected
+    /// row, an inline note that is informational rather than a warning.
+    public static var accentSoft: Color { accent.opacity(0.14) }
+    /// A warning note's ground. `caution` remains the foreground on it.
+    public static var cautionSoft: Color { caution.opacity(0.12) }
+    /// A finished state's halo.
+    public static var okSoft: Color { ok.opacity(0.16) }
 }
 
 // MARK: - Type
@@ -140,6 +161,48 @@ public enum MRType {
     /// The small form of the same.
     public static let declaredSmall = Font.system(.footnote, design: .default, weight: .regular)
         .italic()
+
+    // MARK: - Product page
+    //
+    // The instrument-panel voice above is right for a running model and wrong
+    // for the page that introduces one. A product page is read the way a
+    // product page is read — a name, a sentence, a number — and the panel's
+    // mono-everything turned that page into a terminal listing.
+    //
+    // The rule here: SF Pro throughout, with `.monospacedDigit()` wherever
+    // figures have to line up, and SF Mono reserved for paths, hashes and true
+    // code. Invariant 3 — the type says whether a number was checked — still
+    // holds, because the distinction it needs is upright versus italic:
+    // `declared` is still italic and still never mono.
+
+    /// 28 pt semibold, the model's own name. The specification asks for 26;
+    /// `.title` is the text style that resolves nearest to it and, unlike a
+    /// fixed 26, grows with Dynamic Type. Pair with `.tracking(-0.5)`.
+    public static let pageTitle = Font.system(.title, design: .default, weight: .semibold)
+    /// 15 pt, the one line under the name: what it is, how big, whose licence.
+    public static let pageSubtitle = Font.system(.subheadline, design: .default, weight: .regular)
+    /// 13 pt semibold. A section's name, in sentence case — the ALL-CAPS
+    /// tracked micro-label is not used on a product page.
+    public static let sectionHeading = Font.system(.footnote, design: .default, weight: .semibold)
+    /// 13 pt. The page's body voice: a status sentence, a definition, a note.
+    public static let prose = Font.system(.footnote, design: .default, weight: .regular)
+    /// 13 pt with tabular figures. Every quantity in a list that has to align
+    /// with the quantity above it.
+    public static let figure = Font.system(.footnote, design: .default, weight: .regular)
+        .monospacedDigit()
+    /// 34 pt semibold tabular. The one big number a block is allowed.
+    public static let bigFigure = Font.system(.largeTitle, design: .default, weight: .semibold)
+        .monospacedDigit()
+    /// 15 pt, the quieter half of a big number — "of 517 GB".
+    public static let bigFigureDetail = Font.system(
+        .subheadline, design: .default, weight: .regular
+    )
+    .monospacedDigit()
+    /// 13 pt medium. A button, a text link.
+    public static let control = Font.system(.footnote, design: .default, weight: .medium)
+    /// 12 pt mono. A filesystem path, a revision, a named error — and nothing
+    /// else.
+    public static let path = Font.system(.caption, design: .monospaced, weight: .regular)
 }
 
 public enum MRSpace {
@@ -175,6 +238,11 @@ public enum MRRadius {
     public static let card: CGFloat = 10
     public static let panel: CGFloat = 14
     public static let pill: CGFloat = 999
+    /// A button on a product page: 8, not 6 — it sits beside 26 pt type.
+    public static let action: CGFloat = 8
+    /// The publisher tile at the top of a product page. 16 on 64 points is the
+    /// squircle every app icon on the platform already wears.
+    public static let tile: CGFloat = 16
 }
 
 public enum MRMotion {
@@ -220,6 +288,18 @@ extension View {
     @ViewBuilder
     public func mrWorkspaceSurface() -> some View {
         self.background(MRColor.abyss.ignoresSafeArea())
+    }
+
+    /// A product page: one surface, edge to edge.
+    ///
+    /// The screens built as instrument panels stack cards on `abyss`. A page
+    /// that introduces a product is the opposite arrangement — a single sheet
+    /// divided by hairlines, with weight spent only on the one block that
+    /// needs lifting — so it takes `panel` for the whole column rather than for
+    /// six rectangles drawn on top of it.
+    @ViewBuilder
+    public func mrProductPage() -> some View {
+        self.background(MRColor.panel.ignoresSafeArea())
     }
 
     /// The one translucent navigation surface in the macOS product. Keeping

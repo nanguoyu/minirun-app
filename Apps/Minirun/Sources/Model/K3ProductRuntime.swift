@@ -171,6 +171,7 @@ private enum ProductRuntimeProviders {
             return [
                 K3ProductRuntimeProvider.registration,
                 DeepSeekV4ProductRuntimeProvider.registration,
+                DeepSeekV41ProductRuntimeProvider.registration,
             ]
         #else
             // Both shipping runners require MLX. Keep the universal macOS

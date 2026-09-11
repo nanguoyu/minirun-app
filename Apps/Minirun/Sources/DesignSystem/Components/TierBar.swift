@@ -122,7 +122,7 @@ struct TierBar: View {
         }
         if plan.strategy == .boundedLayerStreaming {
             var parts = [
-                "bounded V4 execution floor " + MRFormat.bytesDecimal(plan.floorBytes)
+                "bounded execution floor " + MRFormat.bytesDecimal(plan.floorBytes)
             ]
             if plan.pinnedLayerCount > 0 {
                 parts.append(
@@ -386,9 +386,12 @@ struct BudgetCompositionBar: View {
     /// disagree and only the first is true.
     private var sentence: String {
         if plan.strategy == .boundedLayerStreaming {
-            return "V4 streams model weights and replaces one layer's causal state at a time. "
-                + "The remaining \(MRFormat.bytesDecimal(plan.freeBytes)) is budget headroom, "
-                + "not a promise to retain model layers."
+            // The model's own name, not "V4": two models draw this sentence now,
+            // and the one it used to name is not always the one running.
+            return "\(plan.modelName) streams model weights and replaces one layer's causal "
+                + "state at a time. The remaining "
+                + "\(MRFormat.bytesDecimal(plan.freeBytes)) is budget headroom, not a promise "
+                + "to retain model layers."
         }
         let staged =
             plan.stagedTierIsFunded
@@ -525,7 +528,7 @@ struct MemoryDial: View {
                 + "\(MRFormat.bytesDecimal(refusal.deficitBytes))"
         }
         if plan.strategy == .boundedLayerStreaming {
-            return "\(MRFormat.bytesDecimal(plan.budgetBytes)), bounded V4 execution floor "
+            return "\(MRFormat.bytesDecimal(plan.budgetBytes)), bounded execution floor "
                 + "\(MRFormat.bytesDecimal(plan.floorBytes)), headroom "
                 + MRFormat.bytesDecimal(plan.freeBytes)
         }

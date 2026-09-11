@@ -252,6 +252,20 @@ public final class DeepSeekV4Vocabulary: @unchecked Sendable {
         return result
     }
 
+    /// The vocabulary's own spelling of one token, before any byte decoding.
+    ///
+    /// For a base token this is the byte-level string the BPE table is keyed
+    /// by — `"Ġthe"`, not `" the"` — and for an added token it is the token's
+    /// content. It is what Hugging Face's `id_to_token` returns, and V4.1's
+    /// Engram token map needs it for exactly the tokens that carry a partial
+    /// UTF-8 sequence: those have no decodable text to normalize, so the
+    /// reference keys them by this form instead.
+    public func rawToken(for id: Int) -> String? {
+        if let added = addedTokensByID[id] { return added }
+        guard id >= 0, id < baseTokens.count else { return nil }
+        return baseTokens[id]
+    }
+
     /// Decodes ids to user-visible text.  Byte fragments are joined before
     /// UTF-8 decoding because a token boundary may split one scalar.
     public func decode(_ ids: [Int]) -> String {

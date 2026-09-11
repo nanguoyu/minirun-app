@@ -164,7 +164,9 @@ struct ConversationSettingsView: View {
                 role: .conversation,
                 presentation: .compact,
                 readOnly: isRunning,
-                readAheadDepth: entry.id == .deepseekV4Flash
+                // The plan's question, not the model id's: a bounded streaming
+                // run has no deterministic read-ahead to state.
+                readAheadDepth: plan.strategy == .boundedLayerStreaming
                     ? nil
                     : Binding(
                         get: { conversation.settings.deterministicReadAheadLayers },

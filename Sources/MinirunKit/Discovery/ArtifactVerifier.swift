@@ -684,6 +684,254 @@ public actor ArtifactVerifier {
         return report
     }
 
+    // MARK: - Evidence handed over by a finished transfer
+
+    /// File a finished transfer's own verification in the ledger as artifact
+    /// verification evidence, without reading one file body.
+    ///
+    /// The record this writes is byte-for-byte the record ``verify(_:_:)`` would
+    /// write for a `.full` pass over the same tree, and it is built by the same
+    /// code path: the same complete-tree fetch, the same descriptor reconcile,
+    /// the same per-file open/`fstat` beneath one held root capability, and the
+    /// same ``ArtifactFilesystemEvidence/validate(evidence:rootDescriptor:rootPath:hooks:)``
+    /// before the ledger write. The single difference is where the digests came
+    /// from: the transfer read them, file by file, against the same published
+    /// table. See ADR 0019.
+    ///
+    /// Everything that could make that claim untrue is a refusal, not a weaker
+    /// record: a plan that is not the complete tree, a file the transfer never
+    /// digested, a volume that will not report persistent identifiers, an object
+    /// that has moved since the closing pass, or a hard-linked leaf whose
+    /// identity is not exclusively its own.
+    @discardableResult
+    public func recordEvidence(
+        fromDownload proof: DownloadVerificationProof,
+        index: ArtifactIndexIdentity,
+        rootedAt authority: ArtifactVerificationRoot? = nil
+    ) async throws -> ArtifactVerificationRecord {
+        guard !verificationInProgress else {
+            throw ArtifactVerificationError.verificationAlreadyInProgress
+        }
+        verificationInProgress = true
+        defer { verificationInProgress = false }
+        let root = URL(fileURLWithPath: proof.rootPath, isDirectory: true)
+        let coordinationRoot = authority?.rootURL.path ?? root.standardizedFileURL.path
+        guard await ArtifactVerificationPassCoordinator.shared.claim(coordinationRoot) else {
+            throw ArtifactVerificationError.verificationAlreadyInProgress
+        }
+        defer {
+            let released = coordinationRoot
+            Task { await ArtifactVerificationPassCoordinator.shared.release(released) }
+        }
+        return try await recordEvidencePass(
+            proof, index: index, root: root, rootedAt: authority)
+    }
+
+    private func recordEvidencePass(
+        _ proof: DownloadVerificationProof,
+        index: ArtifactIndexIdentity,
+        root: URL,
+        rootedAt authority: ArtifactVerificationRoot?
+    ) async throws -> ArtifactVerificationRecord {
+        guard let descriptor = catalog.descriptor(proof.model),
+            let repo = descriptor.source.repo
+        else {
+            throw ArtifactDownloadEvidenceError.noPublishedDigests(proof.model)
+        }
+        // A record is filed against the revision whose digests were actually
+        // matched. If the catalog has moved on since the transfer started, the
+        // bytes on disk are evidence about the old revision and this hand-off is
+        // not the place to reinterpret them — an explicit pass, with its
+        // carry-forward, is.
+        guard repo == proof.repository else {
+            throw ArtifactDownloadEvidenceError.repositoryMoved(
+                planned: "\(proof.repository.repoID)@\(proof.repository.revision)",
+                cataloged: "\(repo.repoID)@\(repo.revision)")
+        }
+
+        let completeTree = try await tree.completeTree(in: repo)
+        let published = completeTree.files
+        let treeTotals = try Self.reconcile(published, with: descriptor, model: proof.model)
+        let treeIdentity = ArtifactDigestPlanIdentity.compute(published)
+        // The whole tree, or nothing. `fullyVerified` is a claim about every
+        // published file, and a transfer whose plan omitted one — or added one
+        // the repository does not publish — cannot make it.
+        let provenIdentity = ArtifactDigestPlanIdentity.compute(proof.files.map(\.repoFile))
+        guard provenIdentity == treeIdentity else {
+            let publishedPaths = Set(published.map(\.path))
+            let provenPaths = Set(proof.files.map(\.path))
+            let missing = publishedPaths.subtracting(provenPaths).sorted()
+            let extra = provenPaths.subtracting(publishedPaths).sorted()
+            var faults: [String] = []
+            if !missing.isEmpty {
+                faults.append(
+                    "\(missing.count) published file(s) were not fetched, the first being '\(missing[0])'")
+            }
+            if !extra.isEmpty {
+                faults.append(
+                    "\(extra.count) fetched file(s) are not published, the first being '\(extra[0])'")
+            }
+            if faults.isEmpty {
+                faults.append(
+                    "the fetched sizes or digests are not the ones the published tree carries")
+            }
+            throw ArtifactDownloadEvidenceError.planIsNotTheCompleteTree(
+                reason: faults.joined(separator: "; "))
+        }
+        let selectedBytes = try Self.checkedByteTotal(
+            proof.files.map(\.repoFile), context: "the transferred byte total")
+
+        let rootDescriptor: Int32
+        let rootIdentity: ArtifactFilesystemIdentity
+        do {
+            if let authority {
+                guard authority.rootURL.standardizedFileURL.path
+                    == root.standardizedFileURL.path
+                else {
+                    throw ArtifactFilesystemEvidenceError.changed(path: root.path)
+                }
+                try authority.validateCurrentBinding()
+                let duplicate = try authority.duplicateArtifactDescriptor()
+                do {
+                    let identity = try ArtifactFilesystemEvidence.identity(
+                        of: duplicate, path: root.path, expectedDirectory: true)
+                    guard identity == authority.artifactIdentity else {
+                        throw ArtifactFilesystemEvidenceError.changed(path: root.path)
+                    }
+                    rootDescriptor = duplicate
+                    rootIdentity = identity
+                } catch {
+                    _ = close(duplicate)
+                    throw error
+                }
+            } else {
+                let opened = try ArtifactFilesystemEvidence.openRootAndIdentity(at: root)
+                rootDescriptor = opened.descriptor
+                rootIdentity = opened.identity
+            }
+        } catch {
+            throw Self.filesystemError(error, fallbackPath: root.path, changed: false)
+        }
+        defer { _ = close(rootDescriptor) }
+
+        let persistentVolume: ArtifactPersistentVolumeIdentity
+        do {
+            let supportsPersistentIDs: Bool?
+            if let authority {
+                supportsPersistentIDs = try authority.persistentIDCapability(
+                    using: hooks.descriptorSupportsPersistentIDs)
+            } else {
+                supportsPersistentIDs = try hooks.volumeSupportsPersistentIDs(root)
+            }
+            guard supportsPersistentIDs == true else {
+                throw ArtifactVerificationError.persistentFileIDsUnavailable(path: root.path)
+            }
+            guard let identity = try hooks.descriptorPersistentVolumeIdentity(
+                rootDescriptor, root.path)
+            else {
+                throw ArtifactVerificationError.persistentFileIDsUnavailable(path: root.path)
+            }
+            persistentVolume = identity
+        } catch let error as ArtifactVerificationError {
+            throw error
+        } catch {
+            throw ArtifactVerificationError.filesystemUnavailable(
+                path: root.path, reason: String(describing: error))
+        }
+
+        // The identities the record will carry, taken now, from objects opened
+        // beneath the held root with `O_NOFOLLOW`. No file body is read. Each
+        // one has to be the same durable object the closing pass checked, or
+        // the digest the transfer matched is not a fact about what is here now.
+        var files: [ArtifactVerifiedFile] = []
+        var seenObjects: [ArtifactFilesystemObjectKey: String] = [:]
+        for proven in proof.files {
+            try Task.checkCancellation()
+            let current: ArtifactFilesystemIdentity
+            do {
+                let descriptor = try ArtifactFilesystemEvidence.openPayload(
+                    proven.path, beneath: rootDescriptor)
+                defer { _ = close(descriptor) }
+                current = try ArtifactFilesystemEvidence.identity(
+                    of: descriptor, path: proven.path, expectedDirectory: false)
+            } catch {
+                throw Self.filesystemError(error, fallbackPath: proven.path, changed: false)
+            }
+            guard current.device == rootIdentity.device else {
+                throw ArtifactVerificationError.filesystemChanged(
+                    path: proven.path,
+                    reason: "the file is mounted from a different volume than the artifact root")
+            }
+            guard current.sizeBytes == proven.expectedSizeBytes,
+                ArtifactFilesystemEvidence.durableIdentityMatches(
+                    current: current, stored: proven.filesystem,
+                    persistentVolume: persistentVolume)
+            else {
+                throw ArtifactDownloadEvidenceError.identityMoved(path: proven.path)
+            }
+            let key = ArtifactFilesystemObjectKey(current)
+            if let firstPath = seenObjects.updateValue(proven.path, forKey: key) {
+                throw ArtifactVerificationError.filesystemUnavailable(
+                    path: proven.path,
+                    reason: ArtifactFilesystemEvidenceError.aliased(
+                        path: proven.path, firstPath: firstPath).description)
+            }
+            files.append(
+                ArtifactVerifiedFile(
+                    path: proven.path, expectedSizeBytes: proven.expectedSizeBytes,
+                    digest: proven.digest, isPayload: proven.isPayload,
+                    filesystem: current))
+        }
+
+        try Task.checkCancellation()
+        let rootAfter = try ArtifactFilesystemEvidence.identity(
+            of: rootDescriptor, path: root.path, expectedDirectory: true)
+        guard rootAfter == rootIdentity else {
+            throw ArtifactVerificationError.filesystemChanged(
+                path: root.path,
+                reason: "the artifact directory metadata moved while its evidence was recorded")
+        }
+
+        let built = ArtifactVerificationEvidence(
+            model: proof.model, repository: repo,
+            treeIdentity: treeIdentity,
+            completenessAuthorityIdentity: completeTree.completenessAuthorityIdentity,
+            selectedPlanIdentity: treeIdentity,
+            treeFileCount: treeTotals.fileCount,
+            treePayloadFileCount: treeTotals.payloadFileCount,
+            treeMetadataFileCount: treeTotals.metadataFileCount,
+            treeBytes: treeTotals.bytes, treePayloadBytes: treeTotals.payloadBytes,
+            treeMetadataBytes: treeTotals.metadataBytes,
+            selectedBytes: selectedBytes, index: index,
+            persistentVolume: persistentVolume,
+            root: rootIdentity,
+            files: files.sorted { $0.path < $1.path })
+        // The same self-consistency gate the ledger applies on the way out. A
+        // record this hand-off could not read back is a record it must not
+        // write.
+        guard built.isStructurallyValid(for: .fullyVerified) else {
+            throw ArtifactDownloadEvidenceError.planIsNotTheCompleteTree(
+                reason: "the recorded file set does not account for the published tree exactly")
+        }
+        do {
+            try ArtifactFilesystemEvidence.validate(
+                evidence: built, rootDescriptor: rootDescriptor, rootPath: root.path)
+            try authority?.validateCurrentBinding()
+        } catch {
+            throw Self.filesystemError(error, fallbackPath: root.path, changed: true)
+        }
+
+        let record = ArtifactVerificationRecord(
+            rootPath: proof.rootPath, state: .fullyVerified, checkedAt: proof.checkedAt,
+            detail: proof.ledgerSentence, evidence: built)
+        ledger.record(record)
+        // A pass that was interrupted before the transfer finished describes an
+        // older state of the same tree, and the durable record now covers every
+        // file it held.
+        checkpoints?.discard(rootPath: proof.rootPath, kind: nil)
+        return record
+    }
+
     /// Run the synchronous streaming hash on a detached utility task. The
     /// descriptor remains owned by the actor frame until this await returns;
     /// parent cancellation is forwarded to the detached task, whose closure is

@@ -20,13 +20,13 @@
       "payloadFileCount" : 577,
       "metadataFileCount" : 51,
       "largestFileBytes" : 1140867072,
-      "minimumBudgetBytes" : null,
-      "runner" : "none",
+      "minimumBudgetBytes" : 2000000000,
+      "runner" : "decodeRunner",
       "licenseName" : "MIT (repository tag license:mit)",
       "licenseAcknowledgementRequired" : true,
       "notes" : [
         "628 files: 577 payload, 51 metadata. The counts and byte totals were walked from the repository tree on 2026-08-11 and match this repo's own index.json exactly.",
-        "This build can fetch and verify the artifact but ships no runner for it."
+        "This build decodes it. The floor is the admitted product envelope; a larger budget pins deterministic layers through the memory dial."
       ]
     },
     {
@@ -46,14 +46,14 @@
       "payloadFileCount" : 557,
       "metadataFileCount" : 67,
       "largestFileBytes" : 8192016384,
-      "minimumBudgetBytes" : null,
-      "runner" : "none",
+      "minimumBudgetBytes" : 3400000000,
+      "runner" : "decodeRunner",
       "licenseName" : "MIT (repository tag license:mit)",
       "licenseAcknowledgementRequired" : true,
       "notes" : [
         "624 files: 557 payload, 67 metadata. The counts and byte totals were walked from the repository tree on 2026-09-10 and match this repo's own index.json exactly.",
         "26 of the payload files and 210 GB of the total are the two conditional-memory tables, each a slice of a 384-million-row table stored as 4 KiB row pages and addressed by row number from the geometry in its unit's manifest.json.",
-        "This build can fetch and verify the artifact but ships no runner for it."
+        "This build decodes it. The stated minimum is the product floor DeepSeekV41ProductMemoryBudget declares: the measured transient envelope plus the routed-expert pool at the default twenty slots plus the bounded generation state. At that budget every block is streamed and the output head is walked in row windows; a larger budget buys residency through the memory dial, up to the budget that pins all forty blocks and the head."
       ]
     },
     {

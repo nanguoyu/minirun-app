@@ -391,16 +391,49 @@ public struct RunReadAheadTelemetry: Sendable, Codable, Equatable {
 
 /// Optional evidence for instruments that are not universal runner concepts.
 /// A missing field means “not reported”; it never means a measured zero.
+/// How often a runtime looked at its own budget, and by how much the widest
+/// observation stood above it.
+///
+/// "The runner stops rather than crossing its budget" is a claim about a
+/// *cadence*, and a record that states a peak without stating how many times
+/// the peak was sampled cannot tell a run that stayed inside its ceiling from a
+/// run nobody measured. V4.1's engine already writes both numbers into its
+/// terminal summary as prose; this is the same pair per sample, so a flight
+/// recorder that survives a `SIGKILL` can say whether enforcement was even
+/// awake when the kernel intervened.
+public struct RunBudgetSentryTelemetry: Sendable, Codable, Equatable {
+    /// Budget checks performed so far, across every seam the runtime enforces
+    /// at — not only the ones that produced a telemetry event.
+    public let checks: UInt64
+    /// The largest amount by which an observed peak stood above the declared
+    /// budget. Zero on a run that stayed inside it.
+    public let worstOvershootBytes: UInt64
+    /// The most the runtime's own policy allows a run to cross by before the
+    /// refusal fires — the largest single allocation between two checks.
+    public let allowanceBytes: UInt64
+
+    public init(checks: UInt64, worstOvershootBytes: UInt64, allowanceBytes: UInt64) {
+        self.checks = checks
+        self.worstOvershootBytes = worstOvershootBytes
+        self.allowanceBytes = allowanceBytes
+    }
+}
+
 public struct RunInstrumentationTelemetry: Sendable, Codable, Equatable {
     public let expert: RunExpertTelemetry?
     public let readAhead: RunReadAheadTelemetry?
+    /// Present on a runtime that enforces its budget between allocations.
+    /// Older records decode this as nil.
+    public let budgetSentry: RunBudgetSentryTelemetry?
 
     public init(
         expert: RunExpertTelemetry? = nil,
-        readAhead: RunReadAheadTelemetry? = nil
+        readAhead: RunReadAheadTelemetry? = nil,
+        budgetSentry: RunBudgetSentryTelemetry? = nil
     ) {
         self.expert = expert
         self.readAhead = readAhead
+        self.budgetSentry = budgetSentry
     }
 }
 
@@ -451,9 +484,33 @@ public struct RunTelemetry: Sendable, Codable, Equatable {
     public let byteAccountingReported: Bool?
     /// The promise the run made about itself.
     public let declaredBudgetBytes: UInt64
-    /// `phys_footprint` — what iOS enforces its limit against.
+    /// `phys_footprint` — what iOS enforces its limit against. Always the
+    /// absolute process figure, whichever basis the runtime enforces.
     public let footprintBytes: UInt64
+    /// The high-water mark **on the basis the runtime enforces**, which is the
+    /// number `declaredBudgetBytes` bounds and the number a breach is declared
+    /// from. See ``entryFootprintBytes``.
     public let peakFootprintBytes: UInt64
+    /// The basis declaration: the process footprint this run started from, when
+    /// the runtime bounds its budget against what the run *adds* above it.
+    ///
+    /// Nil — and it is nil for every runtime that enforces the absolute
+    /// footprint, which is all of them except V4.1 — means the budget bounds
+    /// the absolute figure, and ``footprintBytes`` and ``peakFootprintBytes``
+    /// are already on that one basis.
+    ///
+    /// When it is present the run does not begin in an empty process (ADR
+    /// 0021: a complete 517 GB verification leaves ~10.8 GB behind that
+    /// `malloc_zone_pressure_relief` does not return), so the budget bounds
+    /// `peak - entry`. ``peakFootprintBytes`` is then already relative while
+    /// ``footprintBytes`` is still absolute — which is exactly the mismatch
+    /// that let one row read "23.7 GB of 14.9 GB · peak 14.7 GB". Read the
+    /// current value on the budget's basis from
+    /// ``budgetedFootprintBytes``, never from ``footprintBytes`` directly.
+    ///
+    /// This is a property the runtime declares about itself. No consumer may
+    /// infer the basis from a model id.
+    public let entryFootprintBytes: UInt64?
     public let residentBytes: UInt64
     /// `os_proc_available_memory()`, where the platform has it.
     public let availableBytes: UInt64?
@@ -479,6 +536,7 @@ public struct RunTelemetry: Sendable, Codable, Equatable {
         decodeTokensCompleted: Int? = nil,
         byteAccountingReported: Bool? = true,
         declaredBudgetBytes: UInt64, footprintBytes: UInt64, peakFootprintBytes: UInt64,
+        entryFootprintBytes: UInt64? = nil,
         residentBytes: UInt64, availableBytes: UInt64?, mlxActiveBytes: UInt64,
         mlxCacheBytes: UInt64, mlxPeakBytes: UInt64, thermalState: ThermalStateName,
         lowPowerMode: Bool, batteryLevel: Float?,
@@ -501,6 +559,10 @@ public struct RunTelemetry: Sendable, Codable, Equatable {
         self.declaredBudgetBytes = declaredBudgetBytes
         self.footprintBytes = footprintBytes
         self.peakFootprintBytes = peakFootprintBytes
+        // Zero is not a floor anybody started from; it is a footprint the
+        // platform could not report. Store it as "no declaration" so a missing
+        // sample cannot silently become an absolute-basis claim of nothing.
+        self.entryFootprintBytes = (entryFootprintBytes ?? 0) > 0 ? entryFootprintBytes : nil
         self.residentBytes = residentBytes
         self.availableBytes = availableBytes
         self.mlxActiveBytes = mlxActiveBytes
@@ -518,6 +580,26 @@ public struct RunTelemetry: Sendable, Codable, Equatable {
 
     /// The promise was kept.
     public var budgetRespected: Bool { peakFootprintBytes <= declaredBudgetBytes }
+
+    /// Whether the declared budget bounds what this run *added* rather than
+    /// what the process holds. The runtime declares it; nothing derives it.
+    public var budgetsWhatTheRunAdds: Bool { entryFootprintBytes != nil }
+
+    /// The current footprint on the same basis as ``declaredBudgetBytes`` and
+    /// ``peakFootprintBytes`` — which is what a reader is comparing when a row
+    /// prints "current of budget". Identical to ``footprintBytes`` on the
+    /// absolute basis.
+    public var budgetedFootprintBytes: UInt64 {
+        guard let entry = entryFootprintBytes else { return footprintBytes }
+        return footprintBytes > entry ? footprintBytes - entry : 0
+    }
+
+    /// What is left of the promise, measured from the high-water mark because
+    /// the watermark never moves left: once a run has peaked this is the room
+    /// it still has before the budget breaks. Zero once it has broken.
+    public var budgetSpareBytes: UInt64 {
+        declaredBudgetBytes > peakFootprintBytes ? declaredBudgetBytes - peakFootprintBytes : 0
+    }
 
     /// Legacy telemetry predates the explicit availability bit and therefore
     /// retains the byte-accounting semantics it had when it was recorded.

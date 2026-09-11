@@ -76,6 +76,11 @@ enum DownloadDestinationCapacity {
 struct DestinationPicker: View {
     let modelID: ModelID
     var preferredStartingDirectory: URL? = nil
+    /// Called on the main actor once the manager has accepted the job. The
+    /// presenter closes the sheet through its own state: `dismiss` from a
+    /// task, at the root of a `NavigationStack` inside a sheet, was observed
+    /// to leave the sheet standing until the operator pressed Escape.
+    var onStarted: (() -> Void)? = nil
 
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -83,12 +88,72 @@ struct DestinationPicker: View {
     @State private var selected: VolumeDescriptor?
     @State private var destinationSelection = DownloadDestinationSelection()
     @State private var picking = false
+    /// Between Start and the manager's answer: the plan is validated against
+    /// the folder, the folder is created, the job registered. Seconds on a
+    /// 624-file plan, during which the button must say so rather than go grey.
+    @State private var isStarting = false
     @State private var pickError: String?
     @State private var options = DownloadOptions()
     @State private var advancedOptionsExpanded = false
 
     private var entry: CatalogEntry? { model.entry(modelID) }
-    private var requiredBytes: UInt64 { entry?.descriptor.totalBytes ?? 0 }
+    /// The whole published size — what a fresh copy would need.
+    private var publishedBytes: UInt64 { entry?.descriptor.totalBytes ?? 0 }
+
+    /// What still has to land at `directory`: the published size minus what a
+    /// same-sized file already present there covers, and minus the bytes a
+    /// part file already holds. A resume must be judged against the bytes it
+    /// will write, not against the whole model, or a drive that plainly has
+    /// room for the rest refuses the transfer that would finish it.
+    private func remainingBytes(at directory: URL?) -> UInt64 {
+        guard let directory, let plan = model.downloadPlanForPresentation(modelID) else {
+            return publishedBytes
+        }
+        let kept = KeptFiles.measuring(plan, in: directory)
+        guard case .present = kept.destination else { return publishedBytes }
+        let covered = kept.completeBytes.addingReportingOverflow(kept.partialBytes)
+        let landed = covered.overflow ? UInt64.max : covered.partialValue
+        return landed >= publishedBytes ? 0 : publishedBytes - landed
+    }
+
+    /// Bytes still to write into the artifact folder under the pending
+    /// destination, or the whole model until a destination is chosen.
+    private var requiredBytes: UInt64 { remainingBytes(at: layout?.directory) }
+
+    /// Bytes still to write for a volume row: the artifact folder this
+    /// repository would take inside that volume, if it is already there.
+    private func requiredBytes(on volume: VolumeDescriptor) -> UInt64 {
+        guard let repository,
+            let folder = ArtifactFolderPolicy.resolve(
+                picked: volumeURL(volume), repository: repository, model: modelID)
+        else { return publishedBytes }
+        return remainingBytes(at: folder.directory)
+    }
+
+    /// The repository whose name the artifact folder takes.
+    private var repository: HuggingFaceRepoRef? { entry?.descriptor.source.repo }
+
+    /// The folder name Minirun will create inside whatever the operator picks.
+    /// Known before a folder is chosen, because it comes from the catalog row.
+    private var subfolderName: String? {
+        repository.flatMap(ArtifactFolderPolicy.subfolderName(for:))
+    }
+
+    /// Where the bytes will actually go, once a parent has been confirmed.
+    ///
+    /// Classified against the resolved plan when one exists — that is the same
+    /// authority `DownloadController.start` applies at Continue time — and
+    /// against the repository alone before then.
+    private var layout: DownloadDestinationLayout? {
+        guard let picked = destinationSelection.destination?.directory,
+            let repository
+        else { return nil }
+        if let plan = model.downloadPlanForPresentation(modelID) {
+            return ArtifactFolderPolicy.resolve(picked: picked, plan: plan)
+        }
+        return ArtifactFolderPolicy.resolve(
+            picked: picked, repository: repository, model: modelID)
+    }
 
     var body: some View {
         NavigationStack {
@@ -113,12 +178,22 @@ struct DestinationPicker: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isStarting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start download") {
+                    Button {
                         startDownload()
+                    } label: {
+                        if isStarting {
+                            HStack(spacing: MRSpace.s1) {
+                                ProgressView().controlSize(.small)
+                                Text("Starting…")
+                            }
+                        } else {
+                            Text("Start download")
+                        }
                     }
-                    .disabled(!canStartDownload)
+                    .disabled(!canStartDownload || isStarting)
                 }
             }
         }
@@ -131,9 +206,7 @@ struct DestinationPicker: View {
         .onAppear {
             model.refreshVolumes()
             if let preferredStartingDirectory {
-                selected = model.volumes.first {
-                    path(preferredStartingDirectory, isInside: volumeURL($0))
-                }
+                selected = volume(containing: preferredStartingDirectory)
             }
         }
         .onDisappear {
@@ -146,7 +219,7 @@ struct DestinationPicker: View {
             MetricRow(
                 label: "artifact", value: entry?.descriptor.displayName ?? modelID.rawValue)
             MetricRow(
-                label: "size", value: MRFormat.publishedBytes(requiredBytes),
+                label: "size", value: MRFormat.publishedBytes(publishedBytes),
                 provenance: .declared, detail: "declared by index, not yet checked")
             MetricRow(
                 label: "files",
@@ -182,7 +255,7 @@ struct DestinationPicker: View {
                 } label: {
                     VolumeRow(
                         volume: volume,
-                        requiredBytes: requiredBytes,
+                        requiredBytes: requiredBytes(on: volume),
                         headroomBytes: options.freeSpaceHeadroomBytes,
                         capacityVerdict: capacityVerdict(for: volume),
                         isSelected: selected?.mountPath == volume.mountPath)
@@ -198,7 +271,7 @@ struct DestinationPicker: View {
     /// hardware fact, not sandbox write authority.
     private var folderPicker: some View {
         VStack(alignment: .leading, spacing: MRSpace.s2) {
-            SectionHeader(title: "Destination folder")
+            SectionHeader(title: "Where to keep this model")
             Button {
                 beginFolderSelection(
                     startingAt: destinationSelection.destination?.directory
@@ -218,6 +291,10 @@ struct DestinationPicker: View {
                 }
             #endif
             .frame(minHeight: 44)
+            Text(chooserMessage)
+                .font(MRType.caption)
+                .foregroundStyle(MRColor.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(
                 "Choosing a folder grants access but does not start the download. Review the "
                     + "destination and press Start download when ready.")
@@ -225,6 +302,18 @@ struct DestinationPicker: View {
                 .foregroundStyle(MRColor.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// One sentence, shown in the sheet and put into the system folder chooser,
+    /// so the operator reads the same promise in both places: the folder they
+    /// confirm is the parent, not the artifact.
+    private var chooserMessage: String {
+        guard let subfolderName else {
+            return "Choose where to keep this model. Minirun creates a folder for it inside "
+                + "the one you choose."
+        }
+        return "Choose where to keep this model. Minirun creates a folder named "
+            + "\(subfolderName) inside it."
     }
 
     private func pickErrorCard(_ text: String) -> some View {
@@ -296,19 +385,21 @@ struct DestinationPicker: View {
     }
 
     private var canStartDownload: Bool {
-        guard destinationSelection.destination != nil, validationRefusal == nil else {
-            return false
-        }
+        guard destinationSelection.destination != nil, validationRefusal == nil,
+            let layout, layout.state.allowsWriting
+        else { return false }
         return pendingDestinationVerdict.isFit
     }
 
+    /// Capacity is a fact about the volume, and the artifact folder does not
+    /// exist yet, so the verdict is always taken against the parent.
     private var pendingDestinationVerdict: SpaceVerdict {
         guard let pendingDestination = destinationSelection.destination else {
             return .unknown(reason: "Choose a destination folder first.")
         }
         return model.storage.canHold(
             bytes: requiredBytes,
-            at: pendingDestination.directory,
+            at: layout?.parent ?? pendingDestination.directory,
             headroomBytes: options.freeSpaceHeadroomBytes)
     }
 
@@ -317,14 +408,48 @@ struct DestinationPicker: View {
     ) -> some View {
         Panel(title: "Ready to start") {
             MetricRow(
-                label: "destination",
+                label: "chosen folder",
                 value: destination.directory.lastPathComponent.isEmpty
                     ? destination.directory.path : destination.directory.lastPathComponent,
                 detail: destination.directory.path)
-            MetricRow(
-                label: "download size",
-                value: MRFormat.publishedBytes(requiredBytes),
-                provenance: .declared)
+            if let layout {
+                MetricRow(
+                    label: "model folder", value: layout.subfolderName,
+                    detail: layout.state == .absent
+                        ? "created inside the folder you chose"
+                        : "already there; this transfer reuses it")
+                Text(layout.previewSentence)
+                    .font(MRType.caption)
+                    .foregroundStyle(MRColor.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if subfolderName == nil {
+                NamedErrorCard(
+                    headline: "This model publishes no folder name.",
+                    message: "Minirun will not write a repository into a folder it cannot name.",
+                    namedError: "artifact folder: no canonical repository name",
+                    tone: .refuse)
+            }
+            if let refusal = layout?.state.refusal {
+                NamedErrorCard(
+                    headline: "That folder already holds something else.",
+                    message: "Nothing was written. Choose another folder, or move what is "
+                        + "there out of the way.",
+                    namedError: refusal,
+                    tone: .refuse)
+            }
+            if requiredBytes < publishedBytes {
+                MetricRow(
+                    label: "still to download",
+                    value: MRFormat.bytesDecimal(requiredBytes),
+                    detail: "\(MRFormat.bytesDecimal(publishedBytes - requiredBytes)) of "
+                        + "\(MRFormat.publishedBytes(publishedBytes)) is already in the folder")
+            } else {
+                MetricRow(
+                    label: "download size",
+                    value: MRFormat.publishedBytes(requiredBytes),
+                    provenance: .declared)
+            }
             switch pendingDestinationVerdict {
             case .fits(let spare):
                 MetricRow(
@@ -349,7 +474,7 @@ struct DestinationPicker: View {
 
     private func capacityVerdict(for volume: VolumeDescriptor) -> SpaceVerdict {
         DownloadDestinationCapacity.verdict(
-            for: volume, requiredBytes: requiredBytes,
+            for: volume, requiredBytes: requiredBytes(on: volume),
             headroomBytes: options.freeSpaceHeadroomBytes, storage: model.storage)
     }
 
@@ -368,9 +493,7 @@ struct DestinationPicker: View {
             switch FolderChooser.run(
                 startingAt: directory,
                 prompt: "Use this destination",
-                message:
-                    "Choose or create the artifact folder for this model. Minirun will write "
-                    + "the downloaded repository files directly into the folder you confirm."
+                message: chooserMessage
             ) {
             case .chose(let url): acceptPickedFolder(url)
             case .cancelled: break
@@ -386,9 +509,7 @@ struct DestinationPicker: View {
             let destination = try DownloadDestinationAuthorization.authorize(
                 url, storage: model.storage)
             destinationSelection.replace(with: destination)
-            selected = model.volumes.first {
-                path(destination.directory, isInside: volumeURL($0))
-            }
+            selected = volume(containing: destination.directory)
             pickError = nil
         } catch let error as StorageError {
             pickError = error.description
@@ -410,17 +531,34 @@ struct DestinationPicker: View {
         // From the `start` call onward the manager/controller closes the grant
         // on every success and failure path; sheet dismissal must not race it.
         pickError = nil
-        Task {
+        isStarting = true
+        Task { @MainActor in
             let started = await download.start(
                 destination: destination.directory, scope: destination.scope,
                 options: options)
+            isStarting = false
             if started {
-                dismiss()
+                // The transfer is running and the model page is about to show
+                // it; the sheet has nothing more to say.
+                if let onStarted { onStarted() } else { dismiss() }
             } else {
                 pickError = download.operationError
                     ?? "The download could not be started with this destination."
             }
         }
+    }
+
+    /// The volume a path lives on: the deepest mount that contains it. Every
+    /// path is inside `/`, so "the first volume that contains it" was always
+    /// the internal disk, and picking a folder on an external drive flipped
+    /// the selection back to Macintosh HD.
+    private func volume(containing directory: URL) -> VolumeDescriptor? {
+        model.volumes
+            .filter { path(directory, isInside: volumeURL($0)) }
+            .max { lhs, rhs in
+                volumeURL(lhs).standardizedFileURL.pathComponents.count
+                    < volumeURL(rhs).standardizedFileURL.pathComponents.count
+            }
     }
 
     private func path(_ candidate: URL, isInside root: URL) -> Bool {

@@ -24,6 +24,14 @@ final class RunController {
     /// matched rather than implying it.
     private(set) var previousDigest: String?
 
+    /// This turn's flight recorder, or nil when none could be opened. Nothing
+    /// here reads it back: it is written for a person with a pulled container
+    /// and `Tools/v41_flash/read_run_trace.py`.
+    private var trace: RunTraceRecorder?
+    /// The block the last phase event named, carried onto the next sample so a
+    /// trace line can say where in the pass the footprint was taken.
+    private var traceBlock: (block: Int, count: Int)?
+
     private var session: RunSession?
     private var eventTask: Task<Void, Never>?
     private var instrumentTask: Task<Void, Never>?
@@ -50,7 +58,9 @@ final class RunController {
         runner: any RunnerFacade, request: RunRequest, linkCeiling: Double?,
         layerCount: Int, storedBytesPerLayer: UInt64, widenedBytesPerLayer: UInt64,
         decodeTokens: (([Int]) -> String)? = nil,
-        previousDigest: String? = nil
+        previousDigest: String? = nil,
+        trace: RunTraceRecorder? = nil,
+        traceStart: RunTraceRecorder.Start? = nil
     ) {
         teardown()
         isStopping = false
@@ -58,6 +68,21 @@ final class RunController {
         statedKnobs = RunKnobs()
         self.previousDigest = previousDigest
         self.decodeTokens = decodeTokens
+        // Before `validate`, so a refusal is a trace with a start and an end
+        // rather than a file that was never opened.
+        self.trace = trace
+        traceBlock = nil
+        if let traceStart { trace?.record(traceStart) }
+        // Before `validate`, before `start`, before the runner has allocated
+        // anything: the silence this covers is preparation, and preparation is
+        // where the phone died. See ``RunTraceRecorder/Heartbeat``.
+        //
+        // Elapsed is measured from the start line's own timestamp, so a timer
+        // line and a telemetry line taken at the same moment agree about when
+        // that moment was.
+        trace?.beginHeartbeat(
+            declaredBudgetBytes: request.memoryBudgetBytes,
+            startedAt: traceStart?.at ?? Date())
 
         var fresh = RunSnapshot()
         fresh.state = .validating
@@ -175,6 +200,11 @@ final class RunController {
     /// run replaces this one, where a stale event applied to the fresh snapshot
     /// would be a bug rather than a record.
     private func teardown() {
+        // A run whose subscription is dropped never reaches a terminal event,
+        // so the trace is closed here with the outcome that is true of it: the
+        // App stopped listening. Left open it would be a file whose last line
+        // is a sample, which is exactly what a kill looks like.
+        closeTrace(abandoned: true)
         session?.cancel()
         eventTask?.cancel()
         instrumentTask?.cancel()
@@ -195,6 +225,7 @@ final class RunController {
     /// stream is allowed to drain its final partial window: both production
     /// runners close it after readers quiesce and before emitting terminal.
     private func releaseCompletedSessionResources() {
+        closeTrace()
         instrumentTask?.cancel()
         instrumentTask = nil
         eventTask = nil
@@ -222,6 +253,11 @@ final class RunController {
 
         case .phase(let phase):
             snapshot.apply(phase)
+            traceBlock = RunTraceRecorder.blockProgress(in: phase.detail)
+            // A phase arrives before the telemetry that confirms it, so the
+            // heartbeat learns the stage from here rather than a sample later.
+            trace?.noteStage(
+                phase.generationStage, phase: phase.name, block: traceBlock)
 
         case .token(let token):
             snapshot.tokens.append(token)
@@ -234,6 +270,7 @@ final class RunController {
             snapshot.elapsed = telemetry.elapsed
             // A breach is a permanent fact about a run: once latched, it stays.
             if !telemetry.budgetRespected { snapshot.budgetBreached = true }
+            recordTrace(telemetry)
 
         case .phaseSummary(let summary):
             // Appended, never merged: two passes of the same kind are two
@@ -302,6 +339,79 @@ final class RunController {
 
     private func apply(_ sample: InstrumentSample) {
         snapshot.merge(sample)
+    }
+
+    // MARK: The flight recorder
+
+    /// One telemetry event, as a trace line.
+    ///
+    /// Both footprints go in — `phys_footprint`, which is what iOS's limit is
+    /// enforced against, and `resident_size`, which is roughly the figure a
+    /// Jetsam report prints — because the first question a kill raises is which
+    /// of them grew, and a trace that carried one of them cannot answer it.
+    private func recordTrace(_ telemetry: RunTelemetry) {
+        guard let trace else { return }
+        trace.noteRunnerState(
+            telemetry, block: traceBlock, tokens: snapshot.tokens.count)
+        trace.record(
+            RunTraceRecorder.Sample(
+                elapsed: telemetry.elapsed,
+                stage: telemetry.generationStage?.rawValue ?? "unknown",
+                phase: telemetry.phase,
+                block: traceBlock?.block,
+                blockCount: traceBlock?.count,
+                footprintBytes: telemetry.footprintBytes,
+                residentBytes: telemetry.residentBytes,
+                budgetedFootprintBytes: telemetry.budgetedFootprintBytes,
+                peakFootprintBytes: telemetry.peakFootprintBytes,
+                entryFootprintBytes: telemetry.entryFootprintBytes,
+                declaredBudgetBytes: telemetry.declaredBudgetBytes,
+                availableBytes: telemetry.availableBytes,
+                mlxActiveBytes: telemetry.mlxActiveBytes,
+                mlxCacheBytes: telemetry.mlxCacheBytes,
+                sentryChecks: telemetry.instrumentation?.budgetSentry?.checks,
+                sentryWorstOvershootBytes: telemetry.instrumentation?.budgetSentry?
+                    .worstOvershootBytes,
+                tokens: snapshot.tokens.count))
+    }
+
+    /// The last line, from whatever terminal state the snapshot is already in.
+    ///
+    /// Driven off the snapshot rather than passed an outcome at each of the
+    /// eight call sites, because the one thing that must never happen is a
+    /// terminal path that forgets to close its trace: a trace whose last line
+    /// is a sample is how a kill reads.
+    private func closeTrace(abandoned: Bool = false) {
+        guard let trace else { return }
+        self.trace = nil
+        let outcome: String
+        var namedError: String?
+        switch snapshot.state {
+        case .finished: outcome = "finished"
+        case .cancelled: outcome = "cancelled"
+        case .halted(let fault):
+            outcome = "halted"
+            namedError = fault.namedError
+        case .refused(let error):
+            outcome = "refused"
+            namedError = error.description
+        case .idle, .validating, .running:
+            outcome = abandoned ? "abandoned" : "incomplete"
+        }
+        // A breach is a permanent fact about a run, so the latched flag decides
+        // it rather than the last sample's own comparison.
+        let respected = snapshot.telemetry.map { telemetry in
+            !snapshot.budgetBreached && telemetry.budgetRespected
+        }
+        trace.record(
+            RunTraceRecorder.End(
+                at: Date(),
+                elapsed: snapshot.elapsed,
+                outcome: outcome,
+                tokens: snapshot.tokens.count,
+                peakFootprintBytes: snapshot.telemetry?.peakFootprintBytes,
+                budgetRespected: respected,
+                namedError: namedError))
     }
 
     private func apply(_ sample: RunPayloadFlowSample, for handle: RunHandleID) {

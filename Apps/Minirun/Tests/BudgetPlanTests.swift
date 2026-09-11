@@ -9,7 +9,25 @@ import XCTest
 /// loud to an operator, so it had better be true.
 final class BudgetPlanTests: XCTestCase {
 
-    private var profile: MemoryProfile { CatalogFixtures.kimiK3.memory }
+    /// **The Mac's K3 profile, named rather than inherited.**
+    ///
+    /// This used to be `CatalogFixtures.kimiK3.memory`, which is priced by
+    /// whichever platform the suite is *hosted* on. Every number below — the
+    /// 2.58 GB working reserve, the 7.31 GB arithmetic floor, the 8.00 GB
+    /// product boundary, the preset ladder — is the Mac's, so on the iPhone
+    /// simulator the whole file asserted one platform's arithmetic against the
+    /// other's policy and thirteen of its K3 tests failed for being hosted
+    /// somewhere else.
+    ///
+    /// Naming the policy is the same move the fixtures already made for V4.1:
+    /// a suite that means the Mac's numbers says so, and is byte-identical
+    /// wherever it runs. That the profile the dial *actually* draws follows
+    /// this platform's policy is the separate claim, asserted on purpose at the
+    /// end of
+    /// ``testRefusalThresholdKeepsProductSafetySeparateFromTheOneTokenRecord``.
+    private var profile: MemoryProfile {
+        CatalogFixtures.k3Memory(policy: K3ProductMemoryBudget.macOSProductPolicy)
+    }
 
     private func plan(
         budget: UInt64, ceiling: UInt64 = 16 << 30, readAhead: Int = 0,
@@ -68,11 +86,28 @@ final class BudgetPlanTests: XCTestCase {
     /// 5.8 GB remains the historical one-token record. Product chat uses a
     /// distinct conservative boundary above its exact second-pass floor, and
     /// the UI must not relabel that safety margin as another completed run.
+    ///
+    /// The last three assertions are the platform half, and they are the ones
+    /// that would have caught a fixture stating one platform's floor on the
+    /// other: whatever this build is, the K3 row the dial draws is priced by
+    /// *this* build's policy, and its refusal threshold is that policy's
+    /// boundary — 8.00 GB on the Mac, the bounded tier's 5.80 GB on a phone.
     func testRefusalThresholdKeepsProductSafetySeparateFromTheOneTokenRecord() {
         XCTAssertEqual(profile.onRecordMinimumBudgetBytes, 5_800_000_000)
         XCTAssertEqual(profile.requiredMinimumBudgetBytes, 8_000_000_000)
         XCTAssertGreaterThan(profile.refusalThresholdBytes, profile.arithmeticFloorBytes)
         XCTAssertEqual(profile.refusalThresholdBytes, 8_000_000_000)
+
+        let drawn = CatalogFixtures.kimiK3.memory
+        let policy = K3ProductMemoryBudget.currentPolicy
+        XCTAssertEqual(drawn.requiredMinimumBudgetBytes, policy.minimumBudgetBytes)
+        XCTAssertEqual(
+            drawn.workingSetReserveBytes,
+            K3ProductMemoryBudget.defaultWorkingReserveBytes(for: policy))
+        XCTAssertEqual(
+            drawn.refusalThresholdBytes,
+            max(policy.minimumBudgetBytes, 5_800_000_000),
+            "the dial refuses at this platform's boundary, never at the other's")
     }
 
     // MARK: Refusals
@@ -169,7 +204,7 @@ final class BudgetPlanTests: XCTestCase {
     /// at all: `BudgetPlan` reads a `PinPlan` off `DeepSeekV4MemoryDial` rather
     /// than computing a composition of its own.
     func testTheV4TiersAreTheKitPlannersFields() throws {
-        let ladder = try XCTUnwrap(CatalogFixtures.deepseekV4Flash.memory.deepSeekV4)
+        let ladder = try XCTUnwrap(CatalogFixtures.deepseekV4Flash.memory.deepSeekLadder)
         for budget: UInt64 in [
             3_000_000_000, 4_000_000_000, 8_000_000_000, v4EveryLayerBudget,
             v4FullResidencyBudget, 12_000_000_000,
@@ -325,13 +360,16 @@ final class BudgetPlanTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(candidate.presetDeficit(.balanced)), balanced - 2_700_000_000)
     }
 
+    /// The sentence says "this model" rather than "V4" because two models draw
+    /// it, and the one it used to name is not always the one running.
     func testV4FloorPinsNothingAndSaysSo() {
         let candidate = v4Plan(budget: 2_000_000_000, ceiling: 34_400_000_000)
         XCTAssertEqual(candidate.pinnedLayerCount, 0)
         XCTAssertEqual(
             candidate.explanation(for: .floor),
-            "The minimum admitted V4 envelope. Nothing is held resident: every layer streams, "
-                + "every token.")
+            "The minimum envelope this model is admitted at. Nothing is held resident: every "
+                + "layer streams, every token.")
+        XCTAssertFalse(candidate.explanation(for: .floor).contains("V4"))
     }
 
     func testRefusedV4BudgetAllocatesNoDisplayedTier() {
@@ -342,6 +380,259 @@ final class BudgetPlanTests: XCTestCase {
         XCTAssertEqual(refused.floorBytes, 0)
         XCTAssertEqual(refused.freeBytes, 0)
         XCTAssertTrue(refused.tiersAccountForBudget)
+    }
+
+    // MARK: V4.1's ladder
+
+    /// V4.1's dial floor: the 5.2 GB transient envelope of a run that **pins**
+    /// (phase 3's stated arm, not the 3.2 GB the floor arm measured with nothing
+    /// resident), the 20-slot routed-expert pool at one expert's half-tile, the
+    /// saturated 512 MiB MLX cache and the stated 256 MiB pin margin.
+    private let v41LadderFloor: UInt64 =
+        5_200_000_000 + 20 * 6_266_880 + 536_870_912 + 268_435_456
+    /// Every dense block, as the loaded `BlockFP8Weights` form — the column the
+    /// dial spends budget on. The phase 3 record's 8,729,882,048 B of resident
+    /// weights at 15 GB is this plus the head below.
+    private let v41EveryBlockResidentBytes: UInt64 = 7_406_054_848
+    /// The ladder's last rung: the `[129280, 5120]` BF16 output head.
+    private let v41OutputHeadBytes: UInt64 = 1_323_827_200
+    /// What a pass re-reads when nothing is pinned, blocks only.
+    private let v41EveryBlockReadBytes: UInt64 = 7_206_792_640
+    private var v41EveryBlockBudget: UInt64 { v41LadderFloor + v41EveryBlockResidentBytes }
+    private var v41FullResidencyBudget: UInt64 { v41EveryBlockBudget + v41OutputHeadBytes }
+
+    /// The Mac's V4.1 profile, named for the reason ``profile`` is: the floor
+    /// these tests assert is 3.4 GB, which is the macOS policy's and not the
+    /// iPhone's 1.9 GB. The phone's own dial is asserted at the byte in
+    /// `DeepSeekV41ProductRuntimeTests`.
+    private var v41Profile: MemoryProfile {
+        CatalogFixtures.deepSeekV41Memory(
+            policy: DeepSeekV41ProductMemoryBudget.macOSProductPolicy)
+    }
+
+    private func v41Plan(budget: UInt64, ceiling: UInt64 = 34_400_000_000) -> BudgetPlan {
+        let entry = CatalogFixtures.deepseekV41Flash
+        return BudgetPlan(
+            model: .deepseekV41Flash, modelName: entry.descriptor.displayName,
+            profile: v41Profile, budgetBytes: budget, maximumNewTokens: 64,
+            deviceCeilingBytes: ceiling, readAheadDepth: 1)
+    }
+
+    /// **V4.1 plans like V4 and not like K3.**
+    ///
+    /// This is the whole defect in one assertion. The strategy used to be
+    /// `.residency` for V4.1, so the plan went to `MemoryDialPlanner` over
+    /// `unknownGeometryCensus` — one zero-sized layer — and every budget bought
+    /// the same nothing.
+    func testV41StreamsRatherThanPlanningResidencyOverAnEmptyCensus() {
+        let candidate = v41Plan(budget: v41FullResidencyBudget)
+        XCTAssertEqual(candidate.strategy, .boundedLayerStreaming)
+        XCTAssertEqual(candidate.profile.layerCount, 40)
+        XCTAssertGreaterThan(candidate.pinnedLayerCount, 0)
+    }
+
+    /// The snap points are V4.1's own rungs: the floor, then each of the forty
+    /// blocks in schedule order, then the output head. Forty-two positions, and
+    /// the last one is the whole ladder.
+    func testV41SnapPointsAreFortyBlocksThenTheHead() throws {
+        let ladder = try XCTUnwrap(v41Profile.deepSeekLadder)
+        let points = v41Profile.snapPoints
+
+        XCTAssertEqual(points.count, 42)
+        XCTAssertEqual(points.first, v41LadderFloor)
+        XCTAssertEqual(points[40], v41EveryBlockBudget)
+        XCTAssertEqual(points.last, v41FullResidencyBudget)
+        XCTAssertEqual(
+            points.last,
+            DeepSeekV41MemoryDialInputs.budgetThatPinsEverything(
+                census: ladder.census, floor: ladder.floor),
+            "the dial's last rung and the kit's own answer must be one number")
+        XCTAssertEqual(points, points.sorted(), "a ladder that is not monotone is not a ladder")
+    }
+
+    /// The dial's tiers are the kit planner's fields for V4.1 as they are for
+    /// V4 — `BudgetPlan` reads a `PinPlan` rather than computing a composition
+    /// of its own.
+    func testTheV41TiersAreTheKitPlannersFields() throws {
+        let ladder = try XCTUnwrap(v41Profile.deepSeekLadder)
+        for budget: UInt64 in [
+            7_000_000_000, 10_000_000_000, v41EveryBlockBudget, v41FullResidencyBudget,
+            20_000_000_000,
+        ] {
+            let candidate = v41Plan(budget: budget)
+            let reference = try DeepSeekV4MemoryDial.plan(
+                budgetBytes: budget, census: ladder.census, floor: ladder.floor,
+                maximumNewTokens: candidate.maximumNewTokens)
+
+            XCTAssertEqual(candidate.pinnedBytes, reference.pinnedBytes, "pinned at \(budget)")
+            XCTAssertEqual(
+                candidate.pinnedLayerCount, reference.pinnedLayers.count, "blocks at \(budget)")
+            XCTAssertEqual(
+                candidate.floorBytes, reference.workingFloorBytes, "floor at \(budget)")
+            XCTAssertEqual(
+                candidate.freeBytes, reference.unusedBudgetBytes, "free at \(budget)")
+            XCTAssertEqual(
+                candidate.stagedBytes, 0, "V4.1 replaces one block's state at a time")
+            XCTAssertEqual(candidate.hotSetBytes, 0)
+            XCTAssertTrue(candidate.tiersAccountForBudget, "tiers ≠ budget at \(budget)")
+        }
+    }
+
+    /// **Balanced on this owner's Mac holds all forty blocks and the head.**
+    ///
+    /// The arms this is chosen against: at the 3.4 GB floor a decode token
+    /// reads 11.72 GB and takes 7.49 s; at 15 GB, with all forty blocks and the
+    /// head pinned, it reads 4.51 GB and takes 3.40 s
+    /// (`docs/experiments/2026-09-11-v41-phase3-runner.md` §3). Before this,
+    /// Balanced *was* the floor.
+    func testV41BalancedHoldsEveryBlockAndTheHeadOnTheOwnersMac() {
+        let candidate = v41Plan(budget: DeepSeekV41ProductMemoryBudget.minimumBudgetBytes)
+
+        XCTAssertEqual(candidate.budget(for: .floor), 3_400_000_000)
+        XCTAssertEqual(candidate.budget(for: .balanced), v41FullResidencyBudget)
+        XCTAssertEqual(candidate.budget(for: .generous), 34_400_000_000)
+        XCTAssertLessThanOrEqual(
+            candidate.budget(for: .balanced), 34_400_000_000 * 3 / 5,
+            "full residency has to be inside the 60 % rule to be chosen by it")
+
+        let balanced = candidate.with(budgetBytes: candidate.budget(for: .balanced))
+        XCTAssertEqual(balanced.pinnedLayerCount, 40)
+        XCTAssertTrue(balanced.pinsOutputHead)
+        XCTAssertEqual(balanced.residentUnitsLabel, "40 of 40 + output head")
+        XCTAssertEqual(
+            balanced.pinnedBytes, v41EveryBlockResidentBytes + v41OutputHeadBytes)
+        XCTAssertEqual(
+            balanced.pinnedBytes, 8_729_882_048,
+            "the resident weights the 15 GB arm actually held")
+        // One embedding row is what a token still reads at the top of the
+        // ladder. The table it comes from is the same 1.32 GB as the head and
+        // is never a rung.
+        XCTAssertEqual(balanced.bytesReadPerToken, 10_240)
+        XCTAssertEqual(balanced.freeBytes, 0, "the last snap point spends the whole ladder")
+        XCTAssertEqual(
+            balanced.bytesSavedPerToken, v41EveryBlockReadBytes + v41OutputHeadBytes)
+        XCTAssertEqual(
+            candidate.explanation(for: .balanced),
+            "All 40 layers + output head resident — about 8.53 GB fewer bytes per token.")
+    }
+
+    /// The floor is the product floor, it pins nothing, and it reads the whole
+    /// deterministic census every token — which is what makes Balanced worth
+    /// stating.
+    func testV41FloorIsTheProductFloorAndPinsNothing() {
+        let candidate = v41Plan(budget: 3_400_000_000)
+
+        XCTAssertEqual(candidate.budget(for: .floor), 3_400_000_000)
+        XCTAssertTrue(candidate.isRunnable)
+        XCTAssertNil(candidate.pinPlan, "3.4 GB is below the dial floor and pins nothing")
+        XCTAssertEqual(candidate.pinnedLayerCount, 0)
+        XCTAssertEqual(candidate.residentUnitsLabel, "None")
+        XCTAssertEqual(
+            candidate.bytesReadPerToken, v41EveryBlockReadBytes + v41OutputHeadBytes + 10_240)
+        XCTAssertEqual(
+            candidate.explanation(for: .floor),
+            "The minimum envelope this model is admitted at. Nothing is held resident: every "
+                + "layer streams, every token.")
+        XCTAssertTrue(candidate.tiersAccountForBudget)
+    }
+
+    /// A budget below the product floor is refused in the dial rather than
+    /// inside the run. The entry used to state no minimum at all.
+    func testV41BelowTheProductFloorIsRefusedByTheDial() throws {
+        let refused = v41Plan(budget: 3_399_999_999)
+
+        XCTAssertFalse(refused.isRunnable)
+        let refusal = try XCTUnwrap(refused.refusal)
+        XCTAssertEqual(refusal.suggestedBudgetBytes, 3_400_000_000)
+        XCTAssertEqual(refused.floorBytes, 0)
+        XCTAssertTrue(refused.tiersAccountForBudget)
+    }
+
+    /// Every block is held before the head is, so a budget that can fund the
+    /// blocks but not the head funds the blocks — and the panel says what the
+    /// next 1.32 GB buys.
+    func testV41HoldsEveryBlockBeforeItHoldsTheHead() {
+        let candidate = v41Plan(budget: v41EveryBlockBudget)
+
+        XCTAssertEqual(candidate.pinnedLayerCount, 40)
+        XCTAssertFalse(candidate.pinsOutputHead)
+        XCTAssertEqual(candidate.residentUnitsLabel, "40 of 40")
+        XCTAssertEqual(candidate.bytesReadPerToken, v41OutputHeadBytes + 10_240)
+        XCTAssertEqual(candidate.nextPinSentence, "+1.32 GB pins the output head.")
+    }
+
+    /// Dragging a V4.1 budget up buys resident blocks, not empty space.
+    func testRaisingAV41BudgetPinsStrictlyMoreBlocks() {
+        var previous: UInt64 = 0
+        var sawAnIncrease = false
+        for budget in stride(
+            from: UInt64(3_400_000_000), through: 14_000_000_000, by: 199_000_000)
+        {
+            let candidate = v41Plan(budget: budget)
+            XCTAssertGreaterThanOrEqual(
+                candidate.pinnedBytes, previous, "the pinned tier shrank at \(budget)")
+            if candidate.pinnedBytes > previous { sawAnIncrease = true }
+            previous = candidate.pinnedBytes
+            XCTAssertTrue(candidate.tiersAccountForBudget, "tiers ≠ budget at \(budget)")
+        }
+        XCTAssertTrue(sawAnIncrease)
+    }
+
+    /// **The phone.** A 4.50 GB process ceiling runs V4.1 at its floor and
+    /// cannot pin a single block: the first rung is the 6.13 GB dial floor plus
+    /// block 2, which is more than the whole device offers. Balanced is shown
+    /// over the ceiling with its deficit rather than quietly becoming the floor,
+    /// and the chat starts at Floor.
+    // Main-actor: the iOS half asks `AppModel.defaultPreset(for:)`, which is
+    // main-actor isolated, and a nonisolated test cannot call it on that platform.
+    @MainActor
+    func testV41OnAPhoneRunsAtTheFloorAndIsToldWhatBalancedWouldCost() throws {
+        let candidate = v41Plan(budget: 3_400_000_000, ceiling: 4_500_000_000)
+        let balanced = candidate.budget(for: .balanced)
+
+        XCTAssertEqual(candidate.budget(for: .floor), 3_400_000_000)
+        XCTAssertTrue(candidate.isRunnable, "the product floor still runs on a phone")
+        XCTAssertEqual(candidate.pinnedLayerCount, 0)
+        XCTAssertFalse(candidate.deviceCannotHostModel)
+        // Not block 0: inside the block rung the ladder ranks by bytes saved per
+        // resident byte, and block 2's KV-source geometry scores 0.9747 against
+        // a plain block's 0.9730.
+        XCTAssertEqual(balanced, v41LadderFloor + 191_312_088, "block 2's residency")
+        XCTAssertLessThan(balanced, v41FullResidencyBudget)
+        XCTAssertEqual(
+            try XCTUnwrap(candidate.presetDeficit(.balanced)), balanced - 4_500_000_000)
+        #if os(iOS)
+            XCTAssertEqual(AppModel.defaultPreset(for: .deepseekV41Flash), .floor)
+        #endif
+    }
+
+    /// **Generous on a phone is the first rung, not the ceiling.**
+    ///
+    /// It used to be the ceiling: a budget that runs, pins nothing, and whose
+    /// own explanation called it "the first pin boundary this ladder has". Both
+    /// halves were wrong. Every byte above the floor buys nothing on a device
+    /// that cannot reach the first rung — the dial floor of a run that *pins* is
+    /// 6.13 GB before a single block is held — so a preset that spent the whole
+    /// device on it was the dial offering a residency it has no rung for, and
+    /// on the phone that is the direction that gets an app killed.
+    ///
+    /// So it reports the rung, which the dial draws disabled with its deficit —
+    /// the same thing Balanced does, because on such a device they are the same
+    /// sentence. On any device that *can* reach the first rung, Generous is the
+    /// ceiling exactly as before.
+    func testV41GenerousOnAPhoneIsTheFirstRungItCannotReach() {
+        let candidate = v41Plan(budget: 3_400_000_000, ceiling: 4_500_000_000)
+        let generous = candidate.budget(for: .generous)
+
+        XCTAssertEqual(generous, v41LadderFloor + 191_312_088)
+        XCTAssertEqual(generous, candidate.budget(for: .balanced))
+        XCTAssertEqual(
+            try? XCTUnwrap(candidate.presetDeficit(.generous)), generous - 4_500_000_000)
+
+        // A Mac reaches the first rung, so its Generous is still the ceiling.
+        let mac = v41Plan(budget: 3_400_000_000, ceiling: 34_400_000_000)
+        XCTAssertEqual(mac.budget(for: .generous), 34_400_000_000)
+        XCTAssertNil(mac.presetDeficit(.generous))
     }
 
     func testStagedTierAppearsOnlyWithReadAheadAndOnlyAboveTheFloor() {
@@ -560,15 +851,18 @@ final class BudgetPlanTests: XCTestCase {
 
     // MARK: The default a new chat starts from
 
-    /// Mac and phone start a V4 chat in different places, and the reason is
-    /// evidence rather than taste: the Mac's ladder reaches full residency well
-    /// inside the device, and no pinned V4 arm has ever been run on a phone.
+    /// Mac and phone start a streamed DeepSeek chat in different places, and the
+    /// reason is evidence rather than taste: the Mac's ladder reaches full
+    /// residency well inside the device, and no pinned arm of either model has
+    /// ever been run on a phone.
     @MainActor
-    func testTheDefaultPresetIsPlatformConditionalForV4Only() {
+    func testTheDefaultPresetIsPlatformConditionalForTheStreamedModels() {
         #if os(macOS)
             XCTAssertEqual(AppModel.defaultPreset(for: .deepseekV4Flash), .balanced)
+            XCTAssertEqual(AppModel.defaultPreset(for: .deepseekV41Flash), .balanced)
         #else
             XCTAssertEqual(AppModel.defaultPreset(for: .deepseekV4Flash), .floor)
+            XCTAssertEqual(AppModel.defaultPreset(for: .deepseekV41Flash), .floor)
         #endif
         XCTAssertEqual(AppModel.defaultPreset(for: .kimiK3), .floor)
         XCTAssertEqual(AppModel.defaultPreset(for: .minimaxH3), .floor)
