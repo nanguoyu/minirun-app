@@ -181,6 +181,41 @@ it, run `xcodegen generate` in `Apps/Minirun`
 Model weights are external artifacts governed by their own licenses; this
 repository grants no rights to any weights.
 
+## More from the author
+
+Two other Mac apps by the same author, made the same way: on-device, private,
+yours.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+<a href="https://otterpix.app/"><img src="https://minirun.dev/more/otterpix.png" width="56" height="56" alt="OtterPix"></a>
+
+**[OtterPix](https://otterpix.app/)**
+
+On-device image AI toolkit for Mac. Convert, compress, crop, and watermark —
+plus AI generate, upscale, cut out, erase, anonymize, and face-restore, all
+running locally with no cloud uploads.
+
+`macOS 14+ · Apple silicon`
+
+</td>
+<td width="50%" valign="top">
+
+<a href="https://dudureminder.app/"><img src="https://minirun.dev/more/dudu_dance.svg" width="56" height="56" alt="DuDuReminder"></a>
+
+**[DuDuReminder](https://dudureminder.app/)**
+
+An elegant menu-bar reminder app for macOS with iCloud sync, quick actions,
+and a privacy-first design — your reminders stay in your own Apple account.
+
+`macOS 13+`
+
+</td>
+</tr>
+</table>
+
 ## Contributing
 
 Contributions are welcome under Apache-2.0. Every commit is signed off under

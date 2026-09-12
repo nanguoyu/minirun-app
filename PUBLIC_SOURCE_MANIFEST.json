@@ -676,7 +676,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "CHANGELOG.md",
-      "sha256": "e4a6fd199620f955600c6d2d0e18917e29ac91135f90620059d67ad0e7800bc9"
+      "sha256": "b2d086a53ffa2d24e8fccf67d3b0e5cbce669c117eab19f6a6a84f6d15ef82df"
     },
     {
       "kind": "file",
@@ -724,13 +724,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "1b2e3ed6004dd06146d25c070d53cfbf0184fcd7029e38237333bfa10f8abed2"
+      "sha256": "207b1f3574d120ee869437f9d3a320528d9f674a94043ca2832c6ecbe5b44037"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "README.zh-CN.md",
-      "sha256": "63cd0d2e4932d21f2fe19acb11d1c66c4f24be910e0873b98cafdeeb168072b2"
+      "sha256": "f8053b8b8a5d8745869ed564b1f1176f971bb9bebbc9e677f0a20f4ab4dc0c4c"
     },
     {
       "kind": "file",

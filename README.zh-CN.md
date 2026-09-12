@@ -136,6 +136,40 @@ Xcode 工程由 `Apps/Minirun/project.yml` 生成；改动后在 `Apps/Minirun` 
 
 模型权重是外部产物，受各自许可证约束；本仓库不授予任何权重的使用权。
 
+## 作者的其他应用
+
+同一作者的另外两款 Mac 应用，做法一样：都在本机运行，数据留在你自己手里。（下面的介绍沿用作者本人发布的英文原文。）
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+<a href="https://otterpix.app/"><img src="https://minirun.dev/more/otterpix.png" width="56" height="56" alt="OtterPix"></a>
+
+**[OtterPix](https://otterpix.app/)**
+
+On-device image AI toolkit for Mac. Convert, compress, crop, and watermark —
+plus AI generate, upscale, cut out, erase, anonymize, and face-restore, all
+running locally with no cloud uploads.
+
+`macOS 14+ · Apple silicon`
+
+</td>
+<td width="50%" valign="top">
+
+<a href="https://dudureminder.app/"><img src="https://minirun.dev/more/dudu_dance.svg" width="56" height="56" alt="DuDuReminder"></a>
+
+**[DuDuReminder](https://dudureminder.app/)**
+
+An elegant menu-bar reminder app for macOS with iCloud sync, quick actions,
+and a privacy-first design — your reminders stay in your own Apple account.
+
+`macOS 13+`
+
+</td>
+</tr>
+</table>
+
 ## 参与贡献
 
 欢迎在 Apache-2.0 下贡献。每个提交都需按 [Developer Certificate of Origin 1.1](DCO) 署名（`git commit -s`），详见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请按 [SECURITY.md](SECURITY.md) 的方式私下报告。

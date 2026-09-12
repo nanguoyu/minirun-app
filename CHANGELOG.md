@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The reference run finished. DeepSeek's own inference code, run over the same
+  517 GB container on a data-centre GPU, answers the same question with the same
+  eighteen tokens Minirun produces on a Mac and on an iPhone. The 0.5 notes said
+  that run had not finished; it has, and it agrees.
+
 ## 0.5 (2026091101) — 2026-09-11
 
 - DeepSeek V4.1 Flash chats on Mac and iPhone. The 517 GB container answers on
