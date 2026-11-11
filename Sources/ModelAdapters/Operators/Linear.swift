@@ -44,7 +44,7 @@ public enum K3Projection {
     }
 }
 
-/// `y = x · W^T` for a float32 weight stored `[outFeatures, inFeatures]`.
+/// `y = x @ W^T` for a float32 weight stored `[outFeatures, inFeatures]`.
 ///
 /// The checkpoint's orientation, and the only correct reading of it: every
 /// `nn.Linear` in the modeling code is `bias=False` and stores its weight

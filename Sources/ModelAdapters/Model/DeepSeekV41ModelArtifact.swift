@@ -600,8 +600,9 @@ public final class DeepSeekV41ModelArtifact: DeepSeekV41WeightSource, @unchecked
                 artifact: artifact, cancellationCheck: cancellationCheck)
             // `attn.wo_a` is FP8 [32, 32] in our container and bfloat16 in the
             // reference, which dequantizes it at conversion time and reads it
-            // through an einsum with no activation quantization at all. This is
-            // the one call that reaches the reference's tensor.
+            // through an einsum (the weight is never re-quantized; the
+            // activation is, in `DeepSeekV41GroupedOutput`). This is the one
+            // call that reaches the reference's tensor.
             let outputDown = try DeepSeekV41FP8Linear.dequantizedToBFloat16(
                 try matrix(.attentionOutputDown))
             let attention = DeepSeekV41AttentionWeights(

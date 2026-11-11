@@ -116,15 +116,15 @@ enum DownloadState: Equatable, Sendable {
         case .resolvingIndex:
             return "Preparing download"
         case .active(let progress):
-            return "Downloading · \(percent(progress))"
+            return "Downloading, \(percent(progress))"
         case .paused(let progress):
-            return "Paused · \(percent(progress))"
+            return "Paused at \(percent(progress))"
         case .interrupted(let progress, _):
-            return "Interrupted · \(percent(progress)) kept"
+            return "Interrupted, \(percent(progress)) kept"
         case .verifying:
             return "Checking downloaded files"
         case .cancelled(let progress):
-            return "Cancelled · \(percent(progress)) kept"
+            return "Cancelled, \(percent(progress)) kept"
         case .ready:
             return "Payload checked"
         case .incomplete(let files, _):
@@ -188,7 +188,7 @@ enum VerificationPhase: Equatable, Sendable {
         case .fileDigests:
             return "Checking file digests against the exact repository version…"
         case .checking(let checked, let total, _, _):
-            return "Checking every file against the published digests · \(MRFormat.grouped(checked)) of \(MRFormat.grouped(total))"
+            return "Checked \(MRFormat.grouped(checked)) of \(MRFormat.grouped(total)) files against the published digests"
         }
     }
 
@@ -260,15 +260,15 @@ struct ProgressSnapshot: Equatable, Sendable {
             firstOverflow || secondOverflow)
     }
 
-    /// `file 388 of 470 · 1.07 GB of this file so far`, or
-    /// `file 388 of 470 · starting` when the current file has no bytes yet.
+    /// `file 388 of 470, 1.07 GB of this file so far`, or
+    /// `file 388 of 470, starting` when the current file has no bytes yet.
     /// The old "resuming at offset N" named a resume the operator never
     /// performed; mid-file, the offset is just how far this file has come.
     var resumeSentence: String? {
         guard currentFilePath != nil else { return nil }
         let position = "file \(filesDone + 1) of \(filesTotal)"
-        guard currentFileOffset > 0 else { return position + " · starting" }
-        return position + " · " + MRFormat.bytesDecimal(currentFileOffset) + " of this file so far"
+        guard currentFileOffset > 0 else { return position + ", starting" }
+        return position + ", " + MRFormat.bytesDecimal(currentFileOffset) + " of this file so far"
     }
 
     static func empty(totalBytes: UInt64, filesTotal: Int) -> ProgressSnapshot {

@@ -58,14 +58,21 @@ import XCTest
 /// checkpoint says is `DeepSeekV41ProductGateTests`' question and stays there.
 final class DeepSeekV41AppChatGateTests: XCTestCase {
 
-    /// The phase 3 arms' answer, identical at the 3.4 GB floor and at 15 GB
-    /// (`docs/experiments/2026-09-11-v41-phase3-runner.md` §3).
+    /// The answer at inference revision 314113f8 (ADR 0022). The ids are the
+    /// phase 3 arms' eighteen and DeepSeek's own run's. The digest moved from
+    /// the `df42c109` arithmetic's `dee6d63cbd476588f2d07f65a53b00fc1570bc25aff737c2de5954cbbbaeb52c`
+    /// to `64e3fc387fd35ae77fb5b24ef4293134dedf66387c38954a5d30a3114a8f63a6`
+    /// with the FP8 round trip before `wo_a` and the every-step index keys,
+    /// and to this one when `sparse_attn` took the kernel's bfloat16 weights,
+    /// rounded tile by tile (2026-11-10,
+    /// `docs/experiments/2026-11-10-v41-mac-vs-reference-divergence.md`). It is
+    /// a Minirun recording, not the reference's `e56773aa...2e53c`.
     static let expectedTokenIDs = [
         671, 6102, 294, 33395, 344, 2619, 56, 35393, 666, 343, 43886, 28, 982, 57, 1594, 12,
         797, 1,
     ]
     static let expectedLogitsDigest =
-        "dee6d63cbd476588f2d07f65a53b00fc1570bc25aff737c2de5954cbbbaeb52c"
+        "c28a895301d9df31faf844229c3e572f3f52f2052a83dde71de856ec51f9f11e"
 
     func testTheBudgetTheDialChoosesProducesThePhaseThreeAnswer() async throws {
         #if !arch(arm64)

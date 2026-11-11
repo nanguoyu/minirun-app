@@ -348,7 +348,9 @@ final class DeepSeekV41ProductRuntimeTests: XCTestCase {
                 statedBudgetBytes: 12_300_000_000,
                 policy: DeepSeekV41ProductMemoryBudget.macOSProductPolicy,
                 availableMemoryBytes: nil),
-            .stated(minimumBudgetBytes: 12_300_000_000, maximumNewTokens: 64))
+            // The stated scale carries the Mac policy's reply ceiling, 256
+            // since 2026-11-10 (it was 64).
+            .stated(minimumBudgetBytes: 12_300_000_000, maximumNewTokens: 256))
     }
 
     /// Both policies state a pinned envelope, and the iPhone's is the Mac's

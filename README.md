@@ -13,10 +13,10 @@ Weights stream from your SSD through a memory budget you set. Free, local, on Ma
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="Download for Mac" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone on TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="Version 0.5" src="https://img.shields.io/badge/version-0.5-3b8cf5"></a>
-  <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
+  <a href="CHANGELOG.md"><img alt="Version 0.6" src="https://img.shields.io/badge/version-0.6-3b8cf5"></a>
+  <img alt="macOS 15+ and iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20and%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20and%20MLX-F05138?logo=swift&logoColor=white">
   <a href="LICENSE"><img alt="License Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-2f8f5b"></a>
   <a href="https://minirun.dev"><img alt="Website" src="https://img.shields.io/badge/minirun.dev-website-e0452f"></a>
 </p>
@@ -198,7 +198,7 @@ On-device image AI toolkit for Mac. Convert, compress, crop, and watermark —
 plus AI generate, upscale, cut out, erase, anonymize, and face-restore, all
 running locally with no cloud uploads.
 
-`macOS 14+ · Apple silicon`
+`macOS 14 or later, Apple silicon`
 
 </td>
 <td width="50%" valign="top">
@@ -210,7 +210,7 @@ running locally with no cloud uploads.
 An elegant menu-bar reminder app for macOS with iCloud sync, quick actions,
 and a privacy-first design — your reminders stay in your own Apple account.
 
-`macOS 13+`
+`macOS 13 or later`
 
 </td>
 </tr>
@@ -230,4 +230,4 @@ Copyright (c) 2026 Dong Wang. Source code is licensed under the
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The license does not grant
 rights to the Minirun name and logo; see [TRADEMARKS.md](TRADEMARKS.md).
 
-Website: [minirun.dev](https://minirun.dev) · Docs: [minirun.dev/docs](https://minirun.dev/docs) · Contact: [minirun.dev/contact](https://minirun.dev/contact)
+Website: [minirun.dev](https://minirun.dev), docs: [minirun.dev/docs](https://minirun.dev/docs), contact: [minirun.dev/contact](https://minirun.dev/contact)

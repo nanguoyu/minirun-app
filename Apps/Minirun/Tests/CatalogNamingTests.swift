@@ -109,13 +109,13 @@ final class CatalogNamingTests: XCTestCase {
     func testTheCatalogSummaryReportsWhatTheScanFoundWithoutAClosedTotal() {
         let summary = ModelCatalogPresentation.scanSummary(
             installedCount: 1, mountedLocationCount: 1, unavailableLocationCount: 2)
-        XCTAssertEqual(summary, "1 local model · 1 location mounted · 2 unavailable")
+        XCTAssertEqual(summary, "1 local model, 1 location mounted, 2 unavailable")
         XCTAssertFalse(summary.contains("of 4"))
 
         XCTAssertEqual(
             ModelCatalogPresentation.scanSummary(
                 installedCount: 0, mountedLocationCount: 2, unavailableLocationCount: 0),
-            "0 local models · 2 locations mounted")
+            "0 local models, 2 locations mounted")
     }
 
     func testModelRowPrefersAnActualLastRunOverAStorageProjection() {
@@ -147,7 +147,7 @@ final class CatalogNamingTests: XCTestCase {
 
         XCTAssertEqual(
             ModelRowPresentation.note(fitness: fitness, lastRunSecondsPerToken: 265),
-            "Runs with limits · Last run 4:25/token")
+            "Runs with limits, last run 4:25/token")
     }
 
     /// A device that cannot run the model says so in the row's own words
@@ -359,7 +359,7 @@ final class CatalogNamingTests: XCTestCase {
             ModelCatalogPresentation.sourceStatus(
                 origin: .cached, isRefreshing: true, hasRefreshError: false,
                 isReviewPreview: false),
-            "Current list · updating")
+            "Updating the list")
     }
 
     func testModelDetailDoesNotRenderEmptyTimingOrHistorySections() throws {

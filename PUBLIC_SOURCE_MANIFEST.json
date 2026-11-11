@@ -58,7 +58,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Minirun.xcodeproj/project.pbxproj",
-      "sha256": "3f43bfc6cbd8439ee1239601f574bf67c6ae26e69124aae67e35495aa3a5395a"
+      "sha256": "f29f8d807746245ab04f78ed2d255d66cdcc6344e4b020934dbf8211a5e5faa3"
     },
     {
       "kind": "file",
@@ -232,25 +232,25 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/AssessmentCard.swift",
-      "sha256": "62d1b58d624a9c6f4cdd7c8088793bf13516d557cf44e9e3ebccfc832f38b8ac"
+      "sha256": "cdf00aab2ccc92b8106602d736c8a622dcf6540f242c1043c829a1cfdd2e830b"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/Instruments.swift",
-      "sha256": "cdfa825139c2309024d4463e63d520ab6f00d40c08136f67d13d312b17884111"
+      "sha256": "5c2912d5a4f3ab5ea2bcd78b221ce69f39a6417ebc3611aaca65084d73e6c0f6"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/Primitives.swift",
-      "sha256": "f74beca9faeba130443fc949dd12a42ea351bd86ba2f9c461ba947ebe682c52b"
+      "sha256": "0d187ff6a1ecd9a31396fbda41cab23f52372c1b60ede19a1cf5a5b7bcfdd114"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/ProductPage.swift",
-      "sha256": "5766f35433f6771bed55a409af58a757854a6e50a2ea1ec88e4c44e15e079428"
+      "sha256": "ddb34a73f36aaa8d1d87679777241b5f0db98f78921c75a5d97aa341cf567b72"
     },
     {
       "kind": "file",
@@ -268,7 +268,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/DesignSystem/Components/Rows.swift",
-      "sha256": "29d1ac94122865e03201c0f454bcb4227b45f0826d4cc6332166e0a404ae46f0"
+      "sha256": "e0f8803059b6013c0cc90438ccb0fc1c8cce08a06ff3362f86c17aaad1adf3ee"
     },
     {
       "kind": "file",
@@ -310,7 +310,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Mocks/MockDecodeRunner.swift",
-      "sha256": "5cd7cac86ac2d0bb1f8d8b650eb64cbcdc29776af00700caa38aad25c5fcdde1"
+      "sha256": "062f93ab6f648586a0eec4408040fc0e8b2cb7b7a052c73bf11ef19ca0a37b82"
     },
     {
       "kind": "file",
@@ -322,13 +322,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Mocks/PreviewTokenizer.swift",
-      "sha256": "d9caea8c4efd6d7360cd6c10b622297440cef3800ca3a60bb786389bd160bb16"
+      "sha256": "ddeccb18692eb4979a33f6904f0657797b7043faa2984973b712fc9d9fc67292"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/AppModel.swift",
-      "sha256": "edc05b17e931909186b1673b888920207e223f757b1abe31dfe286b3292ee465"
+      "sha256": "b903adb932d1bd3899675f7679c5a98a1668a732550083e0cc6c984bdc7c1978"
     },
     {
       "kind": "file",
@@ -340,7 +340,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/Conversation.swift",
-      "sha256": "52f869bdb9cd1fd0e0f1b82140096b9cb2509d3fbf88fa5e9968ed3319597f84"
+      "sha256": "bbef53012eda50040258971bd3db4948e1fc461f8901fc3f54822f5f7c7bd471"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Sources/Model/ConversationSessionStore.swift",
+      "sha256": "07f9a67600f1666d99e0646c36e4717026a16c2ede0d72c6e9b892b259e6fccb"
     },
     {
       "kind": "file",
@@ -352,13 +358,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/DeepSeekV41ProductRuntime.swift",
-      "sha256": "d29aa23593ac0493705ae2210e21b4f940debca95927ed774ed1733915211a7e"
+      "sha256": "ef75ca2fe7b4461bf9064b049c30072d57709b3a22963026f4cf7cca111b1d9f"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/DeepSeekV4ProductRuntime.swift",
-      "sha256": "c1f6a8251b1e883f10009883bbdbf16c3813fb6287f8c0fca7e0286050a4fa08"
+      "sha256": "9222c3a0ceba709b68b35400f562ee71c4dc9cc50dd341ebe5038027f91981b3"
     },
     {
       "kind": "file",
@@ -370,7 +376,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/DownloadState.swift",
-      "sha256": "2f5bbaf72d8e6502aac4895cf9a1f54385dc0625b978cb180ef70b000a224336"
+      "sha256": "a7f5e3e4d6d47c059f36b3a9de43fc4548d8d69c1bf3588fe2e35297f2bb404e"
     },
     {
       "kind": "file",
@@ -382,37 +388,37 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/InstrumentSample.swift",
-      "sha256": "c31bbf662476ea0e87e633f8418fa6c960f164e3a28ccfff5535a304f1bb9b29"
+      "sha256": "06141658771faa44a68c4c40264228ce518659b3a2283ff1db529be86ea51383"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/K3ProductRuntime.swift",
-      "sha256": "6508d359688bdca0621acd7ad95a6bd06ae7de62cad448e3245039b5297a8c44"
+      "sha256": "31b8789f2452581ca9b12f3dc3806b4d33201bdf59c339900b0cc17d09269e4b"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/ModelRuntime.swift",
-      "sha256": "f1ffab2b941fd35e3bf70fbecd840090e929720749e54338fe2c71b41d4f1f6e"
+      "sha256": "e4e1f1ac40fa30149f05570ea91fef681f670691fdedd5dfd93821e058414df7"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/PromptAssembler.swift",
-      "sha256": "4ee5ea9da68952048c21c85e8d9c061e183efff69ea4756ec1420e8171fe16f4"
+      "sha256": "01bc21ad5720b871de0d999ac4d8a7635baa8f3ba64e1df7534a2936b27b083e"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/RunController.swift",
-      "sha256": "bd26e885e0ee2c84fa170d7749f738799c20d40c73e90d756cdfbbfa8d7a68aa"
+      "sha256": "5d2e3c6db1988181243c549b2a70c7e6d57124de80bae903a2882cd4004d9a47"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Model/RunSnapshot.swift",
-      "sha256": "d0d12f718b3575d89a0ace14255e378fef466c0355b162ee34adc2fee68e5ffe"
+      "sha256": "673f60652f1a77930ddddeb9a040bc39d43b7efeac75bd5e485420d2b6f3f63f"
     },
     {
       "kind": "file",
@@ -472,13 +478,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/ConversationSettingsView.swift",
-      "sha256": "5888ae34130638183e46ad225e7cb095b5d7ed72e46df05a24c7ab6c6d833b45"
+      "sha256": "1a9e90ed788ef759ac7514b4344c29c5b3043c93a10a683feaf5002e11487b32"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/ConversationView.swift",
-      "sha256": "7ad9be1e45d735f2d218f0fa88631f7c099edb96f022722e0418f92369dd3f5a"
+      "sha256": "a99364955bf811cfaabbebe6be034453a533c0486f8fa45de1a22772ae0c6756"
     },
     {
       "kind": "file",
@@ -490,7 +496,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/DownloadDetailView.swift",
-      "sha256": "df02b0f98631457ea58283263f5cf51ff8dd76043c037868e307b3a9745c128f"
+      "sha256": "c9b01571336bef3c3e2939c43518c4dc3a12b8c7a4ca73865cfaa359556bc762"
     },
     {
       "kind": "file",
@@ -502,7 +508,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/InstrumentPanelView.swift",
-      "sha256": "1a5abe6dca69c53a9d78b451bb777330e3229bb5c3f284fc5ed77e83647f0203"
+      "sha256": "fd6b73e53547a34e887ae0a0759aee937906f26a17792315b49f68f27a1d1789"
     },
     {
       "kind": "file",
@@ -514,19 +520,19 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/ModelCatalogView.swift",
-      "sha256": "ed148966ca33b1831d51457018235d2debc466eadc4bc000d8d3878731a4c176"
+      "sha256": "5b61ba1f10ab5c024257d648a786c766cac7a73b4823d1cb1bf820be2331d2fc"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/ModelDetailView.swift",
-      "sha256": "c649c0482ad862388a29a3940e616306dfbcf509af35116b6767ea58181fee8e"
+      "sha256": "7d689c06a06db14db6a340455221dec169256beb1723a3121063dd360e201d91"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/RootView.swift",
-      "sha256": "1cab4e3580625e99e71ebe498ad20a52d0d2a74b5283893df5b990eaac4a7a85"
+      "sha256": "94edfdcf34ea79ed2713f33725a3e4aba0846174a7b5ff8d355f24363296c64f"
     },
     {
       "kind": "file",
@@ -538,7 +544,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Sources/Screens/StorageSettingsView.swift",
-      "sha256": "2e923cd5118806582cd4cc2ef6db5126a91b734138eec61a0de8f0379cb24d82"
+      "sha256": "9a499a60525a99913ff1942fb7d41dcae7ea800d55b5962d520733563e9b96fe"
     },
     {
       "kind": "file",
@@ -550,7 +556,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/AssessmentCardTests.swift",
-      "sha256": "e9904af31e7b9987dc089722a45f8f70f03a22d14dfabf17c225140f10758cf5"
+      "sha256": "aed823a7bec4e03292f9992208bd1d4cfa75bf00104fa6a3cc43fc78c3d07ccb"
     },
     {
       "kind": "file",
@@ -562,7 +568,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/CatalogNamingTests.swift",
-      "sha256": "a4b63e13aee0135dd7376c2c570d0ffbb47cb728ed41e33f2ae319f185c6e9a1"
+      "sha256": "e9b1d97fffef7b562dfb0718d28b9eb0f25e8b878cb43debcc97948f3faa8279"
     },
     {
       "kind": "file",
@@ -573,20 +579,26 @@
     {
       "kind": "file",
       "mode": "0644",
+      "path": "Apps/Minirun/Tests/ConversationSessionTests.swift",
+      "sha256": "5107592d08a7eb1c222cfc57c1f1f44d6c7c7f0249c56ca0359564091b325d97"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
       "path": "Apps/Minirun/Tests/ConversationTests.swift",
-      "sha256": "9b1b1dd65c488a745321428fa1847bb2b5db7d8b8fa87879cbba9b0f7e722908"
+      "sha256": "e79830b9ee5cb5c48dd5c71e662ddc36af01fdc33c63166f2b104bc6db7e13a4"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/DeepSeekV41PreparationMemoryTests.swift",
-      "sha256": "7e73dd7575e4374ed9b4da3041718a0a6c083aec58551ed8e2bb93a857f9332c"
+      "sha256": "5af8b870b840bd98e6c5822d0301e3a9286c966473ed44fa0e965005a281fe57"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/DeepSeekV41ProductRuntimeTests.swift",
-      "sha256": "77026fb4cb70d57c1c93f4c6225a341559f8baf35c4d9189622a7ad457b560dd"
+      "sha256": "4f8e7aaa0eca6bb1f937b1334adac9b1604da0a7a11a5c9ae40d9239c97e65e7"
     },
     {
       "kind": "file",
@@ -598,7 +610,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/IOSAccessibilitySemanticsTests.swift",
-      "sha256": "377107cae7b5341fa51461686b2c4c1f66c3377b75bd30ad36f3548ed88b3cb9"
+      "sha256": "d1025e11c8e45eca21c778e97176d22edfa165290cd30f5d14bc894d7e780da3"
     },
     {
       "kind": "file",
@@ -610,25 +622,31 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/InstalledModelsTests.swift",
-      "sha256": "3024e484e384bbcce62a426ccc60677e0c647d6118b88fd74f0dad25599e0352"
+      "sha256": "4d525e648d2de70fc65d56a969ce97593dbd8c279e6be667fafc91bc856bca72"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/InstrumentPanelRenderTests.swift",
-      "sha256": "04ed595523d740c1de03626945ace5bedc49f179aa07f18dd35fa8669f937ddf"
+      "sha256": "d6b797d5bcc9fdc42760ba74ec9790a6f99ca2fed173c19379517246def2d9c3"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/InstrumentPanelStatesRenderTests.swift",
+      "sha256": "a86918726e50191fe5bd8f4504510fe8634d6f8fbededac8e742f8f5c6cadfe0"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/MemoryDialRenderTests.swift",
-      "sha256": "50f974d76b695e65e66482b5a9cdc1cc2ab5a8ebacfb296b8ed69673eaf067e3"
+      "sha256": "129bf1ce462ac925119b036a9f8f0b3b575c1211829f9198d726e532fe04adaf"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/ModelPageTests.swift",
-      "sha256": "1e80455f0d92fd1dfba0ec7b6f15c839998581e65451a1000c9b6d4e67efb574"
+      "sha256": "1eea25443bd150c28c43b4c4bf910d3e971cf87ccf5f9a91410f93cc520077cd"
     },
     {
       "kind": "file",
@@ -639,8 +657,14 @@
     {
       "kind": "file",
       "mode": "0644",
+      "path": "Apps/Minirun/Tests/ReplayStateRenderTests.swift",
+      "sha256": "bd68b8a19485538ae07f6f3a4327b51fa5e43d28cbb38e4102925c0a248c31ea"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
       "path": "Apps/Minirun/Tests/RunPipelineTests.swift",
-      "sha256": "dea96051d3e86f5ae3409628d5ee5730815952ccd37528056d5c57056c2b56b5"
+      "sha256": "fe4772afcbe2fcc69639d7b82f20181dc864867605ed1287893e80edcbb360e5"
     },
     {
       "kind": "file",
@@ -658,7 +682,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/Tests/StorageLocationTests.swift",
-      "sha256": "375c7ebcfb64e1b848608051ad725b6e0a9a83fdc977253187279d96196cc49d"
+      "sha256": "aa131613524208c3e47e571c3ca5881896250933480d052d4b13b43a4190b9c7"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Apps/Minirun/Tests/TextJoinerTests.swift",
+      "sha256": "0a61a7f1fc30ae0874e0133b57370918295ab925e42f2835fe7a4265e3f4b225"
     },
     {
       "kind": "file",
@@ -670,13 +700,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Apps/Minirun/project.yml",
-      "sha256": "55a1bab2a552316080dc0c852aeac8290fdb85c757d888a8e08968d8fcb27624"
+      "sha256": "8bfa902cb8781dd5759a8359ae438aeb3fc6ca9444fbfc456b7201fbf1fb828e"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "CHANGELOG.md",
-      "sha256": "b2d086a53ffa2d24e8fccf67d3b0e5cbce669c117eab19f6a6a84f6d15ef82df"
+      "sha256": "e93e2d61579e961dd57d3f67027464f27d1c8796fafab78d1d49b69bc1a9db3e"
     },
     {
       "kind": "file",
@@ -724,13 +754,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "README.md",
-      "sha256": "207b1f3574d120ee869437f9d3a320528d9f674a94043ca2832c6ecbe5b44037"
+      "sha256": "fdf2fb7c20e6b8f18a12bd777189a5ec40921d4f41d3e7b367d339052ff21d50"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "README.zh-CN.md",
-      "sha256": "f8053b8b8a5d8745869ed564b1f1176f971bb9bebbc9e677f0a20f4ab4dc0c4c"
+      "sha256": "e7567640054196df1e183f5e44896e67a529164c11b8b1122e7f9c57de0e150a"
     },
     {
       "kind": "file",
@@ -772,7 +802,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/BenchScenarios/MacReferenceLogits.swift",
-      "sha256": "b5fc899b83d5d88e4a440e90dcd99a8cfdb4d3fd69a3befa1f6686369623b4a7"
+      "sha256": "a58e1ebb5940ed6b982899ee9845ce881415ca137fe377f29fb0f64dcbcbe8ae"
     },
     {
       "kind": "file",
@@ -796,13 +826,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MLXBridge/AffineWeights.swift",
-      "sha256": "bd4e61dbe09dfe48a83f518fdae9d52b68ebc0873e433d900b82f7e2d781ffcd"
+      "sha256": "165286b8f70d73d1f8b2450e0a14d2e4936a054e9689943adbb7b77b9219a514"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MLXBridge/BlockFP8Weights.swift",
-      "sha256": "d3171f28ef846f32f0e8c11928aa64ea242f6a8616d900b647695be98f84b7fc"
+      "sha256": "7e45d46fc269b18f100fefea5cf955b28a7425c163b169e2350ce45fe1dedfdb"
     },
     {
       "kind": "file",
@@ -814,7 +844,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MLXBridge/MXFP4Matmul.swift",
-      "sha256": "dc41043244aa2e3fb118dcc56b4cdd978b1b91eb90cf496277bbc669de58b425"
+      "sha256": "945a2516b516e9bea714ab4aeaf6fead6a958f5d0a08955c8ea8121ec6913289"
     },
     {
       "kind": "file",
@@ -826,7 +856,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MLXBridge/PagedMXFP4Linear.swift",
-      "sha256": "0b967390bf13d011320de27449816dac3755d42745db4e3e08f91363ffb8117f"
+      "sha256": "6023a77cf0467df88ac0cd428f642964d87b718af51c1ce486f3fc9e4bf91bc8"
     },
     {
       "kind": "file",
@@ -1042,7 +1072,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunKit/Runner/RunnerFacade.swift",
-      "sha256": "09320f790c118ef63ae13ba63f1ebd2ee90b3a20dacea42912d5341f7c731b31"
+      "sha256": "0b521a05d7bc096f8333882f5c4e9153481dd00626c48fce6d1a177c875c6928"
     },
     {
       "kind": "file",
@@ -1084,7 +1114,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunRunners/DeepSeekV41DecodeRunner.swift",
-      "sha256": "4a11ef5645c9800e9f2ec0955fc12354364d81277ae06f67c81042ec31dcafd4"
+      "sha256": "8217933e6453388cdbdbb6f3d6515bd0ea377bd1be3a9cc68ceac930c0f91a72"
     },
     {
       "kind": "file",
@@ -1096,19 +1126,31 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunRunners/DeepSeekV41MemoryDialInputs.swift",
-      "sha256": "c3deecea282652e3a7bb6f024da53985bbbe0042a640841030ef04c2b491f03a"
+      "sha256": "83188ea30bbdcf79004ddef34096ffdc52e7a353ba1b8a1bad9bcfec3096ed7c"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunRunners/DeepSeekV41ProductMemoryBudget.swift",
-      "sha256": "b79304300d5bd0382aff99ff95f1e959cf94312ae8b8b4bb49cea650e50a2a73"
+      "sha256": "ec95f8c0d37d00c33b61984cdcd9fc7d836626a06b6331b69635c72c3354ed7c"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunRunners/DeepSeekV41RunEngine.swift",
-      "sha256": "77567b0de82199057750103a72f6b93c056ea4f2a441126b0698b1007e9dabe8"
+      "sha256": "b8f6cd49ba7b75b875e06d57d5cd0ed7b16f5876b321e7900129230904f17e4f"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV41Session.swift",
+      "sha256": "4f9b8f7018d36d75a67380fa2e406f71e25646065f44c91eabbbc5af0033fa1d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/MinirunRunners/DeepSeekV41TraceDump.swift",
+      "sha256": "1c68b76a0de9401427503d3c53d62ede751a65a557f0aaeca9b967dafd01e4af"
     },
     {
       "kind": "file",
@@ -1126,7 +1168,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/MinirunRunners/DeepSeekV4LogitsDump.swift",
-      "sha256": "3c4b8cf7570111d39ad185b5e1ed10615034a0e002d07ffee4d8caefc38309ad"
+      "sha256": "bf0abf65fa3c66553062f1e30bf4b235b5b5809c653ce9cdd2ac35559b9f97dd"
     },
     {
       "kind": "file",
@@ -1288,7 +1330,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Loading/QwenExpertBackends.swift",
-      "sha256": "10c13a3564c0b0db4f76bc1b6ef8205a33048f46dea97f9eb40674a1d84dc59f"
+      "sha256": "ac63b46d52d78f4973f15d38d26d4f09c7d0a8ec4a5a690151e4541f967db95b"
     },
     {
       "kind": "file",
@@ -1330,7 +1372,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Model/DeepSeekV41DenseBlock.swift",
-      "sha256": "c0f76f151eed3830f423ee28d167bd4b6670f3d6c57d077d293074a67bbfdf71"
+      "sha256": "4f9e361d2ab4943e68434fe6ddc019715e4a6ebc9bc502190933daa1e4c94820"
     },
     {
       "kind": "file",
@@ -1342,7 +1384,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Model/DeepSeekV41EngramHasher.swift",
-      "sha256": "79cdb59e810bbf8fc1a05af006fc5a9279f56b6b33fccb40cd7f94367c0e6de6"
+      "sha256": "b39f6c275ecdf221f1054d79aabe9381270d86dd35b92d4f0904a48095746ad5"
     },
     {
       "kind": "file",
@@ -1354,13 +1396,37 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Model/DeepSeekV41Model.swift",
-      "sha256": "146e6a8af967f3741aa6eb9c01ddd9236343c2e00c81a55e4a4ecb58e46de70d"
+      "sha256": "9d997dfd559cc779d2816a3b95dc2a56a48644a7f1b94a2b280cc89cbdd0e3d7"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Model/DeepSeekV41ModelArtifact.swift",
-      "sha256": "fd6a96ff716da43d38711ea66354878fd2119f2ee0bf2641d0990e4463f861c7"
+      "sha256": "42c515f2e88a67318994611e1365c2b205cc9ce0ef13961b318918d72cf9479b"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV41SessionContinuation.swift",
+      "sha256": "fb505c2d1fc05cc55c0e9cf46932c646154b3c203c8cdffdc627d6848b290249"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV41SessionState.swift",
+      "sha256": "0aef4ce5b48b8661d7bfa7c53f0a14188ff6e1c6fd95fa9311664f1fadddd570"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV41TraceWriter.swift",
+      "sha256": "4861ecfe87bfba71e2910718676582acb1ef37a84accdde6452bb87c610b533e"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Sources/ModelAdapters/Model/DeepSeekV41UpstreamInference.swift",
+      "sha256": "9dd5df589f2ddd87a96c1c2b9755d75ee553cb164e667c88c7e11b17aabc2f91"
     },
     {
       "kind": "file",
@@ -1462,7 +1528,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Model/QwenMoEModel.swift",
-      "sha256": "4f6aa1167df7337d91f59c8aab7463a94a33d0818f4c9e021b32e204eb64d507"
+      "sha256": "97d1fce209337ed24775f88823f98a2ec36c0e0db1b12ee4ce47faa95c96eb73"
     },
     {
       "kind": "file",
@@ -1486,13 +1552,13 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/DeepSeekV41Attention.swift",
-      "sha256": "99f043dd33a8c376b6255398545155d2f810157bddd701538eac6b1f3ae086e2"
+      "sha256": "aaf317f87e4286395645340b12f7b7b35f857c4de251c6b94ff197a806d67641"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/DeepSeekV41AttentionForward.swift",
-      "sha256": "681f92629ebd60b1e8d82a704d538edf568f306165b14d161c1a32fca970882c"
+      "sha256": "5acad96059e5e676ec374a4299b98db86ce7c7c068d10ef57e7a30165faf2e97"
     },
     {
       "kind": "file",
@@ -1522,7 +1588,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/DeepSeekV41FP8Linear.swift",
-      "sha256": "83a04317de7ae2ec75a103ea46c1da2a7e778433a8017db5472258baa87c902d"
+      "sha256": "3218984d9a66ed10d5c14747a71c0be9a31bf31f1fc073cbe2632d3363bbba92"
     },
     {
       "kind": "file",
@@ -1534,7 +1600,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/DeepSeekV41HyperConnections.swift",
-      "sha256": "9dd2650a943465d51d733c43b4d7645d98e886897d9a98ee701f4d97882424e6"
+      "sha256": "53b6f74ed365949c726af25b67527c081d37e3a24fbd970b9e9b55043cd2266b"
     },
     {
       "kind": "file",
@@ -1618,25 +1684,25 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/KDA.swift",
-      "sha256": "cb2712408021bb33e849715970f2dff99a57743a88c562d58f85d736e7ede793"
+      "sha256": "fec8ba8da4296c9e79df6a3263ba8af6c6ca9b775b9c9a569a991a76592fc9a0"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/Linear.swift",
-      "sha256": "013b2121d8f8845217b7034c851ddddc3f3aad85c7713fd7756ff67ca6c6bc7e"
+      "sha256": "c13f42201a40a64f2a48424a570c069807dad03a483815e7614100efa3fecc90"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/MLA.swift",
-      "sha256": "ad81656b6b904f21a88778c486b9578a96c7f93be706bc67e952dac8d65cec3b"
+      "sha256": "ede5ef53e60f85c8d5547179e7c9652643742c2a1b61500abb243a77486a5c3b"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Operators/MoE.swift",
-      "sha256": "a08e4c7e1118a4e4a8d479996a043749e9cbc6a9633fb335f64805e40e52dc6f"
+      "sha256": "ca67b013df8e542e84626183f1aa6a0db4bb77bf384c47be47fcd20626b11ae7"
     },
     {
       "kind": "file",
@@ -1678,7 +1744,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Streaming/ExpertStreamEngine.swift",
-      "sha256": "e7deff89c9c1116de0aee9d824e874bbfbe7b17431335994d5b356b8162f8c05"
+      "sha256": "3a1241468bf454127e83bb2a084ce3ead5bc3a806961561e200dcb61db684023"
     },
     {
       "kind": "file",
@@ -1732,7 +1798,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Sources/ModelAdapters/Tokenizer/DeepSeekV41NoThinkingChat.swift",
-      "sha256": "40e96caae9b1e31960ac674801225fde3ddd96e92a28e5fe4bc45fb44388c8bc"
+      "sha256": "e671db34edc17b0c19c900756632e29f7980c0071fa1c88f2920887f13130745"
     },
     {
       "kind": "file",
@@ -2014,7 +2080,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunKitTests/ArtifactDiscoveryTests.swift",
-      "sha256": "a4e898fc6af310aba6b8494def2d6c1853ea37848904fcc6ba190b47315a62be"
+      "sha256": "8d5c23798bf8ff4a8ea4ccac5a53e2271c42b9268d18eb5cf574a84164cadcca"
     },
     {
       "kind": "file",
@@ -2596,7 +2662,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/DeepSeekV41AppChatGateTests.swift",
-      "sha256": "99bb47faaf25d3d76e8f7a5eb00d4f4983a2c3d760362b7f9129b397bb21ace0"
+      "sha256": "fa0ba628fa3962e1999951ffbc6376240fd248d854c0b0cffe0711d4b739eb06"
     },
     {
       "kind": "file",
@@ -2620,25 +2686,37 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/DeepSeekV41PlatformPolicyTests.swift",
-      "sha256": "491f6231352833ff350caaa30d0d02f76dc21128d09fe3d71c02a5929d1ba3bb"
+      "sha256": "938a3b3ea9e63824efbae7f859b83096b389334cee589ebb55a2a841c46fde2f"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/DeepSeekV41ProductGateTests.swift",
-      "sha256": "423228164c37392e915ce2aed443f4553218819949df8cc90ae2db20f39083bf"
+      "sha256": "e32cc940df13dd9cecceb41ce729766986af02946cc8e67edec189561c8a3fd6"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/DeepSeekV41ReplayEngineTests.swift",
+      "sha256": "b30e79ef2c5f133509d64522028c75c2e4e6bf7dceb613a1b83314f00c8f2c9e"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/DeepSeekV41RunPositionsTests.swift",
-      "sha256": "b2eb75cd294930d173f4e1c1ea6b8968452fbc256980ba7e725fbe1e5cf58bba"
+      "sha256": "0a857bb73c45648840a6c301e9ef83ff6e932eab61365a5c69d01a31b0faec7d"
+    },
+    {
+      "kind": "file",
+      "mode": "0644",
+      "path": "Tests/MinirunRunnersTests/DeepSeekV41SessionGateTests.swift",
+      "sha256": "57fb27cfbb2706e35a44eac20b40fb63f1ee88a921a42148fb2ab2840a854819"
     },
     {
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/DeepSeekV4DecodeRunnerTests.swift",
-      "sha256": "5bd8e9b0d76bfe6f9a7ca6376dc92b8bb6147ad724718f46d0998fd4bce61d0f"
+      "sha256": "3c1d52bd4dfedbe2998b4c2be433513414e41343476f68a901d495d24b506b3d"
     },
     {
       "kind": "file",
@@ -2662,7 +2740,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/MinirunRunnersTests/K3DecodeRunnerLifecycleTests.swift",
-      "sha256": "199e64f7d23a2fbe91be1562c8d70f8b28a1fa229c8217e7ee9bced97cac06e5"
+      "sha256": "d8ed581975d63cda5d44121f903d8acad2ebad39f0dc226a267e5db776865881"
     },
     {
       "kind": "file",
@@ -2698,7 +2776,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/ModelAdaptersTests/SyntheticArtifact.swift",
-      "sha256": "743a09e925ffdce855671dc6b35660149ce4fa10bc5f1061f663de1d257cada0"
+      "sha256": "fde463d1b6a1e1fd821d7e426331661283027c5c4525408d3a43102c6b45f167"
     },
     {
       "kind": "file",
@@ -2794,7 +2872,7 @@
       "kind": "file",
       "mode": "0644",
       "path": "Tests/iOSBenchTests/SecurityScopedBookmarkTests.swift",
-      "sha256": "fa26c9f2a9378b1327cf1146964f7d3a85cb2f4c10facd8761b2b332a893d3b2"
+      "sha256": "97de78cbf96408f21c1e79a14ccb95879d3125ba029c503fe8f2e73372671e47"
     },
     {
       "kind": "file",

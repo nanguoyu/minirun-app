@@ -887,6 +887,37 @@ final class ConversationSettingsInheritanceTests: XCTestCase {
         XCTAssertEqual(fromPhone.settings.memoryBudgetBytes, 3_400_000_000)
     }
 
+    /// **A stated response limit is the operator's, and a higher ceiling does
+    /// not migrate it.** The Mac's V4.1 reply ceiling went from 64 to 256 on
+    /// 2026-11-10. A Mac chat stored with 64 keeps 64; only a new chat starts
+    /// at the runner's ceiling. A chat carried to an iPhone is still held to
+    /// the phone's 64.
+    func testARaisedV41ReplyCeilingKeepsAStoredLimit() {
+        let mac = DeepSeekV41ProductMemoryBudget.macOSProductPolicy
+        XCTAssertEqual(mac.maximumNewTokens, 256)
+        var stored = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 3_400_000_000,
+                maximumNewTokens: 64))
+        XCTAssertFalse(AppModel.migrateDeepSeekV41Conversation(&stored, to: mac))
+        XCTAssertEqual(stored.settings.maximumNewTokens, 64)
+
+        var fromMac = Conversation(
+            settings: ConversationSettings(
+                model: .deepseekV41Flash, memoryBudgetBytes: 1_900_000_000,
+                maximumNewTokens: 256))
+        XCTAssertTrue(
+            AppModel.migrateDeepSeekV41Conversation(
+                &fromMac, to: DeepSeekV41ProductMemoryBudget.iOSProductPolicy))
+        XCTAssertEqual(fromMac.settings.maximumNewTokens, 64)
+
+        // What a new chat starts at is the runner's own ceiling, which is the
+        // policy's: 256 on this Mac build, 64 on an iPhone build.
+        XCTAssertEqual(
+            DeepSeekV41DecodeRunner(scale: .product).capabilities.maximumNewTokens,
+            DeepSeekV41ProductMemoryBudget.currentPolicy.maximumNewTokens)
+    }
+
     /// The same rule for the seed a new chat inherits. Without it the migrated
     /// conversation was the only one fixed, and the *next* chat opened at
     /// 3.4 GB again.
@@ -1783,6 +1814,7 @@ extension AppModel {
         runFault: MockDecodeRunner.Fault? = nil,
         runtimeCensus: ArtifactCensus? = nil,
         runtimeWorkingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil,
+        runtimePromptTokenCeiling: Int? = nil,
         userDefaults: UserDefaults? = nil,
         store: ConversationStore? = nil,
         now: Date = Date()
@@ -1793,6 +1825,7 @@ extension AppModel {
             runFault: runFault,
             runtimeCensus: runtimeCensus,
             runtimeWorkingSetReserveBytes: runtimeWorkingSetReserveBytes,
+            runtimePromptTokenCeiling: runtimePromptTokenCeiling,
             userDefaults: userDefaults,
             store: store,
             now: now)
@@ -1804,6 +1837,7 @@ extension AppModel {
         runFault: MockDecodeRunner.Fault? = nil,
         runtimeCensus: ArtifactCensus? = nil,
         runtimeWorkingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil,
+        runtimePromptTokenCeiling: Int? = nil,
         userDefaults injectedDefaults: UserDefaults? = nil,
         store injectedStore: ConversationStore? = nil,
         now: Date = Date(),
@@ -1830,7 +1864,8 @@ extension AppModel {
             runtimes: .preview(
                 entries: CatalogFixtures.all, fault: runFault,
                 artifactCensus: runtimeCensus,
-                workingSetReserveBytes: runtimeWorkingSetReserveBytes),
+                workingSetReserveBytes: runtimeWorkingSetReserveBytes,
+                promptTokenCeiling: runtimePromptTokenCeiling),
             store: injectedStore ?? ConversationStore(directory: directory),
             userDefaults: defaults,
             storage: storage,

@@ -93,9 +93,41 @@ final class DeepSeekV4LogitsDump: @unchecked Sendable {
     /// a measurement arm, and a full disk must not turn a 100-second run into a
     /// refusal that looks like a model failure.
     func record(position: Int, logits: [Float], tokenID: Int, isPrefillToken: Bool) {
+        write(
+            file: Self.vectorName(position: position),
+            sidecarFile: Self.sidecarName(position: position),
+            position: position, logits: logits, tokenID: tokenID,
+            isPrefillToken: isPrefillToken, promptPass: nil)
+    }
+
+    /// Write the vector of a prompt pass that is not the run's last: a pass
+    /// of a replay or a continued turn, whose argmax is checked and dropped
+    /// because the next id is already known.
+    ///
+    /// `promptPosition` is the zero-based index, in the run's prompt, of the
+    /// id that pass consumed, so `prompt-<p>.bin` predicts prompt id `p + 1`.
+    /// The run's last prompt pass is not one of these: it is generated
+    /// position 0 and goes through ``record(position:logits:tokenID:isPrefillToken:)``.
+    /// A run that prefills its whole prompt in one block writes none.
+    ///
+    /// This is what makes a teacher-forced arm comparable position by position:
+    /// a reference's ids fed as a prompt are one pass each, and every one of
+    /// those passes is a vector a reference run wrote.
+    func recordPromptPass(promptPosition: Int, logits: [Float], tokenID: Int, isBlock: Bool) {
+        write(
+            file: Self.promptVectorName(promptPosition: promptPosition),
+            sidecarFile: Self.promptSidecarName(promptPosition: promptPosition),
+            position: promptPosition, logits: logits, tokenID: tokenID,
+            isPrefillToken: isBlock, promptPass: true)
+    }
+
+    private func write(
+        file: String, sidecarFile: String, position: Int, logits: [Float], tokenID: Int,
+        isPrefillToken: Bool, promptPass: Bool?
+    ) {
         let raw = Self.rawBytes(logits)
         let sidecar = Sidecar(
-            file: Self.vectorName(position: position),
+            file: file,
             position: position,
             tokenID: tokenID,
             isPrefillToken: isPrefillToken,
@@ -107,7 +139,8 @@ final class DeepSeekV4LogitsDump: @unchecked Sendable {
             // so the last position's sidecar and the run JSON must agree — which
             // is what says the dump is of the run it claims to be of.
             sha256: SHA256.hexString(SHA256.hash(raw)),
-            knobs: knobs)
+            knobs: knobs,
+            promptPass: promptPass)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -118,8 +151,7 @@ final class DeepSeekV4LogitsDump: @unchecked Sendable {
             try raw.write(
                 to: directory.appendingPathComponent(sidecar.file), options: .atomic)
             try encoder.encode(sidecar).write(
-                to: directory.appendingPathComponent(
-                    Self.sidecarName(position: position)), options: .atomic)
+                to: directory.appendingPathComponent(sidecarFile), options: .atomic)
         } catch {
             FileHandle.standardError.write(
                 Data(
@@ -130,6 +162,12 @@ final class DeepSeekV4LogitsDump: @unchecked Sendable {
 
     static func vectorName(position: Int) -> String { "logits-\(position).bin" }
     static func sidecarName(position: Int) -> String { "logits-\(position).json" }
+    static func promptVectorName(promptPosition: Int) -> String {
+        "prompt-\(promptPosition).bin"
+    }
+    static func promptSidecarName(promptPosition: Int) -> String {
+        "prompt-\(promptPosition).json"
+    }
 
     /// The bytes a logits vector is both written as and digested over.
     ///
@@ -156,5 +194,8 @@ final class DeepSeekV4LogitsDump: @unchecked Sendable {
         let byteCount: Int
         let sha256: String
         let knobs: [String: String]
+        /// True for a prompt pass's vector (`prompt-<p>.bin`); absent for a
+        /// generated position's, which is every file a dump held before.
+        var promptPass: Bool? = nil
     }
 }

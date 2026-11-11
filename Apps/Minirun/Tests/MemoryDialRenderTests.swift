@@ -57,6 +57,10 @@
                 NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
             let url = directory.appendingPathComponent("\(name).png")
             try png.write(to: url)
+            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+            attachment.name = "\(name).png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
             return url
         }
 

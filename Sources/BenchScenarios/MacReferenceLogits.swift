@@ -29,7 +29,7 @@ import StorageCore
 /// So the metric is the **output-scale relative error**,
 /// `max|ours − ref| / max|ref|`, never elementwise — the same quantity M9D used
 /// against the server oracle, and the one §10.4 mandates at these reduction
-/// lengths. The reference tolerance is `max(1e-5, 4·√K·eps_f32)` at `K = 7168`,
+/// lengths. The reference tolerance is `max(1e-5, 4 * sqrt(K) * eps_f32)` at `K = 7168`,
 /// the hidden width the final projection reduces over.
 ///
 /// Bit-identity is still *reported*, because "the two platforms agreed exactly"
@@ -49,7 +49,7 @@ public enum MacReferenceLogits {
     public static let greedyTokenId = 3372
     public static let top1Top2Gap = 0.8024177551269531
 
-    /// `tolerance(K) = max(1e-5, 4·√K·eps_f32)` — spec §10.4, reduction-length
+    /// `tolerance(K) = max(1e-5, 4 * sqrt(K) * eps_f32)` — spec §10.4, reduction-length
     /// dependent. `K` is the hidden width, 7168.
     public static func tolerance(reductionLength K: Int) -> Double {
         max(1e-5, 4 * Double(K).squareRoot() * Double(Float.ulpOfOne))

@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// In the product-page language (DESIGN I.37) a folder is a row and not a card:
 /// a drive glyph, the folder's name, its path in mono, and one dot with one
-/// sentence — *Mounted · assessed 3 days ago*. What the drive measured is a
+/// sentence — *Mounted, assessed 3 days ago*. What the drive measured is a
 /// definition list with the digits aligned, and everything that acts on the
 /// folder is a text link beside it. The one filled button on the page adds a
 /// folder, because that is the one thing this page is for.
@@ -342,9 +342,9 @@ struct StorageSettingsPage: View {
         switch progress.phase {
         case .choosingTargets: return "choosing files to read"
         case .sequential:
-            return "sequential · \(MRFormat.bytesDecimal(progress.bytesRead))"
+            return "sequential reads, \(MRFormat.bytesDecimal(progress.bytesRead)) so far"
         case .scattered:
-            return "scattered · \(MRFormat.bytesDecimal(progress.bytesRead))"
+            return "scattered reads, \(MRFormat.bytesDecimal(progress.bytesRead)) so far"
         }
     }
 
@@ -393,7 +393,7 @@ struct StorageSettingsPage: View {
                     MRPathLabel(path: volume.mountPath, systemImage: "externaldrive")
                     let traits = StorageFolderPresentation.traits(volume)
                     if !traits.isEmpty {
-                        Text(traits.joined(separator: " · "))
+                        FigureRow(figures: traits, spacing: MRSpace.s3)
                             .font(MRType.prose)
                             .foregroundStyle(MRColor.tertiary)
                     }
@@ -452,11 +452,11 @@ enum StorageFolderStatusPresentation {
         }
         guard let assessedAt else {
             return StorageFolderStatus(
-                tone: .ready, sentence: "Mounted · read rate not measured")
+                tone: .ready, sentence: "Mounted, read rate not measured")
         }
         return StorageFolderStatus(
             tone: .ready,
-            sentence: "Mounted · assessed \(MRFormat.relative(assessedAt, now: now))")
+            sentence: "Mounted, assessed \(MRFormat.relative(assessedAt, now: now))")
     }
 }
 

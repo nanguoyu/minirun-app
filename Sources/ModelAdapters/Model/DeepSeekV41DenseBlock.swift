@@ -247,7 +247,7 @@ public enum DeepSeekV41DenseBlock {
                     phaseAccounting: phaseAccounting,
                     diagnostics: diagnostics)
                 attentionCaches = attended.caches
-                observeAttention?(attended.output[attended.output.shape[0] - 1])
+                observeAttention?(attended.output)
                 return attended.output
             },
             moe: moe,

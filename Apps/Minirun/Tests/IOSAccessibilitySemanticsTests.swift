@@ -39,11 +39,11 @@ final class IOSAccessibilitySemanticsTests: XCTestCase {
         // number was nearest.
         XCTAssertEqual(
             LayerLadderAccessibility.visibleSummary(for: cells),
-            "1 layer done · layer 2 of 3")
+            "layer 2 of 3, 1 done")
         XCTAssertEqual(
             LayerLadderAccessibility.spokenValue(for: cells),
             "1 of 3 layers complete, layer 2 of 3 is computing")
-        XCTAssertTrue(LayerLadderAccessibility.tooltip(for: cells[1]).hasPrefix("layer 2 ·"))
+        XCTAssertTrue(LayerLadderAccessibility.tooltip(for: cells[1]).hasPrefix("layer 2, "))
         XCTAssertFalse(LayerLadderAccessibility.spokenValue(for: cells).contains("layer 1 of 3"))
     }
 

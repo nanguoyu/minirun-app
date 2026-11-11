@@ -203,7 +203,7 @@ final class InstalledModelsTests: XCTestCase {
     }
 
     /// The bug the owner saw after a 517 GB download finished: the same copy
-    /// listed twice under *Copies on this device*, both rows *624 files · Not
+    /// listed twice under *Copies on this device*, both rows *624 files, not
     /// verified*, and one press of *Verify all files* starting two passes over
     /// the same drive.
     ///

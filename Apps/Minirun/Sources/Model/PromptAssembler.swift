@@ -63,3 +63,22 @@ protocol PromptTokenizing: Sendable {
     var provenance: String { get }
     var appliesChatTemplate: Bool { get }
 }
+
+/// A turn refused because the conversation it would extend is longer than the
+/// model's verified prompt ceiling. The prompt is the whole conversation, so
+/// nothing in this chat can make it shorter; a new chat can.
+///
+/// Refused before the transcript or the draft changes, like every preparation
+/// refusal, and never answered by dropping earlier turns: a conversation
+/// silently cut at the front would be a different conversation with the same
+/// title.
+struct ConversationLengthRefusal: Error, Equatable, CustomStringConvertible {
+    let modelName: String
+    let promptTokens: Int
+    let ceiling: Int
+
+    var description: String {
+        "With this message the chat would be \(promptTokens) tokens, and \(modelName) "
+            + "reads at most \(ceiling) in one conversation. Start a new chat to keep going."
+    }
+}

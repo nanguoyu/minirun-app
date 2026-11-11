@@ -38,14 +38,22 @@ final class DeepSeekV41RunPositionsTests: XCTestCase {
             74)
     }
 
-    /// The product's widest chat is 512 prompt tokens and 64 new ones, and it
-    /// is still four orders of magnitude below the checkpoint's ceiling.
+    /// The product's widest chat is each policy's ceilings: 768 prompt tokens
+    /// and 256 new ones on a Mac (it was 512 and 64 until 2026-11-10), 512 and
+    /// 64 on an iPhone. Both are still three orders of magnitude below the
+    /// checkpoint's ceiling.
     func testTheWidestProductChatIsStillFarBelowTheCheckpointsCeiling() {
-        let widest = DeepSeekV41RunPositions.count(
-            promptTokenCount: 512, maximumNewTokens: 64,
-            configuredMaximum: publishedCeiling)
-        XCTAssertEqual(widest, 575)
-        XCTAssertLessThan(widest * 1_000, publishedCeiling)
+        for (policy, expected): (DeepSeekV41ProductMemoryBudget.Policy, Int) in [
+            (DeepSeekV41ProductMemoryBudget.macOSProductPolicy, 1_023),
+            (DeepSeekV41ProductMemoryBudget.iOSProductPolicy, 575),
+        ] {
+            let widest = DeepSeekV41RunPositions.count(
+                promptTokenCount: policy.maximumPromptTokens,
+                maximumNewTokens: policy.maximumNewTokens,
+                configuredMaximum: publishedCeiling)
+            XCTAssertEqual(widest, expected, policy.name)
+            XCTAssertLessThan(widest * 1_000, publishedCeiling, policy.name)
+        }
     }
 
     /// A request for more positions than the checkpoint has is clamped here and

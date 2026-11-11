@@ -80,9 +80,9 @@ enum ModelRowPresentation {
         if fitness.verdict != .noRunner,
             let seconds = lastRunSecondsPerToken, seconds.isFinite, seconds > 0
         {
-            terms.append("Last run \(MRFormat.clock(seconds))/token")
+            terms.append("\(terms.isEmpty ? "Last" : "last") run \(MRFormat.clock(seconds))/token")
         }
-        return terms.isEmpty ? nil : terms.joined(separator: " · ")
+        return terms.isEmpty ? nil : terms.joined(separator: ", ")
     }
 }
 
@@ -101,8 +101,8 @@ struct ModelRowLocation: Equatable {
 ///
 /// Same order of authority as the model page — a transfer in motion speaks
 /// first, and then **the disk speaks last** — in the words a 230-point column
-/// has room for. The page says *Ready on K3NVME · every file matches its
-/// published digest*; the row says *Ready on K3NVME*, and the page is one tap
+/// has room for. The page says *Ready on K3NVME. Every file matches its
+/// published digest.*; the row says *Ready on K3NVME*, and the page is one tap
 /// away for the rest.
 enum ModelListStatusPresentation {
     static func resolve(
@@ -131,24 +131,24 @@ enum ModelListStatusPresentation {
         }
         let place = locations[described.locationPath]?.name
             ?? URL(fileURLWithPath: described.locationPath).lastPathComponent
-        let copies = installations.count > 1 ? " · \(installations.count) copies" : ""
+        let copies = installations.count > 1 ? ", \(installations.count) copies" : ""
         guard locations[described.locationPath]?.isMounted == true else {
             return ModelPageStatus(
                 tone: .attention, sentence: "\(place) is not connected" + copies)
         }
         guard described.isComplete != false else {
             return ModelPageStatus(
-                tone: .attention, sentence: "On \(place) · files are missing" + copies)
+                tone: .attention, sentence: "On \(place), files are missing" + copies)
         }
         switch described.verification {
         case .fullyVerified:
             return ModelPageStatus(tone: .ready, sentence: "Ready on \(place)" + copies)
         case .spotChecked:
             return ModelPageStatus(
-                tone: .attention, sentence: "On \(place) · a sample matched" + copies)
+                tone: .attention, sentence: "On \(place), a sample matched" + copies)
         case .unverified:
             return ModelPageStatus(
-                tone: .attention, sentence: "On \(place) · not verified" + copies)
+                tone: .attention, sentence: "On \(place), not verified" + copies)
         }
     }
 
@@ -186,9 +186,9 @@ enum ModelListStatusPresentation {
         case .resolvingIndex:
             return ModelPageStatus(tone: .moving, sentence: "Preparing the transfer")
         case .active(let progress):
-            return ModelPageStatus(tone: .moving, sentence: "Downloading · \(of(progress))")
+            return ModelPageStatus(tone: .moving, sentence: "Downloading, \(of(progress))")
         case .paused(let progress):
-            return ModelPageStatus(tone: .attention, sentence: "Paused · \(of(progress))")
+            return ModelPageStatus(tone: .attention, sentence: "Paused at \(of(progress))")
         case .verifying:
             return ModelPageStatus(tone: .moving, sentence: "Checking downloaded files")
         case .interrupted(_, let reason):
@@ -499,7 +499,7 @@ struct VolumeRow: View {
             }
 
             if !traits.isEmpty {
-                Text(traits.joined(separator: " · "))
+                FigureRow(figures: traits, spacing: MRSpace.s3)
                     .font(MRType.micro)
                     .foregroundStyle(volume.space.isReadOnly ? MRColor.caution : MRColor.secondary)
             }

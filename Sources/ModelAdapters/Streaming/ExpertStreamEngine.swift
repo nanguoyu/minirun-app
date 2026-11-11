@@ -618,7 +618,7 @@ public final class ExpertStreamEngine {
             finalizer: { lease.release() })
     }
 
-    /// `x · Wᵀ` accumulated over the row bands of one tensor, each band read
+    /// `x @ Wᵀ` accumulated over the row bands of one tensor, each band read
     /// through the pager and released before the next is asked for.
     private func streamedLinear(
         _ x: MLXArray,

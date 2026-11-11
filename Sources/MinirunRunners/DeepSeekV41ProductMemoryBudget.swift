@@ -245,8 +245,8 @@ public enum DeepSeekV41ProductMemoryBudget {
     /// accumulations — 1,204,127,936 B of routed-gather operands over eleven
     /// prompt tokens and 2,010,333,184 B of output-head row windows — and that
     /// both grow with something a product prompt is allowed to make larger. At
-    /// this policy's own 512-token prompt limit the gather term alone would be
-    /// 57,755,566,080 B, which is not a budget any Mac has. Bounding them is
+    /// this policy's own 768-token prompt limit the gather term alone would be
+    /// 86,633,349,120 B, which is not a budget any Mac has. Bounding them is
     /// bit-identical (`DeepSeekV41TransientTermTests`) and leaves 3.2 GB as a
     /// bound the run now comes nowhere near: conservative, not wrong. Making it
     /// *right* needs an arm, and an arm needs the container.
@@ -262,8 +262,8 @@ public enum DeepSeekV41ProductMemoryBudget {
         transientExecutionBytes: 3_200_000_000,
         pinnedTransientExecutionBytes: 5_200_000_000,
         minimumBudgetBytes: 3_400_000_000,
-        maximumPromptTokens: 512,
-        maximumNewTokens: 64,
+        maximumPromptTokens: 768,
+        maximumNewTokens: 256,
         boundsLiveOperands: true,
         liveGatherOperandTokens: nil,
         expertReadAhead: 6,
@@ -401,6 +401,12 @@ public enum DeepSeekV41ProductMemoryBudget {
     /// positions is 5,421,056 B, so the floor is 3.20 + 0.125 + 0.005 =
     /// 3.33 GB, rounded to 3.4.
     ///
+    /// At the Mac's ceilings since 2026-11-10, 768 prompt and 256 new tokens
+    /// (1,023 positions), the state is 8,542,976 B and its one-block
+    /// replacement 1,440,512 B, so the exact requirement is 3,335,321,088 B and
+    /// the 3.4 GB floor holds it with 64,678,912 B of padding. The floor did not
+    /// move.
+    ///
     /// The first stated number was 2.9 GB, from the pre-measurement estimate.
     /// The floor arm added 3.03 GB and was refused by its own budget, which is
     /// the refusal working: a floor is not a guess that a run may exceed.
@@ -411,15 +417,28 @@ public enum DeepSeekV41ProductMemoryBudget {
     /// what a floor is for.
     public static var minimumBudgetBytes: UInt64 { currentPolicy.minimumBudgetBytes }
 
-    /// Prompt and reply ceilings.
+    /// Prompt and reply ceilings: the current platform policy's.
     ///
-    /// 512 and 64 are V4's, kept because the arithmetic that set them is the
-    /// same here and not because they were copied: the exact prefill runs every
-    /// block over every prompt token, and the KV a V4.1 run retains at 576
-    /// positions is 5.6 MB — far from the binding constraint. What binds is
-    /// *prefill time*, not memory: a token's routed set is its own, so a
-    /// 512-token prompt reads its blocks' expert tiles 512 times over.
-    /// `docs/experiments/2026-09-11-v41-phase3-runner.md` measures it.
+    /// The prompt ceiling bounds the whole conversation, because the whole
+    /// conversation is the prompt; the reply ceiling bounds one turn. A run
+    /// reaches at most `prompt + reply - 1` positions.
+    ///
+    /// **macOS, 768 and 256: at most 1,023 positions.** Set by the evidence of
+    /// where the runner has been held to DeepSeek's own code.
+    /// `docs/experiments/2026-11-10-v41-long-sequence.md` ran 700 positions
+    /// teacher-forced against the reference, to sequence position 717 in ADR
+    /// 0023's canonical shape (the first turn one block, then one id a pass),
+    /// and found no step at the two structures that start to drop entries
+    /// below it: the 128-slot window ring at position 128 and the ratio-1
+    /// index Top-K at 512. The next boundary is the ratio-2 Top-K at **1,025**,
+    /// which no arm has crossed, so the Mac stops two positions short of it.
+    /// Memory does not bind: the state grows by 4,480 B a position and the
+    /// 3.4 GB floor still holds it with about 65 MB to spare. Time does: every
+    /// position after the first block is one pass.
+    ///
+    /// **iOS, 512 and 64: at most 575 positions.** V4's, and unchanged until a
+    /// phone arm runs past position 512 at the 1.9 GB floor and the phone can
+    /// continue a long reply in the background.
     public static var maximumPromptTokens: Int { currentPolicy.maximumPromptTokens }
     public static var maximumNewTokens: Int { currentPolicy.maximumNewTokens }
 

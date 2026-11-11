@@ -817,7 +817,7 @@ final class InstrumentEvidenceTests: XCTestCase {
     /// because a complete 517 GB verification ran first and left ~10.8 GB
     /// behind, and a run that had not breached anything.
     ///
-    /// The row read `23.7 GB of 14.9 GB · peak 14.7 GB · 0 MB spare` with the
+    /// The row read `23.7 GB of 14.9 GB`, `peak 14.7 GB`, `0 MB spare` with the
     /// bar full, because it took the absolute figure as the current value and
     /// the added-basis budget as its ceiling. Two measurements, one sentence.
     func testTheFootprintRowReadsOnTheBasisTheRuntimeDeclared() {
@@ -834,8 +834,8 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry)
         XCTAssertEqual(row.title, "Footprint added")
-        XCTAssertEqual(row.label, "12.9 GB of 14.9 GB · peak 14.7 GB · 200 MB spare")
-        XCTAssertEqual(row.caption, "Process 23.7 GB · 10.8 GB before this run")
+        XCTAssertEqual(row.figures, ["12.9 GB of 14.9 GB", "peak 14.7 GB", "200 MB spare"])
+        XCTAssertEqual(row.caption, ["Process 23.7 GB", "10.8 GB before this run"])
         XCTAssertFalse(row.breached)
         XCTAssertLessThan(
             row.fillFraction, 1,
@@ -850,10 +850,10 @@ final class InstrumentEvidenceTests: XCTestCase {
     /// scope and the MLX cache.
     ///
     /// Observed on the owner's Mac: the row that had read
-    /// `13.0 GB of 14.9 GB · peak 14.7 GB · 176 MB spare` /
-    /// `Process 23.8 GB · 10.8 GB before this run` finished reading
-    /// `0 MB of 14.9 GB · peak 14.7 GB · 170 MB spare` under
-    /// `Process 161 MB · 10.8 GB before this run`. Both process figures are
+    /// `13.0 GB of 14.9 GB`, `peak 14.7 GB`, `176 MB spare` over
+    /// `Process 23.8 GB`, `10.8 GB before this run` finished reading
+    /// `0 MB of 14.9 GB`, `peak 14.7 GB`, `170 MB spare` over
+    /// `Process 161 MB`, `10.8 GB before this run`. Both process figures are
     /// true and neither is a delta — teardown clears the MLX cache, and the
     /// 10.8 GB floor went with it — but they are a whole teardown apart, so
     /// subtracting the floor from the later one produced a run that had used
@@ -873,12 +873,12 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry)
         XCTAssertEqual(row.title, "Footprint added")
-        XCTAssertEqual(row.label, "peak 14.7 GB of 14.9 GB · 170 MB spare")
+        XCTAssertEqual(row.figures, ["peak 14.7 GB of 14.9 GB", "170 MB spare"])
         XCTAssertFalse(
-            row.label.contains("0 MB of"),
+            row.figures.contains { $0.contains("0 MB of") },
             "a finished run must not report that it added nothing")
         XCTAssertEqual(
-            row.caption, "Process 161 MB after the run · 10.8 GB before this run")
+            row.caption, ["Process 161 MB after the run", "10.8 GB before this run"])
         XCTAssertEqual(
             row.fillFraction, Double(14_730_000_000) / Double(14_900_000_000), accuracy: 0.0001,
             "the bar shows where the run got to, not a released working set")
@@ -900,10 +900,10 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry)
         XCTAssertEqual(row.title, "Footprint")
-        XCTAssertEqual(row.label, "peak 7.15 GB of 8.00 GB · 850 MB spare")
-        XCTAssertEqual(row.caption, "Process 161 MB after the run")
+        XCTAssertEqual(row.figures, ["peak 7.15 GB of 8.00 GB", "850 MB spare"])
+        XCTAssertEqual(row.caption, ["Process 161 MB after the run"])
         XCTAssertFalse(
-            row.caption?.contains("before this run") ?? true,
+            row.caption?.contains { $0.contains("before this run") } ?? true,
             "no floor was declared, so there is no earlier figure to name")
     }
 
@@ -919,7 +919,7 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry, latchedBreach: true)
         XCTAssertTrue(row.breached)
-        XCTAssertEqual(row.label, "peak 15.2 GB of 14.9 GB · 0 MB spare")
+        XCTAssertEqual(row.figures, ["peak 15.2 GB of 14.9 GB", "0 MB spare"])
         XCTAssertEqual(row.fillFraction, 1, accuracy: 0.0001)
         XCTAssertTrue(row.spoken.hasSuffix("the stated budget was exceeded"))
     }
@@ -939,7 +939,7 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry)
         XCTAssertEqual(row.title, "Footprint")
-        XCTAssertEqual(row.label, "7.15 GB of 8.00 GB · peak 7.15 GB · 850 MB spare")
+        XCTAssertEqual(row.figures, ["7.15 GB of 8.00 GB", "peak 7.15 GB", "850 MB spare"])
         XCTAssertNil(row.caption)
     }
 
@@ -974,7 +974,7 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         let row = gauge(for: telemetry, latchedBreach: true)
         XCTAssertTrue(row.breached)
-        XCTAssertEqual(row.label, "15.2 GB of 14.9 GB · peak 15.2 GB · 0 MB spare")
+        XCTAssertEqual(row.figures, ["15.2 GB of 14.9 GB", "peak 15.2 GB", "0 MB spare"])
         XCTAssertEqual(row.fillFraction, 1, accuracy: 0.0001)
         XCTAssertTrue(row.spoken.hasSuffix("the stated budget was exceeded"))
     }
@@ -1002,7 +1002,7 @@ final class InstrumentEvidenceTests: XCTestCase {
 
     // MARK: Three counts, three subjects
 
-    /// The stage header said `Token 15 · 30 complete · layer 31 of 40` beside a
+    /// The stage header said `Token 15`, `30 complete`, `layer 31 of 40` beside a
     /// pace line that said `13 tokens`. All three are right and none of them
     /// counted the same thing; the bare `30` took its subject from the nearest
     /// noun, which was a token. Each says what it counts now.
@@ -1015,7 +1015,7 @@ final class InstrumentEvidenceTests: XCTestCase {
         }
         XCTAssertEqual(
             LayerLadderAccessibility.visibleSummary(for: cells),
-            "30 layers done · layer 31 of 40")
+            "layer 31 of 40, 30 done")
 
         var snapshot = RunSnapshot()
         snapshot.state = .running
@@ -1036,9 +1036,9 @@ final class InstrumentEvidenceTests: XCTestCase {
         let panel = InstrumentPanelView(snapshot: snapshot)
         XCTAssertEqual(panel.stageTitle, "Decode")
         XCTAssertEqual(panel.stageDetail, "Token 15", "the token being generated")
-        XCTAssertEqual(panel.layerProgress, "30 layers done · layer 31 of 40")
+        XCTAssertEqual(panel.layerProgress, "layer 31 of 40, 30 done")
         XCTAssertEqual(
-            panel.rateProvenance, "7:00 decode · 13 tokens done",
+            panel.rateProvenance, "13 tokens done in 7:00 of decode",
             "the pace line counts completed decode passes, which is not the token index")
         XCTAssertEqual(snapshot.decodeTokensCompleted, 13)
     }
@@ -1079,9 +1079,9 @@ final class InstrumentEvidenceTests: XCTestCase {
             hits: 0, misses: 0, evictions: 0, rejectedAdmissions: 0,
             pinnedExpertCount: 0)
         XCTAssertNil(emptyCache.hitRate, "0/0 is not a cache hit rate")
-        XCTAssertEqual(emptyCache.line, "No expert requests yet")
+        XCTAssertEqual(emptyCache.figures, ["No expert requests yet"])
         XCTAssertEqual(emptyCache.accessibilityLine, "no expert requests yet")
-        XCTAssertFalse(emptyCache.line.contains("%"))
+        XCTAssertFalse(emptyCache.figures.joined().contains("%"))
 
         var zeroBeforeAnyToken = RunSnapshot()
         zeroBeforeAnyToken.telemetry = telemetry(
@@ -1189,7 +1189,7 @@ final class InstrumentEvidenceTests: XCTestCase {
         XCTAssertEqual(snapshot.accountingStatus, .notReported)
         XCTAssertEqual(try XCTUnwrap(snapshot.stalls?.overlapFraction), 0.8, accuracy: 0.0001)
         XCTAssertNil(snapshot.cache?.hitRate)
-        XCTAssertEqual(snapshot.cache?.line, "No expert requests yet")
+        XCTAssertEqual(snapshot.cache?.figures, ["No expert requests yet"])
         XCTAssertNil(snapshot.bytesPerToken, "a zero-token denominator must stay unknown")
 
         snapshot.merge(
@@ -1467,9 +1467,9 @@ final class InstrumentEvidenceTests: XCTestCase {
 
         XCTAssertTrue(cache.isDisabled)
         XCTAssertNil(cache.hitRate)
-        XCTAssertEqual(cache.line, "Off · 132,960 loaded from storage")
+        XCTAssertEqual(cache.figures, ["Off, 132,960 loaded from storage"])
         XCTAssertEqual(cache.accessibilityLine, "off, 132960 loaded from storage")
-        XCTAssertFalse(cache.line.contains("0.0%"))
+        XCTAssertFalse(cache.figures.joined().contains("0.0%"))
     }
 
     func testEnabledCacheWithRequestsCanTruthfullyReportZeroReuse() throws {
@@ -1478,8 +1478,8 @@ final class InstrumentEvidenceTests: XCTestCase {
             rejectedAdmissions: 2, pinnedExpertCount: 0)
 
         XCTAssertEqual(try XCTUnwrap(cache.hitRate), 0, accuracy: 0.0001)
-        XCTAssertTrue(cache.line.contains("0.0% hit rate"))
-        XCTAssertTrue(cache.line.contains("8 loaded"))
+        XCTAssertTrue(cache.figures.contains("0.0% hit rate"))
+        XCTAssertTrue(cache.figures.contains("8 loaded"))
     }
 
     func testFailedIdentityWinsOverOtherValidOrMissingMetrics() {

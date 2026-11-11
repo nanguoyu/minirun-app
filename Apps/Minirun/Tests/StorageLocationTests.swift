@@ -413,7 +413,7 @@ final class StorageLocationTests: XCTestCase {
         XCTAssertEqual(transfer.reason, "Waiting for catalog metadata.")
         let globalTransfer = try XCTUnwrap(model.transfersForPresentation.first)
         XCTAssertEqual(globalTransfer.job, state.job)
-        XCTAssertEqual(globalTransfer.state.compactTransferStatus, "Paused · 0%")
+        XCTAssertEqual(globalTransfer.state.compactTransferStatus, "Paused at 0%")
         XCTAssertFalse(globalTransfer.hasCatalogEntry)
         XCTAssertTrue(model.downloadJobs(for: state.plan.model).isEmpty)
         XCTAssertFalse(model.canRetryDownloadRecovery)
@@ -1981,7 +1981,7 @@ final class StorageLocationTests: XCTestCase {
             files: 5, expectedFiles: 5, verification: .unverified)
         XCTAssertEqual(
             ModelArtifactPresentation.status(unverified),
-            "5 files · Not verified")
+            "5 files, not verified")
     }
 
     // MARK: - It has to survive a relaunch

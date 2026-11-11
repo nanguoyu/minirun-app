@@ -602,6 +602,26 @@ struct FlowRow: Layout {
     }
 }
 
+/// Figures that belong to one reading, each its own element.
+///
+/// A row of three numbers used to be one string glued with middle dots, which
+/// left the reader to work out where one figure ended and the next began, and
+/// broke a figure in half when the column was narrow. Each figure is now its
+/// own text at its natural width, separated by space, and the one that does not
+/// fit moves to the next line whole. Font and colour come from the caller.
+struct FigureRow: View {
+    let figures: [String]
+    var spacing: CGFloat = MRSpace.s4
+
+    var body: some View {
+        FlowRow(spacing: spacing, lineSpacing: MRSpace.s0) {
+            ForEach(Array(figures.enumerated()), id: \.offset) { _, figure in
+                Text(figure).lineLimit(1)
+            }
+        }
+    }
+}
+
 // MARK: - Explanations that do not shout
 
 /// An ⓘ that holds a paragraph.

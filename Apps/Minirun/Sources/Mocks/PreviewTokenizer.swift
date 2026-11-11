@@ -54,7 +54,8 @@ extension ModelRuntimeRegistry {
     static func preview(
         entries: [CatalogEntry], fault: MockDecodeRunner.Fault? = nil,
         artifactCensus: ArtifactCensus? = nil,
-        workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil
+        workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil,
+        promptTokenCeiling: Int? = nil
     ) -> ModelRuntimeRegistry {
         let runtimes = entries.compactMap { entry -> ModelRuntime? in
             // This is fixture routing, not product capability. The product
@@ -68,7 +69,8 @@ extension ModelRuntimeRegistry {
                 inspectArtifact: { _ in
                     PreparedArtifactRuntimeInspection(
                         census: artifactCensus,
-                        workingSetReserveBytes: workingSetReserveBytes)
+                        workingSetReserveBytes: workingSetReserveBytes,
+                        promptTokenCeiling: promptTokenCeiling)
                 }
             ) { conversation in
                 let runner = MockDecodeRunner(entry: entry)

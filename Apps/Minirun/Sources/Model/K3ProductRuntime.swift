@@ -76,9 +76,9 @@ final class K3ProductTokenizer: VerifiedPromptTokenizing, @unchecked Sendable {
             sourceRevision: tokenizer.sourceRevision,
             sha256: tokenizer.sha256)
         self.provenance =
-            "Kimi K3 no-thinking chat · artifact \(evidence.repository.repoID)@"
-            + "\(evidence.repository.revision.prefix(12)) · tokenizer \(tokenizer.sourceRepo)@"
-            + "\(tokenizer.sourceRevision.prefix(12)) · SHA-256 \(tokenizer.sha256.prefix(12))…"
+            "Kimi K3 no-thinking chat, artifact \(evidence.repository.repoID)@"
+            + "\(evidence.repository.revision.prefix(12)), tokenizer \(tokenizer.sourceRepo)@"
+            + "\(tokenizer.sourceRevision.prefix(12)), SHA-256 \(tokenizer.sha256.prefix(12))…"
     }
 
     func encode(turns: [PromptTurn]) throws -> [Int] {

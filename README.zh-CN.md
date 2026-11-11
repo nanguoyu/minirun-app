@@ -13,10 +13,10 @@
   <a href="https://downloads.minirun.dev/Minirun.dmg"><img alt="下载 Mac 版" src="https://img.shields.io/badge/Download-Mac%20DMG-111111?logo=apple&logoColor=white"></a>
   <a href="https://testflight.apple.com/join/QuYTybjV"><img alt="iPhone 版 TestFlight" src="https://img.shields.io/badge/iPhone-TestFlight-0d84ff?logo=apple&logoColor=white"></a>
   <a href="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/nanguoyu/minirun-app/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="CHANGELOG.md"><img alt="版本 0.5" src="https://img.shields.io/badge/version-0.5-3b8cf5"></a>
-  <img alt="macOS 15+ · iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%C2%B7%20iOS%2018%2B-555555?logo=apple&logoColor=white">
+  <a href="CHANGELOG.md"><img alt="版本 0.6" src="https://img.shields.io/badge/version-0.6-3b8cf5"></a>
+  <img alt="macOS 15+ 和 iOS 18+" src="https://img.shields.io/badge/platform-macOS%2015%2B%20%E5%92%8C%20iOS%2018%2B-555555?logo=apple&logoColor=white">
   <img alt="Apple silicon" src="https://img.shields.io/badge/silicon-M1%20and%20later-555555">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%C2%B7%20MLX-F05138?logo=swift&logoColor=white">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-SwiftUI%20%E5%92%8C%20MLX-F05138?logo=swift&logoColor=white">
   <a href="LICENSE"><img alt="Apache-2.0 许可" src="https://img.shields.io/badge/license-Apache--2.0-2f8f5b"></a>
   <a href="https://minirun.dev"><img alt="官网" src="https://img.shields.io/badge/minirun.dev-website-e0452f"></a>
 </p>
@@ -152,7 +152,7 @@ On-device image AI toolkit for Mac. Convert, compress, crop, and watermark —
 plus AI generate, upscale, cut out, erase, anonymize, and face-restore, all
 running locally with no cloud uploads.
 
-`macOS 14+ · Apple silicon`
+`macOS 14 或更高版本，Apple 芯片`
 
 </td>
 <td width="50%" valign="top">
@@ -164,7 +164,7 @@ running locally with no cloud uploads.
 An elegant menu-bar reminder app for macOS with iCloud sync, quick actions,
 and a privacy-first design — your reminders stay in your own Apple account.
 
-`macOS 13+`
+`macOS 13 或更高版本`
 
 </td>
 </tr>
@@ -178,4 +178,4 @@ and a privacy-first design — your reminders stay in your own Apple account.
 
 Copyright (c) 2026 Dong Wang。源码采用 [Apache License 2.0](LICENSE)，另见 [NOTICE](NOTICE) 与 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。该许可不授予 Minirun 名称与标志的使用权，见 [TRADEMARKS.md](TRADEMARKS.md)。
 
-官网：[minirun.dev](https://minirun.dev) · 文档：[minirun.dev/docs](https://minirun.dev/docs) · 联系：[minirun.dev/contact](https://minirun.dev/contact)
+官网：[minirun.dev](https://minirun.dev)，文档：[minirun.dev/docs](https://minirun.dev/docs)，联系：[minirun.dev/contact](https://minirun.dev/contact)

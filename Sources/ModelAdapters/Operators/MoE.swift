@@ -20,7 +20,7 @@ public enum ExpertProjection: String, CaseIterable, Sendable {
 /// nothing else. Making the gather the boundary is what lets the bit-identity
 /// gate be fair: both sides run the same tile loop with the same operands.
 public protocol RoutedExpertBackend: AnyObject {
-    /// `out[t, j, :] = W[expertIds[t, j]] · x[t, :]`
+    /// `out[t, j, :] = W[expertIds[t, j]] @ x[t, :]`
     ///
     /// - Parameters:
     ///   - x: `[tokens, inFeatures]`.
@@ -156,7 +156,7 @@ public enum K3Router {
 /// ```text
 /// 1. topk_idx, topk_weight = gate(h)          // on the FULL hidden state
 /// 2. z = routed_expert_down_proj(h)           // hidden -> latent 512
-/// 3. y = Σ_j topk_weight[j] · expert_j(z)     // in the latent
+/// 3. y = Σ_j topk_weight[j] * expert_j(z)     // in the latent
 /// 4. y = routed_expert_norm(y)                // RMSNorm on the SUM, latent width
 /// 5. y = routed_expert_up_proj(y)             // latent -> hidden
 /// 6. y = y + shared_experts(h)                // ORIGINAL hidden, bypasses the latent
@@ -246,7 +246,7 @@ public enum K3MoE {
             layer: layer, projection: .w2, expertIds: flatIds
         ).reshaped([tokens, topK, config.routedExpertHiddenSize])
 
-        // Σ_j weight[j] · out[j], summed over the slot axis in float32.
+        // Σ_j weight[j] * out[j], summed over the slot axis in float32.
         let weighted = expertOutputs * expandedDimensions(selection.weights, axis: -1)
         let routedSum = sum(weighted, axis: 1)
 

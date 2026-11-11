@@ -225,6 +225,8 @@ enum DeepSeekV41RunPositions {
 /// `configuration` would be running a different model than the reference.
 struct DeepSeekV41ArtifactWorkloadFactory: DeepSeekV41RunWorkloadFactory {
     let requiresRuntimeAuthority = true
+    /// Nil for every run that does not carry a conversation across turns.
+    var session: DeepSeekV41SessionOptions?
 
     func prepare(
         request: RunRequest, knobs: DeepSeekV41EffectiveKnobs,
@@ -360,7 +362,11 @@ struct DeepSeekV41ArtifactWorkloadFactory: DeepSeekV41RunWorkloadFactory {
             knobs: knobs, cancellation: cancellation, sentry: sentry,
             endOfSentenceIDs: [endOfSentence],
             positionCount: DeepSeekV41RunPositions.count(
-                for: request, configuredMaximum: config.maximumPositionCount))
+                for: request, configuredMaximum: config.maximumPositionCount),
+            session: session,
+            sessionBinding: session.map { _ in
+                DeepSeekV41SessionBinding(authority: authority, indexData: indexData)
+            })
         // The step that killed three chats, and the reason it is named: this is
         // where forty blocks of rotary tables are built. See
         // ``DeepSeekV41RunPositions``.
@@ -399,6 +405,15 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
     private let cancellation: DeepSeekV4RunCancellation
     private let sentry: DeepSeekV41BudgetSentry
     private var beganExecution = false
+    private let session: DeepSeekV41SessionOptions?
+    private let sessionBinding: DeepSeekV41SessionBinding?
+    private var sessionAccount: DeepSeekV41SessionRecord?
+    private let checkpointer: DeepSeekV41SessionCheckpointer?
+    var sessionRecord: DeepSeekV41SessionRecord? {
+        guard var record = sessionAccount else { return nil }
+        checkpointer?.fill(&record)
+        return record
+    }
 
     let blockCount: Int
     let vocabularySize: Int
@@ -427,9 +442,19 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
         cancellation: DeepSeekV4RunCancellation,
         sentry: DeepSeekV41BudgetSentry,
         endOfSentenceIDs: Set<Int>,
-        positionCount: Int
+        positionCount: Int,
+        session: DeepSeekV41SessionOptions? = nil,
+        sessionBinding: DeepSeekV41SessionBinding? = nil
     ) throws {
         let config = artifact.config
+        self.session = session
+        self.sessionBinding = sessionBinding
+        self.sessionAccount = session.map { _ in DeepSeekV41SessionRecord() }
+        self.checkpointer = session.flatMap { options in
+            options.writeTo.map {
+                DeepSeekV41SessionCheckpointer(url: $0, cadence: options.checkpoint)
+            }
+        }
         self.artifact = artifact
         self.authority = authority
         self.knobs = knobs
@@ -475,6 +500,14 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
             // still fails closed: the head refuses a non-finite window and the
             // greedy pick refuses a non-finite vector.
             diagnostics: .off)
+        // Off unless `MINIRUN_V41_DUMP_TRACE` names a directory; see
+        // ``DeepSeekV41TraceDump``.
+        self.model?.trace = DeepSeekV41TraceDump.claim(metadata: [
+            "source_repository": artifact.sourceRepository,
+            "source_revision": artifact.sourceRevision,
+            "inference_revision": DeepSeekV41UpstreamInference.revision,
+            "position_count": String(positionCount),
+        ])
     }
 
     var readAccountingSnapshot: DeepSeekV4ReadAccountingSnapshot? {
@@ -524,15 +557,67 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
         guard let model else {
             throw RunError.artifactNotReady("the V4.1 workload was already released")
         }
+        state?.release()
+        state = nil
         let result = try model.prefill(
             tokenIDs: tokenIDs,
             decodePositionLimit: decodePositionLimit,
             cancellationCheck: cancellationCheck,
             onBlockCompleted: onBlockCompleted)
         state = result.state
+        checkpointIfAsked()
         return DeepSeekV41WorkloadStep(
             tokenID: result.step.greedyTokenID, logits: result.step.logits,
             completedBlocks: result.step.completedBlocks)
+    }
+
+    func schedulePrompt(
+        tokenIDs: [Int], decodePositionLimit: Int
+    ) throws -> DeepSeekV41PromptSchedule {
+        guard let session else {
+            return try DeepSeekV41PromptSchedule.make(
+                prompt: tokenIDs, firstBlockTokens: tokenIDs.count, restored: nil)
+        }
+        guard let model else {
+            throw RunError.artifactNotReady("the V4.1 workload was already released")
+        }
+        var restored: DeepSeekV41GenerationState?
+        var unusable: String?
+        if let url = session.restoreFrom, let binding = sessionBinding {
+            sessionAccount?.restoredFrom = url.path
+            if FileManager.default.fileExists(atPath: url.path) {
+                let started = MonotonicClock.now()
+                do {
+                    restored = try DeepSeekV41SessionState.restore(
+                        from: url, model: model, binding: binding,
+                        decodePositionLimit: decodePositionLimit,
+                        firstBlockTokens: session.firstTurnTokenCount)
+                } catch {
+                    unusable = "the session state was not restored: \(error)"
+                }
+                sessionAccount?.restoreSeconds = MonotonicClock.seconds(since: started)
+            } else {
+                unusable = "no session state was found"
+            }
+        }
+        let schedule: DeepSeekV41PromptSchedule
+        do {
+            schedule = try DeepSeekV41PromptSchedule.make(
+                prompt: tokenIDs,
+                firstBlockTokens: session.firstTurnTokenCount ?? tokenIDs.count,
+                restored: restored.map { ($0.tokenIDs, $0.firstBlockTokens) },
+                unusableReason: unusable)
+        } catch {
+            restored?.release()
+            throw RunError.promptNotSupported(reason: "\(error)")
+        }
+        if case .continued = schedule.path {
+            state = restored
+        } else {
+            restored?.release()
+        }
+        sessionAccount?.record(schedule, statedFirstTurn: session.firstTurnTokenCount != nil)
+        return schedule
     }
 
     func decode(
@@ -555,6 +640,7 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
                 cancellationCheck: cancellationCheck,
                 onBlockCompleted: onBlockCompleted)
             state = advancing
+            checkpointIfAsked()
             return DeepSeekV41WorkloadStep(
                 tokenID: step.greedyTokenID, logits: step.logits,
                 completedBlocks: step.completedBlocks)
@@ -577,6 +663,7 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
         releasedPinsHead = artifact?.pinsOutputHead ?? releasedPinsHead
         releasedTileReads = artifact?.expertTileReads ?? releasedTileReads
         releasedTileHits = artifact?.expertTileHits ?? releasedTileHits
+        writeSessionSnapshotIfAsked()
         state?.release()
         state = nil
         model = nil
@@ -584,6 +671,33 @@ final class DeepSeekV41ArtifactWorkload: DeepSeekV41RunWorkload {
         artifact = nil
         authority = nil
         Self.reclaimTransientMemory()
+    }
+
+    /// After a completed pass: written only when the session asks for every
+    /// pass.
+    private func checkpointIfAsked() {
+        guard let checkpointer, let model, let state, let binding = sessionBinding else {
+            return
+        }
+        checkpointer.passCompleted(positions: state.position) { url in
+            try DeepSeekV41SessionState.snapshot(state, model: model, binding: binding, to: url)
+        }
+    }
+
+    /// At release, and only for a state that stands at a pass boundary: a
+    /// pass that threw has already dropped it, and whatever an earlier pass
+    /// wrote stays on disk.
+    private func writeSessionSnapshotIfAsked() {
+        guard let checkpointer, let binding = sessionBinding else { return }
+        guard let model, let state else {
+            checkpointer.released(positions: nil) { _ in
+                preconditionFailure("nothing is written without a state")
+            }
+            return
+        }
+        checkpointer.released(positions: state.position) { url in
+            try DeepSeekV41SessionState.snapshot(state, model: model, binding: binding, to: url)
+        }
     }
 
     func prepareForExecution() throws {
@@ -626,6 +740,9 @@ final class DeepSeekV41RunEngine {
     private let capabilities: RunnerCapabilities
     private let knobs: DeepSeekV41EffectiveKnobs
     private let enforcesProductMemoryPolicy: Bool
+    /// Whether the product plan holds the prompt and reply to the policy's
+    /// ceilings. Always true outside a measurement arm that tests them.
+    private let enforcesProductTokenCeilings: Bool
     private let handle: RunHandleID
     private let cancellation: DeepSeekV4RunCancellation
     private let factory: any DeepSeekV41RunWorkloadFactory
@@ -638,9 +755,11 @@ final class DeepSeekV41RunEngine {
     private var thermalTrail: [ThermalTransition] = []
     private let sentry: DeepSeekV41BudgetSentry
     private var tokenIDs: [Int] = []
+    /// Which prompt id a replay is on; nil outside a replay.
+    private var replay: RunReplayProgress?
     private var passSeconds: [Double] = []
     private var lastLogits: [Float] = []
-    private let logitsDump = DeepSeekV41LogitsDump.shared
+    private let logitsDump: DeepSeekV4LogitsDump?
     private var workload: (any DeepSeekV41RunWorkload)?
     private var environment: EnvironmentReport?
     private var sourceRepository = ""
@@ -665,15 +784,19 @@ final class DeepSeekV41RunEngine {
         request: RunRequest, capabilities: RunnerCapabilities,
         knobs: DeepSeekV41EffectiveKnobs,
         enforcesProductMemoryPolicy: Bool,
+        enforcesProductTokenCeilings: Bool = true,
         handle: RunHandleID,
         cancellation: DeepSeekV4RunCancellation,
         factory: any DeepSeekV41RunWorkloadFactory,
+        logitsDump: DeepSeekV4LogitsDump? = DeepSeekV41LogitsDump.shared,
         continuation: AsyncThrowingStream<RunEvent, Error>.Continuation
     ) {
         self.request = request
         self.capabilities = capabilities
         self.knobs = knobs
         self.enforcesProductMemoryPolicy = enforcesProductMemoryPolicy
+        self.enforcesProductTokenCeilings = enforcesProductTokenCeilings
+        self.logitsDump = logitsDump
         self.handle = handle
         self.cancellation = cancellation
         self.factory = factory
@@ -762,7 +885,7 @@ final class DeepSeekV41RunEngine {
                 maximumNewTokens: request.maximumNewTokens,
                 mlxCacheBytes: cacheBytes,
                 pinnedDeterministicBytes: 0,
-                enforcesProductLimits: true)
+                enforcesProductLimits: enforcesProductTokenCeilings)
             productMemoryPlan = plan
             requiredBudget = plan.requiredBudgetBytes
         } else {
@@ -850,21 +973,73 @@ final class DeepSeekV41RunEngine {
 
         phaseName = "prefill"
         generationStage = .prefill
+        let schedule = try prepared.schedulePrompt(
+            tokenIDs: promptTokenIDs, decodePositionLimit: positionLimit.partialValue)
+        if schedule.path == .replayed {
+            continuation.yield(
+                .log(
+                    "V4.1 replay: \(schedule.block.count)-id first block, then "
+                        + "\(schedule.passes.count) one-id passes; "
+                        + (schedule.fallbackReason ?? "no session state")))
+        } else if case .continued(let reused) = schedule.path {
+            continuation.yield(
+                .log(
+                    "V4.1 continued: \(reused) positions restored, "
+                        + "\(schedule.passes.count) one-id passes"))
+        }
+        replay = schedule.path == .replayed
+            ? RunReplayProgress(token: schedule.block.count, of: schedule.promptTokens) : nil
         continuation.yield(
             .phase(
                 RunPhase(
                     name: phaseName, generationStage: generationStage,
-                    fraction: 0, detail: "reading prompt")))
+                    fraction: 0, detail: "reading prompt", replay: replay)))
         phaseBoundary = prepared.phaseMetricsSnapshot
         let prefillStarted = MonotonicClock.now()
-        let first = try autoreleasepool {
-            try prepared.prefill(
-                tokenIDs: promptTokenIDs,
-                decodePositionLimit: positionLimit.partialValue,
-                // The sentry's check, so the model's own per-block seam is a
-                // budget check too and not only a cancellation one.
-                cancellationCheck: sentry.check,
-                onBlockCompleted: observeBlock)
+        // The prompt's passes: the block, if there is one, and then one pass
+        // per remaining id. Only the last pass's step is the run's first token;
+        // every earlier one is checked like a decode pass and then dropped.
+        var first: DeepSeekV41WorkloadStep?
+        // Which prompt id `first` consumed, for the logits dump.
+        var firstPromptPosition = schedule.block.count - 1
+        if !schedule.block.isEmpty {
+            first = try autoreleasepool {
+                try prepared.prefill(
+                    tokenIDs: schedule.block,
+                    decodePositionLimit: positionLimit.partialValue,
+                    // The sentry's check, so the model's own per-block seam is
+                    // a budget check too and not only a cancellation one.
+                    cancellationCheck: sentry.check,
+                    onBlockCompleted: observeBlock)
+            }
+        }
+        let consumedBeforePasses = schedule.promptTokens - schedule.passes.count
+        for (index, token) in schedule.passes.enumerated() {
+            if let earlier = first {
+                try promptPassCompleted(
+                    earlier, promptPosition: firstPromptPosition,
+                    isBlock: index == 0 && !schedule.block.isEmpty)
+            }
+            if replay != nil {
+                replay = RunReplayProgress(
+                    token: consumedBeforePasses + index + 1, of: schedule.promptTokens)
+            }
+            continuation.yield(
+                .phase(
+                    RunPhase(
+                        name: phaseName, generationStage: generationStage,
+                        fraction: 0, detail: "reading prompt", replay: replay)))
+            first = try autoreleasepool {
+                try prepared.decode(
+                    tokenID: token,
+                    cancellationCheck: sentry.check,
+                    onBlockCompleted: observeBlock)
+            }
+            firstPromptPosition = consumedBeforePasses + index
+        }
+        replay = nil
+        guard let first else {
+            throw RunError.artifactNotReady("the V4.1 prompt schedule ran no pass")
         }
         try record(
             first, seconds: MonotonicClock.seconds(since: prefillStarted), prefill: true)
@@ -967,6 +1142,37 @@ final class DeepSeekV41RunEngine {
             maximumNewTokens: request.maximumNewTokens)
     }
 
+    /// A prompt pass that is not the last: held to the same completeness check
+    /// as a token, sampled, budgeted and given a cancellation boundary, and
+    /// then dropped. Nothing about it is a generated token.
+    private func promptPassCompleted(
+        _ step: DeepSeekV41WorkloadStep, promptPosition: Int, isBlock: Bool
+    ) throws {
+        try requireComplete(step)
+        logitsDump?.recordPromptPass(
+            promptPosition: promptPosition, logits: step.logits, tokenID: step.tokenID,
+            isBlock: isBlock)
+        let telemetry = sample(phase: phaseName)
+        recordThermal(
+            telemetry.thermalState, at: telemetry.elapsed, phase: telemetry.phase)
+        continuation.yield(.telemetry(telemetry))
+        enforceBudget(telemetry)
+        try cancellation.check()
+    }
+
+    private func requireComplete(_ step: DeepSeekV41WorkloadStep) throws {
+        guard step.completedBlocks == workload?.blockCount,
+            step.tokenID >= 0,
+            step.tokenID < (workload?.vocabularySize ?? 0),
+            !step.logits.isEmpty,
+            step.logits.count == workload?.vocabularySize,
+            step.logits.allSatisfy(\.isFinite)
+        else {
+            throw RunError.artifactNotReady(
+                "the V4.1 generation step returned incomplete blocks, token, or logits")
+        }
+    }
+
     private func record(
         _ step: DeepSeekV41WorkloadStep, seconds: Double, prefill: Bool
     ) throws {
@@ -1044,7 +1250,7 @@ final class DeepSeekV41RunEngine {
                 RunPhase(
                     name: phaseName, generationStage: generationStage,
                     fraction: Double(completed) / Double(total),
-                    detail: "block \(completed)/\(total)")))
+                    detail: "block \(completed)/\(total)", replay: replay)))
         continuation.yield(.telemetry(telemetry))
         enforceBudget(telemetry)
     }
@@ -1065,7 +1271,7 @@ final class DeepSeekV41RunEngine {
         let telemetry = sample(phase: step, stage: .preparing, folds: false)
         continuation.yield(
             .log(
-                "V4.1 preparing: \(step) · footprint "
+                "V4.1 preparing: \(step), footprint "
                     + ByteSize.format(telemetry.footprintBytes)))
         continuation.yield(.telemetry(telemetry))
     }
@@ -1103,8 +1309,11 @@ final class DeepSeekV41RunEngine {
         let decodeAccounting = completed.flatMap { completed in
             prefillBytes.flatMap { completed.subtracting($0) }
         }
+        // A replay names the prompt id it is on in the sample's phase, so a
+        // trace read without the phase events still says how far it got.
+        let label = replay.map { "\(phase), replay token \($0.token) of \($0.of)" } ?? phase
         return RunTelemetry(
-            at: Date(), elapsed: elapsed, phase: phase,
+            at: Date(), elapsed: elapsed, phase: label,
             tokensPerSecond: decodeTokens > 0 && decodeSeconds > 0
                 ? Double(decodeTokens) / decodeSeconds : nil,
             generationStage: stage ?? generationStage,
@@ -1198,6 +1407,8 @@ final class DeepSeekV41RunEngine {
             publicationRevision: publication?.revision ?? "",
             sourceRepository: sourceRepository,
             sourceRevision: sourceRevision,
+            inferenceRepository: DeepSeekV41UpstreamInference.repository,
+            inferenceRevision: DeepSeekV41UpstreamInference.revision,
             promptTokenIDs: {
                 if case .tokenIDs(let ids) = request.prompt { return ids }
                 return []
@@ -1229,7 +1440,8 @@ final class DeepSeekV41RunEngine {
             pinnedOutputHead: terminalPinsHead,
             expertTileReads: tileReads,
             expertTileHits: tileHits,
-            teardown: teardown)
+            teardown: teardown,
+            session: workload?.sessionRecord)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
@@ -1249,6 +1461,8 @@ final class DeepSeekV41RunEngine {
         }
         var lines = [
             "source \(sourceRepository)@\(sourceRevision)",
+            "inference \(DeepSeekV41UpstreamInference.repository)@"
+                + DeepSeekV41UpstreamInference.revision,
             "thermal " + thermalTrail.map(\.state.rawValue).joined(separator: " -> "),
             "teardown: workload released before terminal event",
         ]
@@ -1356,6 +1570,11 @@ final class DeepSeekV41RunEngine {
         let publicationRevision: String
         let sourceRepository: String
         let sourceRevision: String
+        /// The upstream inference code this run's arithmetic implements. Not
+        /// the same revision as the weights' source: DeepSeek can change
+        /// `inference/model.py` without touching a weight (ADR 0022).
+        let inferenceRepository: String
+        let inferenceRevision: String
         let promptTokenIDs: [Int]
         let requestedNewTokens: Int
         let generatedTokenIDs: [Int]
@@ -1391,5 +1610,9 @@ final class DeepSeekV41RunEngine {
         let expertTileReads: Int
         let expertTileHits: Int
         let teardown: TeardownRecord
+        /// Present only for a run given ``DeepSeekV41SessionOptions``: which
+        /// path the prompt took, why a full prefill was chosen, and what was
+        /// written at release.
+        let session: DeepSeekV41SessionRecord?
     }
 }

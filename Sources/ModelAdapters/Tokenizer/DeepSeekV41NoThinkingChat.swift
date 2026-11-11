@@ -4,7 +4,8 @@ import Foundation
 ///
 /// Taken from the container's own `encoding.py` at
 /// `deepseek-ai/DeepSeek-V4.1-Flash@df42c109`, which the publication carries
-/// beside the weights. The set is V4's four plus `<｜System｜>`: V4.1 supports a
+/// beside the weights, and unchanged for this subset at `314113f8`
+/// (`Tests/Fixtures/deepseek-v41/chat-encoding.json`). The set is V4's four plus `<｜System｜>`: V4.1 supports a
 /// *mid-conversation* system message, which is rendered with its own token and
 /// which — this is the part a port gets wrong — then behaves like a user message
 /// for the purpose of appending the assistant header.
@@ -30,12 +31,14 @@ public enum DeepSeekV41ChatControl: String, CaseIterable, Sendable {
 ///
 /// ```text
 /// bos
+/// consecutive user messages are first merged into one, their texts joined
+/// by a blank line ("\n\n") -- `merge_tool_messages`, which runs on every
+/// conversation, not only on one with tools
 /// for each message:
-///     system  at index 0 : content                     (no token: the file
-///                                                       emits <｜System｜> only
-///                                                       for a reasoning-effort
-///                                                       prefix or a *mid*
-///                                                       conversation system)
+///     system  at index 0 : <｜System｜> content        (`render_message` puts
+///                                                       the token first when
+///                                                       the opening message is
+///                                                       a system one)
 ///     system  later      : <｜System｜> content
 ///     user               : <｜User｜> content
 ///     assistant          : content + eos
@@ -43,12 +46,19 @@ public enum DeepSeekV41ChatControl: String, CaseIterable, Sendable {
 ///     follows or one is being asked for:  <｜Assistant｜> </think>
 /// ```
 ///
-/// which, for a single user turn, is exactly what V4's renderer produces —
+/// which, for a single user turn, is exactly what V4's renderer produces:
 /// `bos`, `<｜User｜>`, the text, `<｜Assistant｜>`, `</think>`. That the two
 /// agree at one turn is a fact about the templates and not an assumption: this
-/// type states V4.1's rules independently, and
-/// `DeepSeekV41ChatPromptTests` holds the rendering to the container's own
-/// `encoding-test_output_*.txt` fixtures where they cover this subset.
+/// type states V4.1's rules independently, and `DeepSeekV41ChatPromptTests`
+/// holds the rendering to what upstream's own `encoding.py` renders, at both
+/// `df42c109` and `314113f8`, for every conversation in
+/// `Tests/Fixtures/deepseek-v41/chat-encoding.json`
+/// (`Tools/v41_flash/make_chat_encoding_fixture.py`).
+///
+/// Message text is never allowed to carry a control. `encoding.py` renders a
+/// typed `<｜User｜>` into its prompt string as text, and the tokenizer that
+/// reads that string would turn it into the control; ``encode(using:)``
+/// refuses instead, through ``DeepSeekV4Vocabulary/encode(_:)``.
 public struct DeepSeekV41NoThinkingChatPrompt: Equatable, Sendable {
     public enum Role: String, Sendable {
         case system
@@ -99,16 +109,32 @@ public struct DeepSeekV41NoThinkingChatPrompt: Equatable, Sendable {
         return ids
     }
 
+    /// `merge_tool_messages`: a user message that follows a user message is
+    /// folded into it, the texts joined by a blank line. It runs before
+    /// rendering at both upstream revisions, for every conversation.
+    private var merged: [Message] {
+        var result: [Message] = []
+        for message in messages {
+            if message.role == .user, let last = result.last, last.role == .user {
+                result[result.count - 1] = Message(
+                    role: .user, content: last.content + "\n\n" + message.content)
+            } else {
+                result.append(message)
+            }
+        }
+        return result
+    }
+
     private var segments: [Segment] {
         var result: [Segment] = [.control(.beginningOfSentence)]
+        let messages = merged
         for (index, message) in messages.enumerated() {
             switch message.role {
             case .system:
-                // `render_message` emits the token for a mid-conversation
-                // system message and *not* for one that opens the
-                // conversation — the leading `<｜System｜>` there is the
-                // reasoning-effort prefix's, which no-thinking mode never has.
-                if index > 0 { result.append(.control(.system)) }
+                // `render_message` emits the token for every system message:
+                // at index 0 as `SYSTEM_SP_TOKEN if index == 0 and (... or
+                // role == "system")`, later as the mid-conversation marker.
+                result.append(.control(.system))
                 if !message.content.isEmpty { result.append(.text(message.content)) }
             case .user:
                 result.append(.control(.user))

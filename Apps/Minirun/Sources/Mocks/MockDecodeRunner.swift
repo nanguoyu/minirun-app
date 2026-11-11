@@ -240,7 +240,7 @@ final class MockDecodeRunner: InstrumentedRunner, @unchecked Sendable {
                     artifactRoot: request.artifact.root.path, startedAt: startedAt)))
         continuation.yield(.log("stated budget \(MRFormat.bytesDecimal(request.memoryBudgetBytes))"))
         continuation.yield(
-            .log("artifact \(request.artifact.root.lastPathComponent) · \(layerCount) layers"))
+            .log("artifact \(request.artifact.root.lastPathComponent), \(layerCount) layers"))
 
         var ladder = (0..<layerCount).map { index in
             LayerCell(
@@ -554,7 +554,7 @@ final class MockDecodeRunner: InstrumentedRunner, @unchecked Sendable {
                 + "\(MRFormat.bytesDecimal(request.memoryBudgetBytes))",
             lines: [
                 "data read \(MRFormat.bytesDecimal(bytesRead))",
-                "model layers \(MRFormat.bytesDecimal(deterministicBytes)) · experts "
+                "model layers \(MRFormat.bytesDecimal(deterministicBytes)), experts "
                     + "\(MRFormat.bytesDecimal(expertBytes))",
             ],
             gitRevision: BuildRevision.current)

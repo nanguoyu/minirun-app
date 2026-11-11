@@ -312,6 +312,7 @@ final class K3DecodeRunnerLifecycleTests: XCTestCase {
 
     func testSyntheticRuntimeCompletesTheProductTokenCeiling() async throws {
         let requested = K3RunFixture.maximumNewTokens
+        let entry = try XCTUnwrap(ProcessFootprint.current()?.footprintBytes)
         let run = await DrainedRun.drain(
             try K3RunFixture.runner().start(
                 K3RunFixture.request(
@@ -323,10 +324,23 @@ final class K3DecodeRunnerLifecycleTests: XCTestCase {
         XCTAssertEqual(run.finished?.tokenIDs.count, requested)
         XCTAssertTrue(run.finished?.finalTelemetry.bytes.isBalanced == true)
         XCTAssertTrue(run.finished?.budgetRespected == true)
+        // K3 enforces the absolute footprint, so its record carries no entry
+        // figure and `peakFootprintBytes` is the whole test process: earlier
+        // tests in the suite leave it near 616 MB before this run starts. The
+        // claim is about what this run adds, so it is bounded as the run's
+        // high-water mark above the footprint it started from.
+        //
+        // Measured on macOS 27.0.1: 20 MB in a fresh process (MLX comes up
+        // inside the run), 7 MB once a previous test has warmed it, while the
+        // 64 passes read 570 MB. 64 MB is three times the cold figure, and a
+        // run that kept a ninth of what it read, or one megabyte a pass, would
+        // break it.
+        let peak = try XCTUnwrap(run.finished?.peakFootprintBytes)
+        let growth = peak > entry ? peak - entry : 0
         XCTAssertLessThan(
-            try XCTUnwrap(run.finished?.peakFootprintBytes),
-            256 << 20,
-            "64 recurrent product passes grew beyond the tiny fixture's bounded working set")
+            growth,
+            UInt64(64 << 20),
+            "64 recurrent product passes grew \(growth) B beyond the tiny fixture's bounded working set")
     }
 
     func testProductRunConsumesFullyVerifiedRootedDescriptors() async throws {

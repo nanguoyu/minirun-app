@@ -80,9 +80,9 @@ final class DeepSeekV4ProductTokenizer: VerifiedPromptTokenizing, @unchecked Sen
             sourceRevision: sourceRevision,
             sha256: tokenizerIdentity.sha256)
         self.provenance =
-            "DeepSeek V4 no-thinking chat · artifact \(evidence.repository.repoID)@"
-            + "\(evidence.repository.revision.prefix(12)) · tokenizer \(source.repoID)@"
-            + "\(sourceRevision.prefix(12)) · SHA-256 "
+            "DeepSeek V4 no-thinking chat, artifact \(evidence.repository.repoID)@"
+            + "\(evidence.repository.revision.prefix(12)), tokenizer \(source.repoID)@"
+            + "\(sourceRevision.prefix(12)), SHA-256 "
             + "\(tokenizerIdentity.sha256.prefix(12))…"
     }
 

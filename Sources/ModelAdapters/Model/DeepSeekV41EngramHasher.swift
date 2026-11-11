@@ -146,6 +146,32 @@ public struct DeepSeekV41EngramHasher {
         for index in recent.indices { recent[index] = 0 }
     }
 
+    /// The whole n-gram state as words: ``position`` followed by the last
+    /// `maxNgramSize` compressed ids in slot order. Nothing else in the hasher
+    /// changes after `init`, so these words and the token map rebuild it.
+    public var stateWords: [Int64] { [Int64(position)] + recent }
+
+    /// Put back a state ``stateWords`` produced. Refuses a word count that
+    /// is not this hasher's, a negative position, and an entry that is neither
+    /// a compressed class nor ``dead``.
+    public mutating func restore(stateWords words: [Int64]) throws {
+        guard words.count == 1 + maxNgramSize else {
+            throw DeepSeekV4Error.configuration(
+                "an Engram hasher state has \(1 + maxNgramSize) words; got \(words.count)")
+        }
+        guard words[0] >= 0, let restored = Int(exactly: words[0]) else {
+            throw DeepSeekV4Error.configuration(
+                "an Engram hasher position cannot be \(words[0])")
+        }
+        let highest = Int64(compressed.max() ?? 0)
+        for word in words.dropFirst() where word != Self.dead && (word < 0 || word > highest) {
+            throw DeepSeekV4Error.configuration(
+                "an Engram hasher state entry \(word) is not a compressed class")
+        }
+        position = restored
+        recent = Array(words.dropFirst())
+    }
+
     /// The row indices for the next `tokenIDs`, `[token][layer][column]`.
     ///
     /// One call for the whole prompt and one call per token produce the same

@@ -35,14 +35,46 @@ public struct DeepSeekV41DecodeRunner: RunnerFacade {
 
     public let scale: Scale
     private let factory: any DeepSeekV41RunWorkloadFactory
+    /// Whether the product scale holds a run to the policy's prompt and reply
+    /// ceilings. True for every runner the product builds; only a measurement
+    /// arm that tests the ceilings themselves turns it off, through the
+    /// internal initializer.
+    let enforcesProductTokenCeilings: Bool
+    /// Where per-position logits go; the environment's sink unless a test
+    /// names one.
+    let logitsDump: DeepSeekV4LogitsDump?
 
     public init(scale: Scale) {
         self.init(scale: scale, factory: DeepSeekV41ArtifactWorkloadFactory())
     }
 
-    init(scale: Scale, factory: any DeepSeekV41RunWorkloadFactory) {
+    /// A run that restores and/or writes a conversation's generation state.
+    /// See ``DeepSeekV41SessionOptions``.
+    public init(scale: Scale, session: DeepSeekV41SessionOptions) {
+        self.init(scale: scale, factory: DeepSeekV41ArtifactWorkloadFactory(session: session))
+    }
+
+    init(
+        scale: Scale, factory: any DeepSeekV41RunWorkloadFactory,
+        enforcesProductTokenCeilings: Bool = true,
+        logitsDump: DeepSeekV4LogitsDump? = DeepSeekV41LogitsDump.shared
+    ) {
         self.scale = scale
         self.factory = factory
+        self.enforcesProductTokenCeilings = enforcesProductTokenCeilings
+        self.logitsDump = logitsDump
+    }
+
+    /// A product-scale or stated run with the token ceilings off, for the arm
+    /// that measures whether they can be lifted. Not reachable from the App.
+    init(
+        scale: Scale, session: DeepSeekV41SessionOptions?,
+        enforcesProductTokenCeilings: Bool
+    ) {
+        self.init(
+            scale: scale,
+            factory: DeepSeekV41ArtifactWorkloadFactory(session: session),
+            enforcesProductTokenCeilings: enforcesProductTokenCeilings)
     }
 
     public var capabilities: RunnerCapabilities {
@@ -54,7 +86,9 @@ public struct DeepSeekV41DecodeRunner: RunnerFacade {
             maximum = maximumNewTokens
         case .product:
             minimum = DeepSeekV41ProductMemoryBudget.minimumBudgetBytes
-            maximum = DeepSeekV41ProductMemoryBudget.maximumNewTokens
+            maximum =
+                enforcesProductTokenCeilings
+                ? DeepSeekV41ProductMemoryBudget.maximumNewTokens : Int.max
         }
         return RunnerCapabilities(
             model: .deepseekV41Flash,
@@ -82,7 +116,7 @@ public struct DeepSeekV41DecodeRunner: RunnerFacade {
             if request.artifact.scope?.isReleased == true {
                 throw RunError.scopeRefused(path: request.artifact.root.path)
             }
-            if scale == .product,
+            if scale == .product, enforcesProductTokenCeilings,
                 case .tokenIDs(let tokenIDs) = request.prompt,
                 tokenIDs.count > DeepSeekV41ProductMemoryBudget.maximumPromptTokens
             {
@@ -125,7 +159,9 @@ public struct DeepSeekV41DecodeRunner: RunnerFacade {
         let engine = DeepSeekV41RunEngine(
             request: request, capabilities: capabilities, knobs: knobs,
             enforcesProductMemoryPolicy: scale == .product,
+            enforcesProductTokenCeilings: enforcesProductTokenCeilings,
             handle: handle, cancellation: cancellation, factory: factory,
+            logitsDump: logitsDump,
             continuation: continuation)
 
         continuation.onTermination = { _ in cancellation.cancel() }
@@ -414,6 +450,18 @@ protocol DeepSeekV41RunWorkload: AnyObject {
     var pinsOutputHead: Bool { get }
     var expertTileReads: Int { get }
     var expertTileHits: Int { get }
+    /// Nil unless the run was given session options.
+    var sessionRecord: DeepSeekV41SessionRecord? { get }
+
+    /// How this run's prompt reaches its first generated token (ADR 0023): a
+    /// block prefilled at position 0 and then one pass per remaining id, or one
+    /// pass per id over a state this call restored and now holds. The engine
+    /// runs the block through ``prefill(tokenIDs:decodePositionLimit:cancellationCheck:onBlockCompleted:)``
+    /// and every pass through ``decode(tokenID:cancellationCheck:onBlockCompleted:)``,
+    /// so each one is checked, sampled and budgeted like any decode pass.
+    func schedulePrompt(
+        tokenIDs: [Int], decodePositionLimit: Int
+    ) throws -> DeepSeekV41PromptSchedule
 
     func prefill(
         tokenIDs: [Int], decodePositionLimit: Int,
@@ -440,6 +488,15 @@ extension DeepSeekV41RunWorkload {
     var pinsOutputHead: Bool { false }
     var expertTileReads: Int { 0 }
     var expertTileHits: Int { 0 }
+    var sessionRecord: DeepSeekV41SessionRecord? { nil }
+
+    /// A run that carries no conversation: the whole prompt is one block.
+    func schedulePrompt(
+        tokenIDs: [Int], decodePositionLimit: Int
+    ) throws -> DeepSeekV41PromptSchedule {
+        try DeepSeekV41PromptSchedule.make(
+            prompt: tokenIDs, firstBlockTokens: tokenIDs.count, restored: nil)
+    }
 }
 
 /// One completed step of preparation, announced as it finishes.

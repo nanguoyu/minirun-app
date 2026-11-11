@@ -12,7 +12,7 @@ import StorageCore
 /// lets "streamed equals resident, bit for bit" be a statement about the byte
 /// source rather than about two similar implementations.
 public protocol QwenExpertBackend: AnyObject {
-    /// `out[t, j, :] = W[expertIds[t][j]] · x[t, :]`
+    /// `out[t, j, :] = W[expertIds[t][j]] @ x[t, :]`
     ///
     /// - Parameters:
     ///   - x: `[tokens, inFeatures]`.

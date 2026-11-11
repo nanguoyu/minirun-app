@@ -53,7 +53,9 @@ public enum DeepSeekV41FP8Linear {
     /// `attn.wo_a` is the reason this exists. DeepSeek's `convert.py`
     /// dequantizes it, so `inference/model.py` declares it
     /// `Linear(..., dtype=torch.bfloat16)` and reads `.weight` directly through
-    /// an `einsum` — there is no activation quantization on that path at all.
+    /// an `einsum`. The weight is never re-quantized on that path; the
+    /// activation is, by ``quantizeDequantizeActivation(_:phaseAccounting:diagnostics:)``
+    /// in ``DeepSeekV41GroupedOutput``.
     /// Our container kept the published FP8 bytes, which is the more faithful
     /// thing to have carried; reaching the reference's tensor from them is this
     /// one call.
@@ -75,7 +77,8 @@ public enum DeepSeekV41FP8Linear {
     ///
     /// The sliding-window K goes through this and stays in it: the ring buffer
     /// holds the *dequantized* values, over the whole post-RoPE vector,
-    /// rotary tail included.
+    /// rotary tail included. The attention output takes the same round trip
+    /// on its grouped view before `wo_a`.
     public static func quantizeDequantizeActivation(
         _ input: MLXArray,
         phaseAccounting: DeepSeekV4PhaseAccounting? = nil,

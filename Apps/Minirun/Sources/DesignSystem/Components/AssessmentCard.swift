@@ -226,7 +226,7 @@ enum AssessmentFormat {
         case .alreadyHere(let bytes):
             return "\(MRFormat.bytesDecimal(bytes)) here"
         case .fits(let spare):
-            return "\(MRFormat.bytesDecimal(fit.requiredBytes)) · "
+            return "\(MRFormat.bytesDecimal(fit.requiredBytes)) needed, "
                 + "\(MRFormat.bytesDecimal(UInt64(max(0, spare)))) spare"
         case .short(let by):
             return "\(MRFormat.bytesDecimal(by)) short"

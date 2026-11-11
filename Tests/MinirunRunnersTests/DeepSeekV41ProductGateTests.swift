@@ -34,9 +34,16 @@ final class DeepSeekV41ProductGateTests: XCTestCase {
                 { @Sendable in token as String? }
             }
             let transport = URLSessionTransport()
-            let catalog = try await HuggingFaceCatalogSource(
-                transport: transport, token: tokenProvider
-            ).fetch()
+            // Live by default: the gate has to see what is published today. The
+            // bundled catalogue is the shipped app's own pin, for a drive that
+            // holds that publication byte for byte while the repository's head
+            // has since moved on card-only commits (the 2026-11-10 record).
+            let catalog =
+                configuration.usesBundledCatalog
+                ? ModelCatalog.bundled
+                : try await HuggingFaceCatalogSource(
+                    transport: transport, token: tokenProvider
+                ).fetch()
             let descriptor = try XCTUnwrap(catalog.descriptor(.deepseekV41Flash))
             let publication = try XCTUnwrap(descriptor.source.repo)
             XCTAssertEqual(
@@ -271,6 +278,11 @@ final class DeepSeekV41ProductGateTests: XCTestCase {
                 record.declaredBudgetBytes, configuration.memoryBudgetBytes,
                 "\(arm) recorded a budget other than the one it was given")
             XCTAssertTrue(record.budgetRespected, "\(arm) crossed its declared budget")
+            // A digest is only attributable to the code it reproduces, and the
+            // weights' source revision does not name that code (ADR 0022).
+            XCTAssertEqual(
+                record.inferenceRevision, DeepSeekV41UpstreamInference.revision,
+                "\(arm) recorded a different upstream inference revision")
             XCTAssertLessThanOrEqual(
                 record.peakFootprintBytes, record.declaredBudgetBytes)
 
@@ -324,6 +336,7 @@ final class DeepSeekV41ProductGateTests: XCTestCase {
             let requestedNewTokens: Int
             let generatedTokenIDs: [Int]
             let logitsSHA256: String?
+            let inferenceRevision: String
             let productMemoryPlan: DeepSeekV41ProductMemoryPlan?
             let pinPlan: PinPlan?
             let pinnedBlockCount: Int
@@ -360,6 +373,7 @@ enum V41ProductGateConfigurationError: Error, CustomStringConvertible {
 /// | `MINIRUN_V41_PRODUCT_ARTIFACT` | the container root |
 /// | `MINIRUN_V41_PRODUCT_OUT` | where the run records are written |
 /// | `MINIRUN_V41_PRODUCT_PUBLICATION_REVISION` | the immutable publication revision |
+/// | `MINIRUN_V41_PRODUCT_CATALOG` | `live` (default) or `bundled`, the app's own pin |
 /// | `MINIRUN_V41_PRODUCT_SOURCE_REVISION` | the immutable upstream revision |
 /// | `MINIRUN_V41_PRODUCT_PROMPT` | the user turn |
 /// | `MINIRUN_V41_PRODUCT_BUDGET_BYTES` | the declared memory ceiling |
@@ -371,6 +385,7 @@ enum V41ProductGateConfigurationError: Error, CustomStringConvertible {
 /// | `MINIRUN_V41_EXPERT_READ_AHEAD` / `_QUEUE_DEPTH` / `_SLOTS` | pool knobs |
 /// | `MINIRUN_V41_EXPERT_TILE_ADOPTION` | `1`/`0`; the gather's transfer mode |
 /// | `MINIRUN_V41_LOGIT_CHUNK_ROWS` | output-head window |
+/// | `MINIRUN_V41_MLX_CACHE_BYTES` | MLX cache limit; unset is the scale's default |
 ///
 /// The expected ids are **optional**, which V4's are not, and that is the whole
 /// difference between a gate and the arm that produces one: the first V4.1 run
@@ -388,8 +403,15 @@ struct DeepSeekV41ProductGateConfiguration {
     let expectedText: String?
     let memoryBudgetBytes: UInt64
     let huggingFaceToken: String?
+    /// The shipped catalogue instead of a live fetch.
+    let usesBundledCatalog: Bool
     let knobs: RunKnobs
     let verificationRequest: ArtifactVerificationRequest
+    /// Whether the run is held to the product's prompt and reply ceilings.
+    /// `MINIRUN_V41_PRODUCT_TOKEN_CEILINGS=off` turns them off for the arm
+    /// that tests whether they can be lifted; on is the default and what
+    /// every gate uses.
+    var enforcesTokenCeilings = true
 
     static func load(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -439,6 +461,11 @@ struct DeepSeekV41ProductGateConfiguration {
             }
             expectedTokenIDs = parsed
         }
+        let rawCatalog = environment["MINIRUN_V41_PRODUCT_CATALOG"] ?? "live"
+        guard rawCatalog == "live" || rawCatalog == "bundled" else {
+            throw V41ProductGateConfigurationError.invalid(
+                "MINIRUN_V41_PRODUCT_CATALOG", rawCatalog)
+        }
         let rawScale = environment["MINIRUN_V41_SCALE"] ?? DeepSeekV41GateScale.product.rawValue
         guard let scale = DeepSeekV41GateScale(rawValue: rawScale) else {
             throw V41ProductGateConfigurationError.invalid("MINIRUN_V41_SCALE", rawScale)
@@ -483,6 +510,16 @@ struct DeepSeekV41ProductGateConfiguration {
         knobs.expertPoolSlots = try optionalPositive("MINIRUN_V41_EXPERT_SLOTS")
         knobs.logitChunkRows = try optionalPositive("MINIRUN_V41_LOGIT_CHUNK_ROWS")
         knobs.expertTileAdoption = try optionalFlag("MINIRUN_V41_EXPERT_TILE_ADOPTION")
+        // A stated budget below the dial's 6.14 GB floor pins nothing at the
+        // default 512 MiB cache; stating a smaller cache is how an arm at a
+        // small stated budget still pins a block.
+        if let cache = try optionalPositive("MINIRUN_V41_MLX_CACHE_BYTES") {
+            guard cache >= 0 else {
+                throw V41ProductGateConfigurationError.invalid(
+                    "MINIRUN_V41_MLX_CACHE_BYTES", "\(cache)")
+            }
+            knobs.mlxCacheLimitBytes = cache
+        }
 
         // Full is the default and the only request a *gate* may use: it digests
         // every published file, which for V4.1 is 517 GB. A `spot` arm reads a
@@ -499,9 +536,15 @@ struct DeepSeekV41ProductGateConfiguration {
                 "MINIRUN_V41_VERIFY_DEPTH", rawDepth)
         }
 
+        let rawCeilings = environment["MINIRUN_V41_PRODUCT_TOKEN_CEILINGS"] ?? "on"
+        guard rawCeilings == "on" || rawCeilings == "off" else {
+            throw V41ProductGateConfigurationError.invalid(
+                "MINIRUN_V41_PRODUCT_TOKEN_CEILINGS", rawCeilings)
+        }
+
         try FileManager.default.createDirectory(
             at: outputDirectory, withIntermediateDirectories: true)
-        return DeepSeekV41ProductGateConfiguration(
+        var configuration = DeepSeekV41ProductGateConfiguration(
             scale: scale, artifactRoot: artifactRoot, outputDirectory: outputDirectory,
             publicationRevision: publicationRevision, sourceRevision: sourceRevision,
             prompt: prompt, newTokenCount: newTokens,
@@ -514,7 +557,10 @@ struct DeepSeekV41ProductGateConfiguration {
                 .flatMap { $0.isEmpty ? nil : $0 },
             memoryBudgetBytes: memoryBudgetBytes,
             huggingFaceToken: environment["HF_TOKEN"],
+            usesBundledCatalog: rawCatalog == "bundled",
             knobs: knobs, verificationRequest: request)
+        configuration.enforcesTokenCeilings = rawCeilings == "on"
+        return configuration
     }
 
     var runnerScale: DeepSeekV41DecodeRunner.Scale {
@@ -524,7 +570,9 @@ struct DeepSeekV41ProductGateConfiguration {
         case .stated:
             return .stated(
                 minimumBudgetBytes: memoryBudgetBytes,
-                maximumNewTokens: DeepSeekV41ProductMemoryBudget.maximumNewTokens)
+                maximumNewTokens: enforcesTokenCeilings
+                    ? DeepSeekV41ProductMemoryBudget.maximumNewTokens
+                    : max(newTokenCount, DeepSeekV41ProductMemoryBudget.maximumNewTokens))
         }
     }
 

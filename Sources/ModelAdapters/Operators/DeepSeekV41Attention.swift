@@ -27,12 +27,28 @@ import MLXBridge
 /// `original_seq_len` 0 — at the plain `rope_theta`. Both are 10,000 in the
 /// published configuration, so only the YaRN half actually differs, but the
 /// choice is stated here rather than assumed.
+///
+/// ## Held, or computed for the positions a pass touches
+///
+/// A row is a pure function of the position and the pair's frequency, so a
+/// table need not hold any. ``isOnDemand`` tables compute each row from
+/// ``frequencies`` when ``DeepSeekV41Rotary`` asks for it, through the same
+/// ``row(position:)`` the held form is built with, so the two give the same
+/// bits. The model uses that form: a decode step touches one position and a
+/// prefill its prompt's, and a table held for every position a session might
+/// reach is the 10 GiB of `docs/experiments/2026-09-11-v41-phase3-runner.md`.
+/// Nothing is cached: a row is thirty-two cosines and thirty-two sines, cheaper
+/// to compute than to look after.
 public struct DeepSeekV41RotaryTable: Sendable {
     public let dimension: Int
-    /// `[positions, dimension / 2]`, row-major.
+    /// `[positions, dimension / 2]`, row-major. Empty for an ``isOnDemand``
+    /// table, which holds no rows.
     public let cosines: [Float]
     public let sines: [Float]
+    /// The positions this table answers for: `0..<positionCount`.
     public let positionCount: Int
+    /// Rows are computed per call rather than held.
+    public let isOnDemand: Bool
 
     /// The per-pair frequencies, before the position multiply. Exposed because
     /// a test that disagrees about the table should say so before it disagrees
@@ -46,7 +62,8 @@ public struct DeepSeekV41RotaryTable: Sendable {
         base: Float,
         factor: Float,
         betaFast: Float,
-        betaSlow: Float
+        betaSlow: Float,
+        onDemand: Bool = false
     ) throws {
         guard dimension > 0, dimension.isMultiple(of: 2), positionCount > 0 else {
             throw DeepSeekV41Error.configuration(
@@ -92,27 +109,55 @@ public struct DeepSeekV41RotaryTable: Sendable {
                 "rotary frequency table is not finite and positive")
         }
 
-        var cosines = [Float](repeating: 0, count: positionCount * half)
-        var sines = [Float](repeating: 0, count: positionCount * half)
-        for position in 0..<positionCount {
-            for pair in 0..<half {
-                // `torch.outer(arange(seqlen), freqs)` is a float32 product, so
-                // the angle is rounded to float32 before the cosine is taken.
-                let angle = Float(position) * frequencies[pair]
-                cosines[position * half + pair] = Float(Foundation.cos(Double(angle)))
-                sines[position * half + pair] = Float(Foundation.sin(Double(angle)))
+        var cosines = [Float]()
+        var sines = [Float]()
+        if !onDemand {
+            cosines.reserveCapacity(positionCount * half)
+            sines.reserveCapacity(positionCount * half)
+            for position in 0..<positionCount {
+                let row = Self.row(position: position, frequencies: frequencies)
+                cosines.append(contentsOf: row.cosines)
+                sines.append(contentsOf: row.sines)
             }
         }
         self.dimension = dimension
         self.positionCount = positionCount
+        self.isOnDemand = onDemand
         self.frequencies = frequencies
         self.cosines = cosines
         self.sines = sines
     }
 
+    /// One position's cosines and sines, `dimension / 2` of each.
+    public func row(position: Int) throws -> (cosines: [Float], sines: [Float]) {
+        guard position >= 0, position < positionCount else {
+            throw DeepSeekV41Error.configuration(
+                "rotary position \(position) is outside the \(positionCount)-row table")
+        }
+        if isOnDemand { return Self.row(position: position, frequencies: frequencies) }
+        let half = dimension / 2
+        let start = position * half
+        return (Array(cosines[start..<(start + half)]), Array(sines[start..<(start + half)]))
+    }
+
+    private static func row(
+        position: Int, frequencies: [Float]
+    ) -> (cosines: [Float], sines: [Float]) {
+        var cosines = [Float](repeating: 0, count: frequencies.count)
+        var sines = [Float](repeating: 0, count: frequencies.count)
+        for pair in frequencies.indices {
+            // `torch.outer(arange(seqlen), freqs)` is a float32 product, so
+            // the angle is rounded to float32 before the cosine is taken.
+            let angle = Float(position) * frequencies[pair]
+            cosines[pair] = Float(Foundation.cos(Double(angle)))
+            sines[pair] = Float(Foundation.sin(Double(angle)))
+        }
+        return (cosines, sines)
+    }
+
     /// The table one block uses, per `Attention.__init__`.
     public static func forBlock(
-        _ block: Int, config: DeepSeekV41Config, positionCount: Int
+        _ block: Int, config: DeepSeekV41Config, positionCount: Int, onDemand: Bool = false
     ) throws -> DeepSeekV41RotaryTable {
         let compresses = try config.compressionRatio(block: block) != 0
         return try DeepSeekV41RotaryTable(
@@ -122,7 +167,8 @@ public struct DeepSeekV41RotaryTable: Sendable {
             base: compresses ? config.compressionRopeTheta : config.ropeTheta,
             factor: config.ropeFactor,
             betaFast: Float(config.ropeBetaFast),
-            betaSlow: Float(config.ropeBetaSlow))
+            betaSlow: Float(config.ropeBetaSlow),
+            onDemand: onDemand)
     }
 }
 
@@ -162,17 +208,9 @@ public enum DeepSeekV41Rotary {
         cosine.reserveCapacity(positions.count * half)
         sine.reserveCapacity(positions.count * half)
         for position in positions {
-            guard position >= 0, position < table.positionCount else {
-                throw DeepSeekV41Error.configuration(
-                    "rotary position \(position) is outside the \(table.positionCount)-row table")
-            }
-            let start = position * half
-            cosine.append(contentsOf: table.cosines[start..<(start + half)])
-            if inverse {
-                sine.append(contentsOf: table.sines[start..<(start + half)].map(-))
-            } else {
-                sine.append(contentsOf: table.sines[start..<(start + half)])
-            }
+            let row = try table.row(position: position)
+            cosine.append(contentsOf: row.cosines)
+            sine.append(contentsOf: inverse ? row.sines.map(-) : row.sines)
         }
 
         var frequencyShape = [positions.count]
@@ -278,6 +316,30 @@ public enum DeepSeekV41WindowIndices {
 /// The sink has no value vector: it absorbs probability mass and contributes
 /// nothing to the numerator.
 ///
+/// ## The weights that multiply the values are bfloat16
+///
+/// `kernel.py` declares the probability tile `acc_s_cast` bfloat16 (line 339),
+/// copies the float32 exponentials into it (377) and multiplies *that* into
+/// the values (380), while the running sum it divides by at the end (374-376,
+/// 383) is over the float32 exponentials. So each weight is rounded to
+/// bfloat16 in the numerator and nowhere else. Multiplying the float32
+/// exponentials instead moved block 0's attention output by about 1% against
+/// DeepSeek's own run on identical input; with the rounding, the kernel's own
+/// captured calls replay to single units
+/// (`docs/experiments/2026-11-10-v41-mac-vs-reference-divergence.md`).
+///
+/// ## And they are rounded per tile, against the running maximum
+///
+/// The kernel walks the index row in tiles of 64 slots (358). Each tile's
+/// exponentials are taken against the maximum *so far*, rounded to bfloat16,
+/// multiplied in, and the accumulator and the sum are rescaled by
+/// `exp(previous - new)` when a later tile raises the maximum (368-379); the
+/// sink joins the sum after the last tile, against the final maximum (382-383).
+/// Rounding once against the final maximum gives a different number whenever
+/// two tiles hold valid slots, which a compressed layer's decode does: the
+/// window ring fills the second tile and the compressed rows the third. That
+/// is the 1.4% block 2's decode differed by.
+///
 /// ## Batched heads
 ///
 /// The head loop is expressed as a batch axis, which is ADR 0018's decision for
@@ -288,6 +350,9 @@ public enum DeepSeekV41WindowIndices {
 public enum DeepSeekV41SparseAttention {
     /// The kernel's finite lower bound. Not `-Float.infinity`.
     static let runningMaximumFloor: Float = -1e30
+    /// `sparse_attn_kernel`'s `block`: how many slots of the index row one
+    /// tile of the online softmax takes.
+    static let tileWidth = 64
 
     /// - Parameters:
     ///   - queries: `[tokens, heads, dimension]`.
@@ -325,9 +390,13 @@ public enum DeepSeekV41SparseAttention {
             var tokenOutputs = [MLXArray]()
             tokenOutputs.reserveCapacity(queries.shape[0])
             for token in 0..<queries.shape[0] {
+                // Valid slots grouped by the kernel tile their *position* in
+                // the index row falls in; an empty slot still occupies its
+                // position, which is what decides the tiles.
                 var seen = Set<Int>()
-                let valid = try indices[token].compactMap { index -> Int? in
-                    if index == -1 { return nil }
+                var tiles = [[Int]]()
+                var currentTile = -1
+                for (position, index) in indices[token].enumerated() where index != -1 {
                     guard index >= 0, index < keysAndValues.shape[0] else {
                         throw DeepSeekV41Error.configuration(
                             "token \(token) names KV row \(index), outside the cache")
@@ -336,32 +405,48 @@ public enum DeepSeekV41SparseAttention {
                         throw DeepSeekV41Error.configuration(
                             "token \(token) names KV row \(index) more than once")
                     }
-                    return index
+                    if position / tileWidth != currentTile {
+                        currentTile = position / tileWidth
+                        tiles.append([])
+                    }
+                    tiles[tiles.count - 1].append(index)
                 }
-                guard !valid.isEmpty else {
+                guard !tiles.isEmpty else {
                     // `0 / inf`. Stated rather than computed, because computing
                     // it would mean forming an empty reduction.
                     tokenOutputs.append(
                         MLXArray.zeros([heads, dimension], dtype: .float32))
                     continue
                 }
-                let kv = keysAndValues.take(MLXArray(valid), axis: 0).asType(.float32)
                 let query = queries[token, 0..., 0...].asType(.float32)
-                let scores =
-                    sum(
-                        kv[.newAxis, 0..., 0...] * query[0..., .newAxis, 0...],
-                        axis: -1) * scale
-                let maximumScore = maximum(
-                    scores.max(axis: -1, keepDims: true),
-                    MLXArray(runningMaximumFloor))
-                let exponentials = exp(scores - maximumScore)
-                let denominator =
-                    sum(exponentials, axis: -1, keepDims: true)
-                    + exp(sink - maximumScore)
-                tokenOutputs.append(
-                    sum(
-                        kv[.newAxis, 0..., 0...] * exponentials[0..., 0..., .newAxis],
-                        axis: 1) / denominator)
+                // A tile with no valid slot leaves the maximum, the sum and the
+                // accumulator exactly as they were (it rescales by exp(0) and
+                // adds zeros), so only tiles with a valid slot are walked.
+                var runningMaximum = MLXArray.full(
+                    [heads, 1], values: MLXArray(runningMaximumFloor), dtype: .float32)
+                var sumOfExponentials = MLXArray.zeros([heads, 1], dtype: .float32)
+                var accumulator = MLXArray.zeros([heads, dimension], dtype: .float32)
+                for tile in tiles {
+                    let kv = keysAndValues.take(MLXArray(tile), axis: 0).asType(.float32)
+                    let scores =
+                        sum(
+                            kv[.newAxis, 0..., 0...] * query[0..., .newAxis, 0...],
+                            axis: -1) * scale
+                    let maximumScore = maximum(
+                        runningMaximum, scores.max(axis: -1, keepDims: true))
+                    let rescale = exp(runningMaximum - maximumScore)
+                    let exponentials = exp(scores - maximumScore)
+                    sumOfExponentials =
+                        sumOfExponentials * rescale
+                        + sum(exponentials, axis: -1, keepDims: true)
+                    let weights = exponentials.asType(.bfloat16).asType(.float32)
+                    accumulator =
+                        accumulator * rescale
+                        + sum(kv[.newAxis, 0..., 0...] * weights[0..., 0..., .newAxis], axis: 1)
+                    runningMaximum = maximumScore
+                }
+                let denominator = sumOfExponentials + exp(sink - runningMaximum)
+                tokenOutputs.append(accumulator / denominator)
             }
             return stacked(tokenOutputs, axis: 0)
         }
@@ -376,6 +461,13 @@ public enum DeepSeekV41SparseAttention {
 /// while our container carries the published FP8 bytes, so the caller passes the
 /// dequantized matrix (``DeepSeekV41FP8Linear/dequantizedToBFloat16(_:stream:)``).
 /// `wo_b` stays FP8 and goes through the ordinary projection.
+///
+/// The einsum's *activation* is not the raw attention output. Since upstream
+/// `4dd75a8b` (``DeepSeekV41UpstreamInference/revision``) the reference runs
+/// `act_quant(o, 32, "ue8m0", e8m0, inplace=True)` on the grouped view first,
+/// so each group's `heads/groups * head_dim` values are rounded through FP8 in
+/// blocks of 32 with power-of-two scales and read back as bfloat16. That is the
+/// same round trip the sliding-window K takes, applied to the grouped layout.
 public enum DeepSeekV41GroupedOutput {
     public static func project(
         _ attention: MLXArray,
@@ -414,8 +506,11 @@ public enum DeepSeekV41GroupedOutput {
         // The heads are flattened and re-split into groups exactly as
         // `o.view(bsz, seqlen, n_local_groups, -1)` does: group g takes the
         // consecutive heads [g * heads/groups, (g+1) * heads/groups).
-        let grouped = attention.asType(.float32)
-            .reshaped([attention.shape[0], groups, groupInput.partialValue])
+        let grouped = try DeepSeekV41FP8Linear.quantizeDequantizeActivation(
+            attention.asType(.bfloat16)
+                .reshaped([attention.shape[0], groups, groupInput.partialValue]),
+            phaseAccounting: phaseAccounting, diagnostics: diagnostics)
+            .asType(.float32)
         let first = groupWeight.asType(.float32)
             .reshaped([groups, rank, groupInput.partialValue])
         let latent = einsum("tgd,grd->tgr", grouped, first)

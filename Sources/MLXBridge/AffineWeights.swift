@@ -229,7 +229,7 @@ public struct AffineWeights {
     }
 }
 
-/// Dense affine matmul: `y = x · W^T`, with `W` in checkpoint layout.
+/// Dense affine matmul: `y = x @ W^T`, with `W` in checkpoint layout.
 ///
 /// `transpose` is not a parameter, for the same reason ``mxfp4MM`` has none: the
 /// checkpoint stores `[outFeatures, inFeatures]`, so `transpose: true` is the
@@ -253,7 +253,7 @@ public func affineMM(
         stream: stream)
 }
 
-/// Routed-expert affine matmul: `out[t, j, :] = W[rhsIndices[t, j]] · x[t, :]`.
+/// Routed-expert affine matmul: `out[t, j, :] = W[rhsIndices[t, j]] @ x[t, :]`.
 ///
 /// - Parameters:
 ///   - x: `[tokens, inFeatures]` activations, one row per token.
@@ -269,7 +269,7 @@ public func affineMM(
 /// must be presented as `[tokens, 1, 1, inFeatures]`. Passing
 /// `[tokens, 1, inFeatures]` instead is a legal broadcast whenever
 /// `tokens == expertsPerToken`, produces an identical output shape, and silently
-/// computes `W[rhsIndices[t, j]] · x[j]` — the slot index used as the token
+/// computes `W[rhsIndices[t, j]] @ x[j]` — the slot index used as the token
 /// index. M3 measured that mistake at ~1.5 relative to the output scale against
 /// a 1e-5 tolerance. Callers here cannot express it.
 ///

@@ -101,7 +101,8 @@ public struct DeepSeekV41AttentionGeometry: Sendable, Equatable {
 /// `outputDown` is `attn.wo_a` **already dequantized to bfloat16**. Our
 /// container carries the published FP8 [32, 32] bytes; DeepSeek's `convert.py`
 /// dequantizes that matrix, so the reference holds bfloat16 and reads it through
-/// an `einsum` with no activation quantization at all. See
+/// an `einsum` whose activation has been rounded through FP8 first (see
+/// ``DeepSeekV41GroupedOutput``). See
 /// ``DeepSeekV41FP8Linear/dequantizedToBFloat16(_:stream:)``.
 public struct DeepSeekV41AttentionWeights {
     public let sink: MLXArray
@@ -345,12 +346,10 @@ public enum DeepSeekV41AttentionForward {
             // behind. Getting this wrong is invisible in prefill and in every
             // decode step where the group happens to complete.
             //
-            // `index_k` is the opposite and deliberately so: the reference
-            // assigns it *inside* `if self.owns_k and latent is not None`, so on
-            // a step where no group completes, an index-key owner scores against
-            // the keys the last owner that did publish left there. That is the
-            // reference's behaviour, quirk and all, and it is reproduced above
-            // by publishing only alongside a latent.
+            // `index_k` follows the same rule since upstream `8b3cec70`: an
+            // index-key owner publishes its own key cache on every step, whether
+            // or not a group completed, so it never scores against another
+            // owner's keys. See ``index(hidden:queryLatent:latent:geometry:weights:caches:shared:table:startPosition:tokens:offset:compressedLength:phaseAccounting:diagnostics:)``.
             if geometry.mode == .full, caches.compressed != nil {
                 shared.compressedKeyValues = caches.compressed
             }
@@ -461,7 +460,15 @@ public enum DeepSeekV41AttentionForward {
                 normEpsilon: geometry.normEpsilon, positions: latentPositions,
                 table: table, diagnostics: diagnostics)
             caches.indexKeys = append(caches.indexKeys, keys)
-            shared.indexKeys = caches.indexKeys
+        }
+        // Published on every step, not only alongside a latent. Before upstream
+        // `8b3cec70` the assignment sat inside `if self.owns_k and latent is not
+        // None`, so on a step where its group was still filling, a ratio-2 owner
+        // scored against whichever owner had published last: in the published
+        // model that is block 20, the ratio-1 decoder source, from the previous
+        // pass. Now it is `if self.owns_k: shared_attn.index_k = self.k_cache`.
+        if geometry.mode == .full, let ownKeys = caches.indexKeys {
+            shared.indexKeys = ownKeys
         }
         guard let publishedKeys = shared.indexKeys,
             publishedKeys.shape[0] >= compressedLength

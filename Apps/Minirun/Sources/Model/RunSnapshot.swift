@@ -225,6 +225,26 @@ struct RunSnapshot: Equatable, Sendable {
         return telemetry?.generationStage ?? phase?.generationStage
     }
 
+    // MARK: A replayed conversation
+
+    /// Which prompt id a replay is on, while the run is replaying. A
+    /// conversation whose saved state was missing, refused or stale is rebuilt
+    /// one id a pass before the reply starts (ADR 0023), and on a long chat
+    /// that is minutes in which the person should know what is happening.
+    var replayProgress: RunReplayProgress? {
+        guard state.isRunning, generationStage == .prefill else { return nil }
+        return phase?.replay
+    }
+
+    /// The sentence shown in place of the prefill line while a replay runs.
+    var replaySentence: String? {
+        replayProgress.map(Self.replaySentence)
+    }
+
+    static func replaySentence(_ progress: RunReplayProgress) -> String {
+        "Restoring the conversation, token \(progress.token) of \(progress.of)"
+    }
+
     // MARK: The prefill pass
     //
     // Prompt ingestion is minutes long on a flagship artifact, and for all of
@@ -262,7 +282,10 @@ struct RunSnapshot: Equatable, Sendable {
     /// enough layers have finished for that ratio to mean anything, and nil
     /// once the pass is complete.
     var prefillRemainingSecondsEstimate: Double? {
-        guard generationStage == .prefill,
+        // A replay is one pass per token of the conversation, and this ratio
+        // knows only the pass in flight, so it would promise the end of one
+        // token as the end of the prompt.
+        guard generationStage == .prefill, replayProgress == nil,
             let progress = passLayerProgress,
             progress.completed >= 2, progress.completed < progress.total,
             let elapsed = telemetry?.elapsed, elapsed.isFinite, elapsed > 0
@@ -402,7 +425,7 @@ struct LayerCell: Equatable, Sendable, Identifiable {
         ]
         if let seconds = wallSeconds { parts.append(String(format: "%.3f s", seconds)) }
         parts.append(wasStaged ? "staged" : "serial")
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -494,19 +517,26 @@ struct CacheStrip: Equatable, Sendable {
         return Double(hits) / Double(total.partialValue)
     }
 
-    var line: String {
+    /// What the strip prints: one sentence while there is nothing to count,
+    /// and otherwise one figure per counter, each its own element.
+    var figures: [String] {
         if isDisabled {
-            guard let misses, misses >= 0 else { return "Off" }
-            if misses == 0 { return "Off · no storage loads yet" }
-            return "Off · \(count(misses)) loaded from storage"
+            guard let misses, misses >= 0 else { return ["Off"] }
+            if misses == 0 { return ["Off, no storage loads yet"] }
+            return ["Off, \(count(misses)) loaded from storage"]
         }
         if let hits, let misses, hits == 0, misses == 0 {
-            return "No expert requests yet"
+            return ["No expert requests yet"]
         }
         let rate = hitRate.map { MRFormat.percent($0) } ?? "—"
-        let lookups = "\(count(hits)) reused · \(count(misses)) loaded"
-        return "\(rate) hit rate · \(lookups) · \(count(evictions)) evicted · "
-            + "\(count(rejectedAdmissions)) not cached · \(count(pinnedExpertCount)) held"
+        return [
+            "\(rate) hit rate",
+            "\(count(hits)) reused",
+            "\(count(misses)) loaded",
+            "\(count(evictions)) evicted",
+            "\(count(rejectedAdmissions)) not cached",
+            "\(count(pinnedExpertCount)) held",
+        ]
     }
 
     var accessibilityLine: String {
@@ -581,16 +611,18 @@ struct ReproducibilityFooter: Equatable, Sendable {
     /// point of `Regenerate`.
     var matchesPreviousRun: Bool?
 
-    var line: String {
+    /// One element per fact, set beside each other by `FigureRow`.
+    var figures: [String] {
         var parts = [samplingMode, "token \(tokenID)"]
         if let gap = top1Top2Gap { parts.append(String(format: "top1−top2 gap %.4f", gap)) }
         parts.append("logits sha256 \(MRFormat.shortDigest(logitsDigest))")
-        return parts.joined(separator: " · ")
+        return parts
     }
 }
 
 /// A named failure with the numbers its card needs. Every error card in this
-/// product is plain sentence · exact numbers · the named error string.
+/// product has three parts: a plain sentence, the exact numbers, and the named
+/// error string.
 struct RunFault: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         /// The exact fields StorageCore reported. A removable-volume failure is

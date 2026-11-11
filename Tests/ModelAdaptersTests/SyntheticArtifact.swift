@@ -21,7 +21,7 @@ import StorageCore
 /// Every relationship below is transcribed from a real layer manifest
 /// (`docs/experiments/data/2026-08-08-m8-partial-k3/layer01-manifest.json` for
 /// KDA, `layer47` for MLA) and then divided down: `f_b_proj` is
-/// `[heads·headDim, fanRank]` because it is `[12288, 128]` there, `A_log` is
+/// `[heads * headDim, fanRank]` because it is `[12288, 128]` there, `A_log` is
 /// `[1, headDim]` with the entries past `heads` exactly zero because the
 /// flagship stores it padded that way (M9B), `q_conv1d` is F32 `[channels, W]`,
 /// and the row bands are 16 KiB-aligned with padding between them. A fixture
@@ -38,7 +38,7 @@ enum SyntheticArtifact {
         /// Layers below this are dense. One, as in the flagship.
         var firstKDenseReplace = 1
 
-        // KDA. `inner = heads · headDim`.
+        // KDA. `inner = heads * headDim`.
         var kdaHeads = 4
         var kdaHeadDim = 16
         var kdaKernel = 4
@@ -54,7 +54,7 @@ enum SyntheticArtifact {
         var vHeadDim = 8
 
         // MoE. The container geometry is what fixes these: a tile needs
-        // `rows · cols` divisible by 524,288 (one scale per 32 elements, 16 KiB
+        // `rows * cols` divisible by 524,288 (one scale per 32 elements, 16 KiB
         // aligned), so one band of `w1` is 1024 × 512 and one band of `w2` is
         // 512 × 1024. Smaller would not be a legal container.
         var experts = 12

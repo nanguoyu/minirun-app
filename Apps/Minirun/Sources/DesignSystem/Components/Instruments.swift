@@ -1,7 +1,7 @@
 import MinirunKit
 import SwiftUI
 
-// MARK: - C · Budget gauge
+// MARK: - C, budget gauge
 
 /// The footprint filling against the stated budget, with a peak watermark that
 /// only ever moves right.
@@ -13,7 +13,7 @@ import SwiftUI
 /// ## One basis, stated
 ///
 /// Every number in this row — fill, watermark, budget mark, and all three
-/// values in the label — is on the basis the runtime declared, and the runtime
+/// figures under the bar — is on the basis the runtime declared, and the runtime
 /// declares it by publishing an entry footprint or not (`RunTelemetry`'s
 /// `entryFootprintBytes`; nothing here looks at a model id). On the absolute
 /// basis the row is what it always was. On V4.1's added-above-entry basis the
@@ -24,8 +24,8 @@ import SwiftUI
 ///
 /// The bug this replaces: the row took the absolute process footprint as the
 /// current value and the added-basis budget as its ceiling, and read
-/// `23.7 GB of 14.9 GB · peak 14.7 GB · 0 MB spare` with the bar full while the
-/// run was comfortably inside its budget.
+/// `23.7 GB of 14.9 GB`, `peak 14.7 GB`, `0 MB spare` with the bar full while
+/// the run was comfortably inside its budget.
 struct BudgetGauge: View {
     /// The current footprint **on the budget's basis**. Callers pass
     /// `telemetry.budgetedFootprintBytes`, never `telemetry.footprintBytes`.
@@ -48,14 +48,14 @@ struct BudgetGauge: View {
     /// it is not even arithmetic: the entry floor describes a moment before the
     /// run and the process figure a moment after it, so subtracting one from
     /// the other clamped to zero and printed `0 MB of 14.9 GB` under a caption
-    /// reading `Process 161 MB · 10.8 GB before this run` — a run that had just
+    /// reading `Process 161 MB` and `10.8 GB before this run` — a run that had just
     /// held 13.0 GB. So a finished row states the **peak**, which is the number
     /// the budget was kept against and the one fact that outlives the run, and
     /// the caption says when each process figure was taken.
     var isTerminalSample: Bool = false
 
-    // The four strings below are internal, not private: the row's promise is
-    // what it says, so what it says is what the suite reads.
+    // The figures below are internal, not private: the row's promise is what
+    // it says, so what it says is what the suite reads.
     var breached: Bool { latchedBreach || peakBytes > declaredBudgetBytes }
     /// Measured from the watermark, not from the current value: the peak only
     /// ever moves right, so this is the room the run still has before the
@@ -101,12 +101,12 @@ struct BudgetGauge: View {
             .frame(height: 18)
             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
 
-            Text(label)
+            FigureRow(figures: figures)
                 .font(MRType.micro)
                 .foregroundStyle(breached ? MRColor.refuse : MRColor.secondary)
-                .animation(nil, value: label)
+                .animation(nil, value: figures)
             if let caption {
-                Text(caption)
+                FigureRow(figures: caption)
                     .font(MRType.micro)
                     .foregroundStyle(MRColor.tertiary)
                     .animation(nil, value: caption)
@@ -131,15 +131,22 @@ struct BudgetGauge: View {
         return min(1, Double(isTerminalSample ? peakBytes : footprintBytes) / ceiling)
     }
 
-    var label: String {
+    /// The figures under the bar, each its own element: where the run is
+    /// against the budget, its peak, and the room left.
+    var figures: [String] {
         if isTerminalSample {
-            return "peak \(MRFormat.bytesDecimal(peakBytes)) of "
-                + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) · "
-                + "\(MRFormat.bytesDecimal(spareBytes)) spare"
+            return [
+                "peak \(MRFormat.bytesDecimal(peakBytes)) of "
+                    + MRFormat.bytesDecimal(declaredBudgetBytes),
+                "\(MRFormat.bytesDecimal(spareBytes)) spare",
+            ]
         }
-        return "\(MRFormat.bytesDecimal(footprintBytes)) of "
-            + "\(MRFormat.bytesDecimal(declaredBudgetBytes)) · peak "
-            + "\(MRFormat.bytesDecimal(peakBytes)) · \(MRFormat.bytesDecimal(spareBytes)) spare"
+        return [
+            "\(MRFormat.bytesDecimal(footprintBytes)) of "
+                + MRFormat.bytesDecimal(declaredBudgetBytes),
+            "peak \(MRFormat.bytesDecimal(peakBytes))",
+            "\(MRFormat.bytesDecimal(spareBytes)) spare",
+        ]
     }
 
     /// What the process holds, and how much of that this run did not put there.
@@ -147,16 +154,18 @@ struct BudgetGauge: View {
     /// missing from a row that is not reporting it; after the run both figures
     /// carry the moment they were taken, because they are minutes and a whole
     /// teardown apart.
-    var caption: String? {
+    var caption: [String]? {
         guard let processBytes else { return nil }
         if isTerminalSample {
             let now = "Process \(MRFormat.bytesDecimal(processBytes)) after the run"
-            guard let entryFootprintBytes else { return now }
-            return now + " · \(MRFormat.bytesDecimal(entryFootprintBytes)) before this run"
+            guard let entryFootprintBytes else { return [now] }
+            return [now, "\(MRFormat.bytesDecimal(entryFootprintBytes)) before this run"]
         }
         guard let entryFootprintBytes else { return nil }
-        return "Process \(MRFormat.bytesDecimal(processBytes)) · "
-            + "\(MRFormat.bytesDecimal(entryFootprintBytes)) before this run"
+        return [
+            "Process \(MRFormat.bytesDecimal(processBytes))",
+            "\(MRFormat.bytesDecimal(entryFootprintBytes)) before this run",
+        ]
     }
 
     var spoken: String {
@@ -215,7 +224,7 @@ extension BudgetGauge {
     }
 }
 
-// MARK: - D · Layer ladder
+// MARK: - D, layer ladder
 
 /// Pure layout arithmetic for the 93-cell ladder. The inspector's supported
 /// minimum is 300 points, so a fixed 371-point row is not a valid intrinsic
@@ -263,7 +272,7 @@ enum LayerLadderAccessibility {
 
     /// Layers, and the word "layers" is in it.
     ///
-    /// It read `30 complete · layer 31 of 40` on a header whose other half said
+    /// It read `30 complete`, then `layer 31 of 40`, on a header whose other half said
     /// `Token 15`, beside a pace line that said `13 tokens`. Three counts of
     /// three different things, only one of which named what it counted; the
     /// bare leading number took its subject from the nearest one, which was a
@@ -275,7 +284,7 @@ enum LayerLadderAccessibility {
         let done = completedCount(in: cells)
         let noun = done == 1 ? "layer" : "layers"
         if let current = cells.first(where: { $0.status == .computing }) {
-            return "\(done) \(noun) done · layer \(current.index + 1) of \(cells.count)"
+            return "layer \(current.index + 1) of \(cells.count), \(done) done"
         }
         return "\(done) of \(cells.count) layers done"
     }
@@ -300,7 +309,7 @@ enum LayerLadderAccessibility {
         ]
         if let seconds = cell.wallSeconds { parts.append(String(format: "%.3f s", seconds)) }
         parts.append(cell.wasStaged ? "staged" : "serial")
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -398,7 +407,7 @@ struct LayerLadder: View {
     }
 }
 
-// MARK: - E · Byte-flow ribbon
+// MARK: - E, byte-flow ribbon
 
 /// Two stacked lanes of successful model payload reads in runner-owned
 /// half-second windows. Page-cache hits are included, so this is process data
@@ -549,7 +558,7 @@ struct StreamLegend: View {
     }
 }
 
-// MARK: - F · Overlap meter
+// MARK: - F, overlap meter
 
 /// The single most diagnostic instrument, from the `Stalls` pair. One bar, two
 /// segments: phase time not blocked on model data and time spent waiting for it.
@@ -584,13 +593,16 @@ struct OverlapMeter: View {
                     first: stalls.computeSeconds, firstColor: MRColor.tertiary,
                     second: stalls.computeWaitedOnIOSeconds, secondColor: MRColor.caution)
 
-                Text(
-                    "not waiting \(MRFormat.clock(stalls.computeSeconds)) · waiting on model data "
-                        + MRFormat.clock(stalls.computeWaitedOnIOSeconds)
-                )
-                    .font(MRType.micro)
-                    .foregroundStyle(MRColor.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // One figure under each half of the bar it explains.
+                HStack(alignment: .firstTextBaseline, spacing: MRSpace.s3) {
+                    Text("not waiting \(MRFormat.clock(stalls.computeSeconds))")
+                    Spacer(minLength: 0)
+                    Text("waiting on model data \(MRFormat.clock(stalls.computeWaitedOnIOSeconds))")
+                        .multilineTextAlignment(.trailing)
+                }
+                .font(MRType.micro)
+                .foregroundStyle(MRColor.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 Text("Not reported")
                     .font(MRType.micro)
@@ -606,7 +618,7 @@ struct OverlapMeter: View {
                         height: 6)
                 }
                 Text(
-                    "\(readAhead.overlapEfficiency.map { MRFormat.percent($0) } ?? "—") of read time hidden · "
+                    "\(readAhead.overlapEfficiency.map { MRFormat.percent($0) } ?? "—") of read time hidden, "
                         + "staging peaked at \(MRFormat.bytesDecimal(readAhead.peakStagedBytes))"
                 )
                 .font(MRType.micro)
@@ -689,13 +701,15 @@ struct PhaseSplitBar: View {
                         .foregroundStyle(MRColor.secondary)
                         .lineLimit(1)
                     Spacer(minLength: MRSpace.s2)
-                    Text(
-                        MRFormat.phaseSeconds(term.seconds / passDivisor)
-                            + (fraction(term).map { " · \(MRFormat.percent($0, digits: 0))" } ?? "")
-                    )
-                    .font(MRType.micro)
-                    .foregroundStyle(MRColor.tertiary)
-                    .animation(nil, value: term.seconds)
+                    Text(MRFormat.phaseSeconds(term.seconds / passDivisor))
+                        .font(MRType.micro)
+                        .foregroundStyle(MRColor.tertiary)
+                        .animation(nil, value: term.seconds)
+                    // Its own column, so the shares line up down the rows.
+                    Text(fraction(term).map { MRFormat.percent($0, digits: 0) } ?? "")
+                        .font(MRType.micro)
+                        .foregroundStyle(MRColor.tertiary)
+                        .frame(minWidth: 30, alignment: .trailing)
                 }
                 // A term's name is a label, not an explanation, and two of
                 // these labels were actively misleading before the GPU wait
@@ -734,7 +748,7 @@ struct PhaseSplitBar: View {
         case .prefill: return "Prefill"
         case .decode:
             return summary.passCount > 1
-                ? "Decode · mean of \(summary.passCount) passes" : "Decode"
+                ? "Decode, mean of \(summary.passCount) passes" : "Decode"
         }
     }
 
@@ -842,17 +856,17 @@ enum PhaseTermPalette {
     }
 }
 
-// MARK: - G · Cache strip
+// MARK: - G, cache strip
 
 struct CacheStripView: View {
     let cache: CacheStrip?
 
     var body: some View {
-        Text(cache?.line ?? "Not reported")
+        FigureRow(figures: cache?.figures ?? ["Not reported"])
             .font(MRType.micro)
             .foregroundStyle(MRColor.tertiary)
-            .fixedSize(horizontal: false, vertical: true)
-            .animation(nil, value: cache?.line)
+            .animation(nil, value: cache?.figures)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel("expert reuse")
             .accessibilityValue(accessibilityValue)
     }

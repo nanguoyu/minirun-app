@@ -186,10 +186,10 @@ public enum DeepSeekV41HyperConnections {
     /// then sums over `i`:
     ///
     /// ```text
-    /// out[j, e] = Σ_i comb[i, j] · residual[i, e]        (V4.1)
+    /// out[j, e] = Σ_i comb[i, j] * residual[i, e]        (V4.1)
     /// ```
     ///
-    /// V4 contracts the other way — `Σ_j comb[i, j] · residual[j, e]`, which is
+    /// V4 contracts the other way — `Σ_j comb[i, j] * residual[j, e]`, which is
     /// what ``DeepSeekV4HyperConnections/combine(branch:residual:split:)``
     /// computes and what `Tools/v4_flash/hash_window_layer_reference.py` states
     /// for V4. Sinkhorn makes `comb` doubly stochastic, so both orientations

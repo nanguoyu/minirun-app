@@ -173,8 +173,8 @@ public enum K3MLA {
         var scores: MLXArray
         if state != nil, decodeExpression == .absorbed {
             // Absorbed MLA decode:
-            //   q_nope · (W_UK · c)^T == (q_nope · W_UK) · c^T
-            //   (p · c) · W_UV^T == p · (W_UV · c)^T
+            //   q_nope @ (W_UK @ c)^T == (q_nope @ W_UK) @ c^T
+            //   (p @ c) @ W_UV^T == p @ (W_UV @ c)^T
             // This keeps history in its low-rank form and avoids reprojecting
             // every cached position on every token.
             let decompression = weights.kvBProj.reshaped([

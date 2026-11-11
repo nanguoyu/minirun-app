@@ -1,7 +1,7 @@
 import Foundation
 import MLX
 
-/// Dense MXFP4 matmul: `y = x · W^T`, with `W` in checkpoint layout.
+/// Dense MXFP4 matmul: `y = x @ W^T`, with `W` in checkpoint layout.
 ///
 /// - Parameters:
 ///   - x: `[..., M, inFeatures]`. `float32` in gives `float32` out; `float16`
@@ -33,7 +33,7 @@ public func mxfp4MM(
         stream: stream)
 }
 
-/// Routed-expert MXFP4 matmul: `out[t, j, :] = W[rhsIndices[t, j]] · x[t, :]`.
+/// Routed-expert MXFP4 matmul: `out[t, j, :] = W[rhsIndices[t, j]] @ x[t, :]`.
 ///
 /// This is the operator a MoE decode step needs: one activation per token, each
 /// token routed to `expertsPerToken` of the stacked experts.
@@ -57,7 +57,7 @@ public func mxfp4MM(
 /// Passing `[tokens, 1, inFeatures]` instead leaves batch shape `(tokens,)`.
 /// When `tokens != expertsPerToken` that raises. When they are **equal** it is
 /// a legal broadcast: no error, an identical output shape, and the operator
-/// computes `W[rhsIndices[t, j]] · x[j]` — the slot index silently used as the
+/// computes `W[rhsIndices[t, j]] @ x[j]` — the slot index silently used as the
 /// token index. Measured deviation from the reference was ~1.5 relative to the
 /// output scale, against a 1e-5 tolerance.
 ///

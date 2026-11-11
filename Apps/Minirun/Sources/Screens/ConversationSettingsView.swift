@@ -218,7 +218,7 @@ struct ConversationSettingsView: View {
                 if conversation.settings.model == .kimiK3,
                     K3ProductMemoryBudget.currentPolicy.isExperimental
                 {
-                    Text("Experimental iPhone tier · up to \(ceiling) output tokens")
+                    Text("Experimental iPhone tier, up to \(ceiling) output tokens")
                         .font(MRType.smallProse)
                         .foregroundStyle(MRColor.secondary)
                         .fixedSize(horizontal: false, vertical: true)

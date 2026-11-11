@@ -21,7 +21,7 @@ final class AssessmentCardTests: XCTestCase {
             availableBytes: 2_000_000_000_000)
         // `MRFormat`'s precision rule: three significant-ish digits, so a
         // 431 GB remainder loses its decimals and a 1.56 TB total keeps two.
-        XCTAssertEqual(AssessmentFormat.fitValue(fit), "1.56 TB · 431 GB spare")
+        XCTAssertEqual(AssessmentFormat.fitValue(fit), "1.56 TB needed, 431 GB spare")
     }
 
     func testAVolumeTooSmallShowsHowFarShort() {

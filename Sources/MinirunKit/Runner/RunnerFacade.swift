@@ -504,7 +504,7 @@ public struct RunTelemetry: Sendable, Codable, Equatable {
     /// `malloc_zone_pressure_relief` does not return), so the budget bounds
     /// `peak - entry`. ``peakFootprintBytes`` is then already relative while
     /// ``footprintBytes`` is still absolute — which is exactly the mismatch
-    /// that let one row read "23.7 GB of 14.9 GB · peak 14.7 GB". Read the
+    /// that let one row read "23.7 GB of 14.9 GB" beside "peak 14.7 GB". Read the
     /// current value on the budget's basis from
     /// ``budgetedFootprintBytes``, never from ``footprintBytes`` directly.
     ///
@@ -670,15 +670,33 @@ public struct RunPhase: Sendable, Equatable {
     public let generationStage: RunGenerationStage?
     public let fraction: Double?
     public let detail: String
+    /// Set while a prompt is being replayed: a conversation whose saved state
+    /// was missing, refused or stale is rebuilt one id a pass, and this says
+    /// which id of how many. Nil for every other pass, and for every runner
+    /// that never replays.
+    public let replay: RunReplayProgress?
 
     public init(
         name: String, generationStage: RunGenerationStage? = nil,
-        fraction: Double? = nil, detail: String = ""
+        fraction: Double? = nil, detail: String = "", replay: RunReplayProgress? = nil
     ) {
         self.name = name
         self.generationStage = generationStage
         self.fraction = fraction
         self.detail = detail
+        self.replay = replay
+    }
+}
+
+/// Which prompt id a replay is on, counted over the whole conversation's
+/// prompt: `token` of `of`, both one-based, `token <= of`.
+public struct RunReplayProgress: Sendable, Codable, Equatable {
+    public let token: Int
+    public let of: Int
+
+    public init(token: Int, of: Int) {
+        self.token = token
+        self.of = of
     }
 }
 

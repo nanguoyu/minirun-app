@@ -2,10 +2,34 @@
 
 ## Unreleased
 
-- The reference run finished. DeepSeek's own inference code, run over the same
-  517 GB container on a data-centre GPU, answers the same question with the same
-  eighteen tokens Minirun produces on a Mac and on an iPhone. The 0.5 notes said
-  that run had not finished; it has, and it agrees.
+## 0.6 (2026111101) — 2026-11-11
+
+- On a Mac, a DeepSeek V4.1 Flash reply can now run to 256 tokens and a
+  conversation to 768, where both stopped at 64 and 512. A new chat asks for
+  up to 256 tokens and the model still stops when its answer is done; a chat
+  you set to a shorter limit keeps it. On iPhone the limits stay 64 and 512.
+- A second question in a DeepSeek V4.1 Flash chat reads only its own words
+  from the drive. Each chat keeps what the model has already worked through,
+  beside the conversation, and the next question carries on from there instead
+  of reading the whole conversation again: asked *and of hungary?* after *what
+  is the capital of austria*, the reply read 41 GB of experts, where reading
+  the conversation from the start read 141 GB. On an iPhone this is saved after
+  every token, so a reply the system cuts off keeps everything up to its last
+  word. A chat whose saved state is gone rebuilds it token by token, says
+  *Restoring the conversation* while it does, and gives the same answer it
+  would have given carrying on.
+- DeepSeek V4.1 Flash follows DeepSeek's October fix to its inference code.
+  DeepSeek changed how two steps of the model are computed without changing a
+  single weight, so the 517 GB container you already have stays as it is and
+  Minirun now computes those two steps the new way. Asked the same question, it
+  gives the same answer as before: the same eighteen tokens, at the 3.4 GB floor
+  and at 15 GB.
+- Every line in the app that joined two facts with a middle dot now reads as a
+  sentence or as separate figures: *Downloading, 47.6 GB of 517 GB*, *Mounted,
+  assessed 3 days ago*, *517 GB in 624 files*. The Instruments footprint row,
+  expert reuse and the reply footer set each figure on its own.
+- In Instruments, a stage sentence that does not fit beside the stage title on a
+  phone takes its own row under it instead of wrapping to three lines.
 
 ## 0.5 (2026091101) — 2026-09-11
 
@@ -50,15 +74,15 @@
   cover the same model, it is listed once.
 - The model page puts the copies on your drive above the facts about the model.
   *Readiness* is no longer a column of sentences taking a third of the width: it
-  is two lines at the top of *About* — *Chat · supported here*, *Files · fully
-  verified* — and where a copy is, whether it has been checked, and the controls
+  is two lines at the top of *About*, *Chat* with *supported here* and *Files*
+  with *fully verified*, and where a copy is, whether it has been checked, and the controls
   that check or remove it come straight after the transfer.
 - Settings, Storage and About have been redesigned to match the model page.
   Sections are headings and hairlines instead of bordered cards under
   ALL-CAPS labels; a preference is its name, the sentence that says what it
   does, and its control on the same line. Storage now reads a folder the way
   the rest of the app reads a model: a drive glyph, the folder's name, its
-  path, and one coloured dot with one sentence — *Mounted · assessed 3 days
+  path, and one coloured dot with one sentence — *Mounted, assessed 3 days
   ago*, or *Not connected. Plug the drive in, or remove the folder.* What a
   drive measured is a list with the figures and their units lined up, and
   *Assess again* and *Forget this measurement* sit under it as links rather
@@ -70,7 +94,7 @@
 - The models list, Downloads and Download details now read like the model page.
   A model is a row: the publisher's mark, its name, one line saying what it is,
   and on the right a coloured dot with one sentence — *Ready on K3NVME*,
-  *Downloading · 47.6 GB of 517 GB*, *ARCHIVE is not connected*, *Not on this
+  *Downloading, 47.6 GB of 517 GB*, *ARCHIVE is not connected*, *Not on this
   device* — over its size. The rounded badges are gone; so is the guesswork
   they invited, because a row now says the same thing the model page says, in
   fewer words. Downloads gives each transfer the same block the model page

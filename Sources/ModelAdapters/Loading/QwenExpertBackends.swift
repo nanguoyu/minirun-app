@@ -238,7 +238,7 @@ private func gatherBatchedExperts(
         // `affineGatherMM` inserts the broadcast axes itself. That is not a
         // convenience here: `x` presented as `[tokens, 1, inFeatures]` is a legal
         // broadcast whenever `tokens == slots` and silently computes
-        // `W[ids[t, j]] · x[j]`, which M3 measured at ~1.5 relative to the output
+        // `W[ids[t, j]] @ x[j]`, which M3 measured at ~1.5 relative to the output
         // scale. A batched gather is exactly where that mistake becomes
         // expressible, so it goes through the wrapper that cannot express it.
         let produced = affineGatherMM(

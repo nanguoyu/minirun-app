@@ -88,9 +88,9 @@ final class DeepSeekV41ProductTokenizer: VerifiedPromptTokenizing, @unchecked Se
             sourceRevision: sourceRevision,
             sha256: tokenizerIdentity.sha256)
         self.provenance =
-            "DeepSeek V4.1 no-thinking chat · artifact \(evidence.repository.repoID)@"
-            + "\(evidence.repository.revision.prefix(12)) · tokenizer \(source.repoID)@"
-            + "\(sourceRevision.prefix(12)) · SHA-256 "
+            "DeepSeek V4.1 no-thinking chat, artifact \(evidence.repository.repoID)@"
+            + "\(evidence.repository.revision.prefix(12)), tokenizer \(source.repoID)@"
+            + "\(sourceRevision.prefix(12)), SHA-256 "
             + "\(tokenizerIdentity.sha256.prefix(12))…"
     }
 
@@ -212,7 +212,9 @@ enum DeepSeekV41ProductRuntimeProvider {
     /// `.stated` is not "the same run with a bigger number". It turns the
     /// product memory policy **off**: `DeepSeekV41RunEngine` prices its
     /// requirement as the pool plus the MLX cache plus whatever the ladder
-    /// pinned, the 512/64 prompt and reply limits stop being enforced, and the
+    /// pinned, the product plan's prompt and reply limits are not consulted
+    /// (the reply ceiling stays the runner's capability, passed below, and the
+    /// conversation ceiling stays the app's), and the
     /// budget sentry's ceiling becomes the stated number rather than the
     /// platform floor. On a Mac that is the whole point: a stated budget buys
     /// resident blocks and the envelope the plan would have charged is
@@ -289,13 +291,48 @@ enum DeepSeekV41ProductRuntimeProvider {
                     // failure to run: V4.1 runs at that floor with nothing
                     // pinned, and a dial with no ladder offers no pinned tier.
                     deepSeekLadder: try? DeepSeekV41MemoryDialInputs.inspect(artifact),
-                    progressLayerCount: configuration.numberOfLayers)
+                    progressLayerCount: configuration.numberOfLayers,
+                    // The whole conversation is the prompt, so this is the
+                    // longest conversation a turn can extend.
+                    promptTokenCeiling: DeepSeekV41ProductMemoryBudget.maximumPromptTokens)
             },
             makeTokenizer: { try DeepSeekV41ProductTokenizer(artifact: $0) },
-            makeRunner: { conversation in
-                DeepSeekV41DecodeRunner(
-                    scale: runnerScale(
-                        statedBudgetBytes: conversation.settings.memoryBudgetBytes))
+            makeConversationRunner: { conversation, context in
+                let scale = runnerScale(
+                    statedBudgetBytes: conversation.settings.memoryBudgetBytes)
+                guard
+                    let options = try sessionOptions(
+                        for: conversation, tokenizer: context.tokenizer,
+                        sessionFile: context.sessionFile)
+                else { return DeepSeekV41DecodeRunner(scale: scale) }
+                return DeepSeekV41DecodeRunner(scale: scale, session: options)
             })
+    }
+
+    /// The session a conversation's turn runs with (ADR 0023).
+    ///
+    /// The first turn's length is the encoding of the first user message
+    /// alone, with its generation prefix: the block every computation of this
+    /// conversation opens with. It is passed whether or not a file exists, so a
+    /// turn that has no saved state replays in the conversation's own shape
+    /// rather than prefilling the whole transcript at once. The file is read
+    /// and written at the same path, at the platform's cadence: every pass on
+    /// a phone, at the end of the turn on a Mac.
+    ///
+    /// Nil for a conversation with no user message, which has no first turn.
+    static func sessionOptions(
+        for conversation: Conversation, tokenizer: any PromptTokenizing, sessionFile: URL?,
+        checkpoint: DeepSeekV41SessionOptions.Checkpoint = .platformDefault
+    ) throws -> DeepSeekV41SessionOptions? {
+        guard let first = conversation.messages.first(where: { $0.role == .user }) else {
+            return nil
+        }
+        let firstTurn = try tokenizer.encode(turns: [PromptTurn(role: .user, text: first.text)])
+        let file = sessionFile.flatMap {
+            ConversationSessionStore.ensureDirectory(for: $0) ? $0 : nil
+        }
+        return DeepSeekV41SessionOptions(
+            restoreFrom: file, writeTo: file, firstTurnTokenCount: firstTurn.count,
+            checkpoint: checkpoint)
     }
 }

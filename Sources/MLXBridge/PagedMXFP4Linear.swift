@@ -177,7 +177,7 @@ public struct PagedLinearReport: Codable {
 /// unevaluated tiles plus the read-ahead window could exceed the pool.
 public enum PagedMXFP4Linear {
 
-    /// Stream a container's tiles through a bounded pool, computing `x · W^T`.
+    /// Stream a container's tiles through a bounded pool, computing `x @ W^T`.
     ///
     /// - Parameters:
     ///   - x: `[M, inFeatures]` activations.

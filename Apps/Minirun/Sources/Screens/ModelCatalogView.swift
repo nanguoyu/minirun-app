@@ -598,10 +598,10 @@ enum ModelCatalogPresentation {
         isReviewPreview: Bool
     ) -> String {
         if isReviewPreview { return "Sample model list" }
-        if isRefreshing { return "Current list · updating" }
+        if isRefreshing { return "Updating the list" }
         switch origin {
         case .live: return "Up to date"
-        case .cached: return hasRefreshError ? "Saved list · offline" : "Saved model list"
+        case .cached: return hasRefreshError ? "Saved list, offline" : "Saved model list"
         case .bundled: return hasRefreshError ? "Update unavailable" : "Loading…"
         }
     }
@@ -612,9 +612,9 @@ enum ModelCatalogPresentation {
         let models = installedCount == 1 ? "1 local model" : "\(installedCount) local models"
         let mounted = mountedLocationCount == 1
             ? "1 location mounted" : "\(mountedLocationCount) locations mounted"
-        guard unavailableLocationCount > 0 else { return "\(models) · \(mounted)" }
+        guard unavailableLocationCount > 0 else { return "\(models), \(mounted)" }
         let unavailable = unavailableLocationCount == 1
             ? "1 unavailable" : "\(unavailableLocationCount) unavailable"
-        return "\(models) · \(mounted) · \(unavailable)"
+        return "\(models), \(mounted), \(unavailable)"
     }
 }

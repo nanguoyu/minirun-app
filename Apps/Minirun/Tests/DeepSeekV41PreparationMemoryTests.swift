@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import MinirunRunners
 import ModelAdapters
 import StorageCore
 import XCTest
@@ -17,8 +18,8 @@ import XCTest
 /// flight recorder's trace for the third was a start line and *nothing else*:
 ///
 /// ```text
-/// scale product · declared budget 1.900 GB · max new tokens 64 · prompt tokens 11
-/// entry footprint 0.111 GB · resident 0.213 GB · device available 6.331 GB
+/// scale product, declared budget 1.900 GB, max new tokens 64, prompt tokens 11
+/// entry footprint 0.111 GB, resident 0.213 GB, device available 6.331 GB
 /// pin plan none -- every block streams
 /// NO END LINE
 /// ```
@@ -203,12 +204,18 @@ final class DeepSeekV41PreparationMemoryTests: XCTestCase {
     func testTheTablesAChatNeedsAreTheChatsPositionsAndNotTheCheckpointsCeiling() throws {
         let config = try publishedConfig()
 
-        // The product's own widest chat: 512 prompt tokens and 64 new ones.
-        let widest = 512 + 64 - 1
-        let widestBytes = DeepSeekV41Model.rotaryTableBytes(
-            positionCount: widest, config: config)
-        XCTAssertEqual(widestBytes, 5_888_000)
-        XCTAssertLessThan(widestBytes, DeepSeekV41Model.rotaryTableBudgetBytes)
+        // The product's own widest chat on each platform: 768 prompt tokens
+        // and 256 new ones on a Mac since 2026-11-10, 512 and 64 on an iPhone.
+        for (policy, expected): (DeepSeekV41ProductMemoryBudget.Policy, UInt64) in [
+            (DeepSeekV41ProductMemoryBudget.macOSProductPolicy, 10_475_520),
+            (DeepSeekV41ProductMemoryBudget.iOSProductPolicy, 5_888_000),
+        ] {
+            let widest = policy.maximumPromptTokens + policy.maximumNewTokens - 1
+            let widestBytes = DeepSeekV41Model.rotaryTableBytes(
+                positionCount: widest, config: config)
+            XCTAssertEqual(widestBytes, expected, policy.name)
+            XCTAssertLessThan(widestBytes, DeepSeekV41Model.rotaryTableBudgetBytes)
+        }
 
         // And the chat the trace above belongs to: 74 positions, 758 kB.
         XCTAssertEqual(
@@ -232,13 +239,15 @@ final class DeepSeekV41PreparationMemoryTests: XCTestCase {
     /// This is the one assertion here that is an observation rather than a
     /// product: building every rotary table a product chat needs must not move
     /// the number Jetsam judges this process by more than a stated bound. The
-    /// tables for a 576-position chat are 5,888,000 B of payload; 64 MB is
+    /// tables for the iPhone's 575-position chat are 5,888,000 B of payload,
+    /// and for the Mac's 1,023-position chat 10,475,520 B; 64 MB is
     /// generous room for the allocator's own rounding and for whatever else the
     /// test host does between the two readings, and it is 182 times below the
     /// 10.0 GiB the same loop used to take.
     func testBuildingAChatsRotaryTablesBarelyMovesThePhysFootprint() throws {
         let config = try publishedConfig()
-        let positions = 512 + 64 - 1
+        let policy = DeepSeekV41ProductMemoryBudget.currentPolicy
+        let positions = policy.maximumPromptTokens + policy.maximumNewTokens - 1
 
         // Warm the reading: the first `task_info` in a process, and the first
         // `pow`/`cos` through libm, are not what this measures.

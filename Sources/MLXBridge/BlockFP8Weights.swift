@@ -436,7 +436,7 @@ public struct BlockFP8Weights {
     }
 }
 
-/// Dense `y = x · Wᵀ` over V4's finite block-FP8 checkpoint bytes.
+/// Dense `y = x @ Wᵀ` over V4's finite block-FP8 checkpoint bytes.
 public func blockFP8MM(
     _ x: MLXArray,
     _ weights: BlockFP8Weights,

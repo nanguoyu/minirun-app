@@ -239,7 +239,7 @@ struct InstrumentPanelView: View {
         }
     }
 
-    // MARK: H · Status chips
+    // MARK: H, status chips
 
     private var chips: some View {
         HStack(spacing: MRSpace.s2) {
@@ -293,18 +293,30 @@ struct InstrumentPanelView: View {
     @ViewBuilder private var currentStage: some View {
         if snapshot.state.isRunning || snapshot.phase != nil {
             VStack(alignment: .leading, spacing: MRSpace.s2) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(stageTitle).mrLabel()
-                    if let detail = stageDetail {
-                        Text(detail)
-                            .font(MRType.micro)
-                            .foregroundStyle(MRColor.secondary)
+                // One row when it fits. A replay's detail is a whole sentence,
+                // and at phone width it was squeezed into three lines between
+                // the title and the layer count; there it takes a row of its
+                // own instead.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(stageTitle).mrLabel()
+                        if let detail = stageDetail {
+                            stageDetailText(detail).lineLimit(1).fixedSize()
+                        }
+                        Spacer(minLength: MRSpace.s2)
+                        layerProgressText.lineLimit(1).fixedSize()
                     }
-                    Spacer()
-                    Text(layerProgress)
-                        .font(MRType.micro)
-                        .foregroundStyle(MRColor.secondary)
-                        .animation(nil, value: layerProgress)
+                    VStack(alignment: .leading, spacing: MRSpace.s1) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(stageTitle).mrLabel()
+                            Spacer(minLength: MRSpace.s2)
+                            layerProgressText
+                        }
+                        if let detail = stageDetail {
+                            stageDetailText(detail)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
                 if !snapshot.ladder.isEmpty {
                     #if os(iOS)
@@ -319,6 +331,19 @@ struct InstrumentPanelView: View {
             .accessibilityValue(
                 [stageTitle, stageDetail, layerProgress].compactMap { $0 }.joined(separator: ", "))
         }
+    }
+
+    private func stageDetailText(_ detail: String) -> some View {
+        Text(detail)
+            .font(MRType.micro)
+            .foregroundStyle(MRColor.secondary)
+    }
+
+    private var layerProgressText: some View {
+        Text(layerProgress)
+            .font(MRType.micro)
+            .foregroundStyle(MRColor.secondary)
+            .animation(nil, value: layerProgress)
     }
 
     private var generationStage: RunGenerationStage? { snapshot.generationStage }
@@ -346,7 +371,7 @@ struct InstrumentPanelView: View {
     var stageDetail: String? {
         guard let phase = snapshot.phase else { return nil }
         switch generationStage {
-        case .prefill: return "Reading prompt"
+        case .prefill: return snapshot.replaySentence ?? "Reading prompt"
         case .decode:
             let components = phase.name.split(separator: " ")
             return components.last.flatMap { Int($0) }.map { "Token \($0)" } ?? "Generating"
@@ -356,7 +381,7 @@ struct InstrumentPanelView: View {
         }
     }
 
-    // MARK: A · Rate · B · Bytes per token
+    // MARK: A, rate, and B, bytes per token
 
     /// Two readouts, and which two depends on the stage.
     ///
@@ -402,7 +427,7 @@ struct InstrumentPanelView: View {
             // total beside the elapsed clock it was divided by; printing it
             // twice is one fact wearing two labels.
             if let current = currentTokenBytes, generationStage != .prefill {
-                Text("\(currentPassLabel) · \(MRFormat.bytesDecimal(current)) read so far")
+                Text("\(MRFormat.bytesDecimal(current)) read so far for \(currentPassLabel)")
                     .font(MRType.micro)
                     .foregroundStyle(MRColor.tertiary)
                     .animation(nil, value: current)
@@ -424,7 +449,7 @@ struct InstrumentPanelView: View {
             seconds.isFinite, seconds >= 0
         else { return nil }
         let count = snapshot.decodeTokensCompleted
-        return "\(MRFormat.clock(seconds)) decode · \(count) token\(count == 1 ? "" : "s") done"
+        return "\(count) token\(count == 1 ? "" : "s") done in \(MRFormat.clock(seconds)) of decode"
     }
 
     private var bytesPerTokenText: String {
@@ -437,7 +462,7 @@ struct InstrumentPanelView: View {
 
     private var byteSplit: String? {
         guard let split = snapshot.byteSplitPerToken else { return nil }
-        return "model layers \(MRFormat.bytesDecimal(split.deterministic)) · experts "
+        return "model layers \(MRFormat.bytesDecimal(split.deterministic)), experts "
             + "\(MRFormat.bytesDecimal(split.expert))"
     }
 
@@ -454,8 +479,8 @@ struct InstrumentPanelView: View {
         guard let telemetry = snapshot.telemetry, telemetry.reportsByteAccounting else {
             return nil
         }
-        return "\(MRFormat.bytesDecimal(telemetry.bytes.totalBytesRead)) read · "
-            + "\(MRFormat.clock(telemetry.elapsed)) elapsed"
+        return "\(MRFormat.bytesDecimal(telemetry.bytes.totalBytesRead)) read in "
+            + MRFormat.clock(telemetry.elapsed)
     }
 
     private var prefillRateSpoken: String {
@@ -491,10 +516,10 @@ struct InstrumentPanelView: View {
     }
 
     private var currentPassLabel: String {
-        generationStage == .prefill ? "Current prefill" : "Current token"
+        generationStage == .prefill ? "this prefill" : "this token"
     }
 
-    // MARK: C · Budget gauge
+    // MARK: C, budget gauge
 
     @ViewBuilder private var budgetGauge: some View {
         if let telemetry = snapshot.telemetry {
@@ -559,7 +584,7 @@ struct InstrumentPanelView: View {
         }
     }
 
-    // MARK: E · F · Storage — one section, two measurements
+    // MARK: E and F, storage — one section, two measurements
 
     /// Data flow and overlap are two views of one subject: what the run is
     /// getting out of storage. Presented as two independent charts with two
@@ -600,7 +625,7 @@ struct InstrumentPanelView: View {
         .accessibilityLabel("storage")
     }
 
-    // MARK: G · Cache strip
+    // MARK: G, cache strip
 
     @ViewBuilder private var cache: some View {
         if snapshot.cache != nil {

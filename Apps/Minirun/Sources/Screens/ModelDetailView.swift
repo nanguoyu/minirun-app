@@ -366,7 +366,7 @@ struct ModelDetailPage: View {
             copyLocationName: describedArtifact.map { locationName(for: $0) })
     }
 
-    /// Download / Pause · Cancel / New chat · Verify again, and nothing else.
+    /// Download, Pause and Cancel, or New chat and Verify again, and nothing else.
     /// Every other control on this page is a text link.
     @ViewBuilder private func headerActions(_ entry: CatalogEntry) -> some View {
         switch model.state(of: modelID) {
@@ -732,15 +732,15 @@ struct ModelDetailPage: View {
         if let measured, let artifact = describedArtifact {
             MRFact(
                 "Size on disk",
-                "\(MRFormat.measuredBytes(measured)) · "
+                "\(MRFormat.measuredBytes(measured)) in "
                     + "\(MRFormat.grouped(artifact.fileCount)) files")
         } else if let measured {
             MRFact("Size on disk", MRFormat.measuredBytes(measured))
         } else {
             MRFact(
                 "Published size",
-                "\(MRFormat.publishedBytes(entry.descriptor.totalBytes)) · "
-                    + publishedFileCount(entry.descriptor.totalFileCount),
+                "\(MRFormat.publishedBytes(entry.descriptor.totalBytes))"
+                    + inPublishedFiles(entry.descriptor.totalFileCount),
                 provenance: .declared)
         }
     }
@@ -784,7 +784,7 @@ struct ModelDetailPage: View {
             MRFact(
                 "Last run",
                 String(format: "%.1f s per token", record.secondsPerToken)
-                    + " · peak \(MRFormat.bytesDecimal(record.peakFootprintBytes))")
+                    + ", peak \(MRFormat.bytesDecimal(record.peakFootprintBytes))")
         }
     }
 
@@ -828,13 +828,13 @@ struct ModelDetailPage: View {
     @ViewBuilder private func moreFacts(_ entry: CatalogEntry) -> some View {
         MRFact(
             "Payload",
-            "\(MRFormat.publishedBytes(entry.descriptor.payloadBytes)) · "
-                + publishedFileCount(entry.descriptor.payloadFileCount),
+            "\(MRFormat.publishedBytes(entry.descriptor.payloadBytes))"
+                + inPublishedFiles(entry.descriptor.payloadFileCount),
             provenance: .declared)
         MRFact(
             "Metadata",
-            "\(MRFormat.publishedBytes(entry.descriptor.metadataBytes)) · "
-                + publishedFileCount(entry.descriptor.metadataFileCount),
+            "\(MRFormat.publishedBytes(entry.descriptor.metadataBytes))"
+                + inPublishedFiles(entry.descriptor.metadataFileCount),
             provenance: .declared)
         MRFact(
             "Largest file", MRFormat.publishedBytes(entry.descriptor.largestFileBytes),
@@ -846,6 +846,11 @@ struct ModelDetailPage: View {
 
     private func publishedFileCount(_ count: Int) -> String {
         count > 0 ? "\(MRFormat.grouped(count)) files" : "file count not published"
+    }
+
+    /// The tail of a published size: "517 GB in 624 files".
+    private func inPublishedFiles(_ count: Int) -> String {
+        count > 0 ? " in \(MRFormat.grouped(count)) files" : ", file count not published"
     }
 
     /// Two lines, each a dot and a phrase: whether this build can chat with the
@@ -941,9 +946,9 @@ struct ModelDetailPage: View {
                     MRStatusLine(
                         tone: isMounted(artifact)
                             ? ModelPageStatusPresentation.tone(for: artifact) : .attention,
-                        sentence: "\(locationName(for: artifact)) · "
-                            + ModelArtifactPresentation.status(artifact)
-                            + (isMounted(artifact) ? "" : " · not connected"))
+                        sentence: ModelArtifactPresentation.copyLine(
+                            artifact, locationName: locationName(for: artifact),
+                            isMounted: isMounted(artifact)))
                     // Only where there is more than one copy. With a single
                     // copy the facts above already carry its path and its last
                     // verification, and a row that repeats them is furniture.
@@ -1286,7 +1291,7 @@ enum ModelPurposePresentation {
             ModelLicensePresentation.shortName(descriptor.licenseName),
         ]
         .compactMap { $0 }
-        return terms.isEmpty ? nil : terms.joined(separator: " · ")
+        return terms.isEmpty ? nil : terms.joined(separator: ", ")
     }
 
     static func purpose(_ architecture: ModelArchitecture) -> String? {
@@ -1303,9 +1308,9 @@ enum ModelPurposePresentation {
     static func family(_ architecture: ModelArchitecture) -> String? {
         switch architecture {
         case .kimiK3MoE, .deepseekV4FlashMoE, .deepseekV41FlashMoE, .qwen3MoE:
-            return "Mixture of experts"
+            return "mixture of experts"
         case .minimaxH3Video:
-            return "Diffusion transformer"
+            return "diffusion transformer"
         case .unrecognized:
             return nil
         }
@@ -1334,11 +1339,11 @@ enum ArtifactPrecisionPresentation {
     static func sentence(for layout: ArtifactLayout) -> String? {
         switch layout {
         case .k3FlagshipLayerStreams:
-            return "FP4 experts · BF16 dense layers"
+            return "FP4 experts, BF16 dense layers"
         case .v4FlashUnitBundle:
-            return "FP4 experts · FP8 matrices"
+            return "FP4 experts, FP8 matrices"
         case .v41FlashUnitBundle:
-            return "FP4 experts · FP8 matrices · FP8 memory tables"
+            return "FP4 experts, FP8 matrices, FP8 memory tables"
         case .h3UnitBundle, .qwenContainerSet, .unrecognized:
             return nil
         }
@@ -1372,7 +1377,7 @@ enum TransferPacePresentation {
         }
         // The estimate is the status sentence's, under the name; printing it
         // twice on one screen would make the page argue with itself.
-        return terms.isEmpty ? nil : terms.joined(separator: " · ")
+        return terms.isEmpty ? nil : terms.joined(separator: ", ")
     }
 }
 
@@ -1437,22 +1442,22 @@ enum ModelPageStatusPresentation {
         guard !complete.isEmpty else {
             return ModelPageStatus(
                 tone: .attention,
-                sentence: "On \(place) · files published by the repository are missing.")
+                sentence: "On \(place), but files published by the repository are missing.")
         }
         if complete.contains(where: { $0.verification == .fullyVerified }) {
             return ModelPageStatus(
                 tone: .ready,
-                sentence: "Ready on \(place) · every file matches its published digest.")
+                sentence: "Ready on \(place). Every file matches its published digest.")
         }
         if complete.contains(where: { $0.verification == .spotChecked }) {
             return ModelPageStatus(
                 tone: .attention,
-                sentence: "On \(place) · a sample matched. Verify all files before using "
+                sentence: "On \(place), and a sample matched. Verify all files before using "
                     + "this copy in a chat.")
         }
         return ModelPageStatus(
             tone: .attention,
-            sentence: "On \(place) · verify all files before using this copy in a chat.")
+            sentence: "On \(place). Verify all files before using this copy in a chat.")
     }
 
     /// What a transfer record alone has to say, with no drive consulted.
@@ -1481,7 +1486,7 @@ enum ModelPageStatusPresentation {
             if case .checking(let checked, let total, _, _) = phase {
                 return ModelPageStatus(
                     tone: .moving,
-                    sentence: "Checking the files on \(destinationName ?? "the drive") against the published digests · \(MRFormat.grouped(checked)) of \(MRFormat.grouped(total))")
+                    sentence: "Checked \(MRFormat.grouped(checked)) of \(MRFormat.grouped(total)) files on \(destinationName ?? "the drive") against the published digests.")
             }
             return ModelPageStatus(
                 tone: .moving,
@@ -1525,7 +1530,7 @@ enum ModelPageStatusPresentation {
     ) -> String {
         var sentence = to("Downloading", destination)
         if let remaining = progress.estimatedTimeRemaining, remaining > 0 {
-            sentence += " · about \(MRFormat.duration(remaining)) left"
+            sentence += ", about \(MRFormat.duration(remaining)) left"
         }
         return sentence
     }
@@ -1682,10 +1687,23 @@ enum ModelArtifactPresentation {
         }
         let files = "\(MRFormat.grouped(artifact.fileCount)) file\(artifact.fileCount == 1 ? "" : "s")"
         switch artifact.verification {
-        case .unverified: return "\(files) · Not verified"
-        case .spotChecked: return "\(files) · Spot-check passed"
-        case .fullyVerified: return "\(files) · Fully verified"
+        case .unverified: return "\(files), not verified"
+        case .spotChecked: return "\(files), spot-check passed"
+        case .fullyVerified: return "\(files), fully verified"
         }
+    }
+
+    /// One copy's row: where it is, then what is known about its files. A
+    /// drive that is away says only that, whatever its last verification said.
+    static func copyLine(
+        _ artifact: DiscoveredArtifact, locationName: String, isMounted: Bool
+    ) -> String {
+        guard isMounted else { return "\(locationName) is not connected" }
+        if let missing = artifact.missingFileCount, missing > 0 {
+            return "On \(locationName), \(MRFormat.grouped(missing)) "
+                + "file\(missing == 1 ? "" : "s") missing"
+        }
+        return "On \(locationName), " + status(artifact)
     }
 }
 

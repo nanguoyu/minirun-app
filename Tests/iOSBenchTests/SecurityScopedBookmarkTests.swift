@@ -204,7 +204,33 @@ final class SecurityScopedBookmarkTests: XCTestCase {
 /// directory is enough to make resolution report `isStale` while still
 /// returning the new location. That last fact is what makes the stale path
 /// testable for real rather than only through the fake.
+///
+/// On macOS 27.0.1 a resolved directory bookmark comes back as a directory URL
+/// (`/.../artifact/`), so it no longer compares equal to a URL built without a
+/// directory hint, even after standardizing. The claim is "the same filesystem
+/// item", so ``assertSameItem(_:_:_:file:line:)`` compares exactly that: the
+/// standardized path, and the volume's own file identifier.
 final class SystemSecurityScopedURLCodingTests: XCTestCase {
+
+    private func assertSameItem(
+        _ resolved: URL, _ expected: URL, _ message: String = "",
+        file: StaticString = #filePath, line: UInt = #line
+    ) throws {
+        XCTAssertEqual(
+            resolved.resolvingSymlinksInPath().standardizedFileURL.path,
+            expected.resolvingSymlinksInPath().standardizedFileURL.path,
+            message, file: file, line: line)
+        let key: Set<URLResourceKey> = [.fileResourceIdentifierKey]
+        let resolvedID = try XCTUnwrap(
+            resolved.resourceValues(forKeys: key).fileResourceIdentifier,
+            message, file: file, line: line)
+        let expectedID = try XCTUnwrap(
+            expected.resourceValues(forKeys: key).fileResourceIdentifier,
+            message, file: file, line: line)
+        XCTAssertTrue(
+            resolvedID.isEqual(expectedID), "different file identifiers. \(message)",
+            file: file, line: line)
+    }
 
     func testRealBookmarkRoundTrip() throws {
         let directory = TemporaryDirectory(self)
@@ -215,9 +241,7 @@ final class SystemSecurityScopedURLCodingTests: XCTestCase {
 
         let resolved = try coding.resolve(data)
         XCTAssertFalse(resolved.isStale)
-        XCTAssertEqual(
-            resolved.url.resolvingSymlinksInPath().standardizedFileURL,
-            directory.url.resolvingSymlinksInPath().standardizedFileURL)
+        try assertSameItem(resolved.url, directory.url)
     }
 
     func testRealStaleBookmarkIsRewrittenByTheStore() throws {
@@ -238,10 +262,8 @@ final class SystemSecurityScopedURLCodingTests: XCTestCase {
         try FileManager.default.moveItem(at: original, to: moved)
 
         let resolved = try store.resolve(key: "model")
-        XCTAssertEqual(
-            resolved.url.resolvingSymlinksInPath().standardizedFileURL,
-            moved.resolvingSymlinksInPath().standardizedFileURL,
-            "a stale bookmark should still find the item it was made for")
+        try assertSameItem(
+            resolved.url, moved, "a stale bookmark should still find the item it was made for")
         XCTAssertFalse(resolved.isStale, "the store refreshes rather than passing staleness up")
         XCTAssertNotEqual(persistence.data(forKey: "model"), before, "the blob must be rewritten")
 

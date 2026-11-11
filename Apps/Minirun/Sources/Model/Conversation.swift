@@ -253,16 +253,16 @@ struct MessageTelemetry: Codable, Equatable, Sendable {
     /// might derive differently.
     var decodePhaseAggregate: RunPhaseSummary? = nil
 
-    /// One line, in the order a reader asks the questions: how long, how fast,
-    /// how many bytes it cost, and whether the budget held.
-    var line: String {
+    /// The footer's figures, in the order a reader asks the questions: how
+    /// long, how fast, how many bytes it cost, and whether the budget held.
+    var figures: [String] {
         var parts = [MRFormat.clock(wallSeconds)]
         if let tokensPerSecond { parts.append(MRFormat.tokenRate(tokensPerSecond)) }
         if let bytesPerToken { parts.append("\(MRFormat.bytesDecimal(bytesPerToken))/token") }
         parts.append(
             "peak \(MRFormat.bytesDecimal(peakFootprintBytes)) of "
                 + "\(MRFormat.bytesDecimal(declaredBudgetBytes))")
-        return parts.joined(separator: " · ")
+        return parts
     }
 
     var spokenLine: String {

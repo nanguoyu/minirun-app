@@ -244,7 +244,7 @@ private struct LaunchRefusalView: View {
         }
     }
 
-    /// Sidebar · detail · panel.
+    /// Sidebar, detail and panel.
     ///
     /// The sidebar lists **conversations** and nothing else, with Settings
     /// pinned at the bottom. Models used to sit in the sidebar too, and a

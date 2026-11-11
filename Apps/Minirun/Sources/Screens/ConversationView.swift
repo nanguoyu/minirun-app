@@ -251,45 +251,7 @@ struct ConversationView: View {
 
     /// The assistant turn being produced right now.
     private func pendingTurn(_ conversation: Conversation) -> some View {
-        HStack(alignment: .top, spacing: MRSpace.s4) {
-            VStack(alignment: .leading, spacing: MRSpace.s2) {
-                // The caret is part of the text, not a sibling view: a sibling
-                // sits at the trailing edge of the whole text block, which for a
-                // wrapped answer is the end of the first line, not the point
-                // where the next token will land.
-                StreamingText(
-                    text: snapshot.generatedText
-                        ?? snapshot.tokens.map { $0.text ?? "‹\($0.tokenID)›" }.joined(),
-                    caretActive: isRunning)
-                .lineSpacing(5)
-                if snapshot.tokens.isEmpty, let phase = snapshot.phase {
-                    Text("\(phase.name) — \(phase.detail)")
-                        .font(MRType.micro)
-                        .foregroundStyle(MRColor.tertiary)
-                        .animation(nil, value: phase.detail)
-                }
-                if let footer = snapshot.reproducibility {
-                    HStack(spacing: MRSpace.s2) {
-                        Text(footer.line)
-                            .font(MRType.micro)
-                            .foregroundStyle(MRColor.secondary)
-                            .textSelection(.enabled)
-                        DigestLabel(digest: footer.logitsDigest, label: nil)
-                    }
-                }
-            }
-            .frame(maxWidth: 640, alignment: .leading)
-            Spacer(minLength: MRSpace.s7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("assistant turn in progress")
-        .accessibilityValue(
-            snapshot.tokens.isEmpty
-                ? "no tokens yet"
-                : MRAnswerMarkdown.spokenText(
-                    snapshot.generatedText
-                        ?? snapshot.tokens.map { $0.text ?? "token \($0.tokenID)" }.joined()))
+        PendingTurnView(snapshot: snapshot, isRunning: isRunning)
     }
 
     // MARK: - Cards and banners
@@ -367,7 +329,14 @@ struct ConversationView: View {
                 actionTitle: "Open running chat") { model.openRunningConversation() }
         }
         if let error = model.runPreparationError(for: conversationID) {
-            if model.runPreparationBudgetTarget(for: conversationID) != nil {
+            if model.runPreparationReachedLength(for: conversationID) {
+                banner(
+                    tone: .refuse,
+                    text: error,
+                    actionTitle: "New chat") {
+                        model.newConversation(modelID: conversation.settings.model)
+                    }
+            } else if model.runPreparationBudgetTarget(for: conversationID) != nil {
                 banner(
                     tone: .refuse,
                     text: error,
@@ -928,12 +897,17 @@ struct MessageBlock: View {
         }
     }
 
+    /// Each figure is its own element, so a phone-width column moves the next
+    /// one to a new line whole rather than breaking a number in two.
     private func telemetryLine(_ telemetry: MessageTelemetry) -> some View {
-        HStack(spacing: MRSpace.s2) {
-            Text(telemetry.line)
-                .font(MRType.micro)
-                .foregroundStyle(MRColor.secondary)
-                .textSelection(.enabled)
+        FlowRow(spacing: MRSpace.s3, lineSpacing: MRSpace.s1) {
+            ForEach(telemetry.figures, id: \.self) { figure in
+                Text(figure)
+                    .lineLimit(1)
+                    .font(MRType.micro)
+                    .foregroundStyle(MRColor.secondary)
+                    .textSelection(.enabled)
+            }
             if !telemetry.budgetRespected {
                 StatusChip(text: "budget exceeded", tone: .refuse)
             }
@@ -1093,3 +1067,62 @@ struct StreamingText: View {
     }
 }
 
+/// The assistant turn being produced right now: the streamed text, and before
+/// the first token the line that says what the run is doing. A replayed
+/// conversation says so there, in a sentence; every other prompt pass shows
+/// its phase and block.
+struct PendingTurnView: View {
+    let snapshot: RunSnapshot
+    let isRunning: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: MRSpace.s4) {
+            VStack(alignment: .leading, spacing: MRSpace.s2) {
+                // The caret is part of the text, not a sibling view: a sibling
+                // sits at the trailing edge of the whole text block, which for a
+                // wrapped answer is the end of the first line, not the point
+                // where the next token will land.
+                StreamingText(
+                    text: snapshot.generatedText
+                        ?? snapshot.tokens.map { $0.text ?? "‹\($0.tokenID)›" }.joined(),
+                    caretActive: isRunning)
+                .lineSpacing(5)
+                if snapshot.tokens.isEmpty, let sentence = snapshot.replaySentence {
+                    Text(sentence)
+                        .font(MRType.micro)
+                        .foregroundStyle(MRColor.tertiary)
+                        .animation(nil, value: sentence)
+                        .accessibilityIdentifier("conversation.replay")
+                } else if snapshot.tokens.isEmpty, let phase = snapshot.phase {
+                    Text("\(phase.name) — \(phase.detail)")
+                        .font(MRType.micro)
+                        .foregroundStyle(MRColor.tertiary)
+                        .animation(nil, value: phase.detail)
+                }
+                if let footer = snapshot.reproducibility {
+                    FlowRow(spacing: MRSpace.s3, lineSpacing: MRSpace.s1) {
+                        ForEach(footer.figures, id: \.self) { figure in
+                            Text(figure)
+                                .lineLimit(1)
+                                .font(MRType.micro)
+                                .foregroundStyle(MRColor.secondary)
+                                .textSelection(.enabled)
+                        }
+                        DigestLabel(digest: footer.logitsDigest, label: nil)
+                    }
+                }
+            }
+            .frame(maxWidth: 640, alignment: .leading)
+            Spacer(minLength: MRSpace.s7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("assistant turn in progress")
+        .accessibilityValue(
+            snapshot.tokens.isEmpty
+                ? (snapshot.replaySentence ?? "no tokens yet")
+                : MRAnswerMarkdown.spokenText(
+                    snapshot.generatedText
+                        ?? snapshot.tokens.map { $0.text ?? "token \($0.tokenID)" }.joined()))
+    }
+}

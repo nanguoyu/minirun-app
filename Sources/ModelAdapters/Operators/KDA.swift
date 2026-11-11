@@ -218,8 +218,8 @@ public enum K3KDA {
     ///
     /// ```text
     /// S = S * exp(g_t)
-    /// S = S + (beta_t * k_t) ⊗ (v_t - k_t · S)
-    /// o_t = q_t · S
+    /// S = S + (beta_t * k_t) ⊗ (v_t - k_t @ S)
+    /// o_t = q_t @ S
     /// ```
     ///
     /// The output uses the state **after** the update, not before.

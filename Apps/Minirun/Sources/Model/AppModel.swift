@@ -770,6 +770,10 @@ final class AppModel {
     var drafts: [UUID: String] = [:]
 
     let conversationStore: ConversationStore
+    /// Each conversation's saved generation state, beside the conversations.
+    /// See ``ConversationSessionStore/invalidates(before:after:)`` for when a
+    /// file stops being its conversation's.
+    let conversationSessions: ConversationSessionStore
 
     /// The conversation whose turn is in flight, if any.
     private(set) var runningConversationID: UUID?
@@ -784,6 +788,9 @@ final class AppModel {
     /// A failure while resolving a run's storage grant belongs to the chat that
     /// tried to run. It must not become a global banner in every conversation.
     private(set) var runPreparationErrors: [UUID: String] = [:]
+    /// The conversations whose entry in ``runPreparationErrors`` is a
+    /// ``ConversationLengthRefusal``.
+    private var conversationLengthRefusals: [UUID: String] = [:]
     /// The named budget required by a prompt-specific preparation refusal.
     /// Kept separately from generic storage/runtime failures so the UI can
     /// offer Chat settings instead of sending the user to an unrelated page.
@@ -1014,6 +1021,7 @@ final class AppModel {
             self.history = []
         #endif
         self.conversationStore = store
+        self.conversationSessions = ConversationSessionStore(besideConversationsIn: store)
         self.conversationStorageError = conversationStorageError
         self.userDefaults = userDefaults
         self.persistsDefaults = persistsDefaults
@@ -1550,6 +1558,15 @@ final class AppModel {
         }
         conversations = restored.sorted { $0.updatedAt > $1.updatedAt }
         conversationLoadFailures = result.failures
+        // A conversation that failed to decode is still somebody's: its file
+        // is not an orphan until the document is gone.
+        var kept = Set(conversations.map(\.id))
+        for failure in result.failures {
+            if let id = UUID(uuidString: String(failure.filename.dropLast(".json".count))) {
+                kept.insert(id)
+            }
+        }
+        conversationSessions.removeOrphans(keeping: kept)
     }
 
     /// One-time compatibility for conversations created before the iPhone K3
@@ -1713,7 +1730,11 @@ final class AppModel {
     /// something a call site can forget.
     func update(_ id: UUID, _ mutate: (inout Conversation) -> Void) {
         guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let before = conversations[index]
         mutate(&conversations[index])
+        if ConversationSessionStore.invalidates(before: before, after: conversations[index]) {
+            conversationSessions.delete(id)
+        }
         conversations[index].updatedAt = Date()
         persist(conversations[index])
         sortConversations()
@@ -1730,6 +1751,9 @@ final class AppModel {
             runSnapshotConversationID = nil
         }
         conversations.removeAll { $0.id == id }
+        // A turn still stopping may write once more at its release;
+        // `recordTurn` removes that file when it lands for a chat that is gone.
+        conversationSessions.delete(id)
         drafts.removeValue(forKey: id)
         runPreparationErrors.removeValue(forKey: id)
         runPreparationBudgetTargets.removeValue(forKey: id)
@@ -1814,6 +1838,12 @@ final class AppModel {
         runPreparationBudgetTargets[id]
     }
 
+    /// Whether this conversation's last refused turn was refused for its
+    /// length, which a new chat answers and nothing in this one does.
+    func runPreparationReachedLength(for id: UUID) -> Bool {
+        runPreparationErrors[id] != nil && runPreparationErrors[id] == conversationLengthRefusals[id]
+    }
+
     func setDraft(_ text: String, in id: UUID) {
         drafts[id] = text
         // A prompt-specific reserve belongs to the exact draft that produced
@@ -1846,6 +1876,9 @@ final class AppModel {
                 runPreparationErrors[id] =
                     "This prompt needs \(MRFormat.bytesDecimal(target)); this chat states "
                     + "\(MRFormat.bytesDecimal(prospective.settings.memoryBudgetBytes))."
+            } else if let refusal = error as? ConversationLengthRefusal {
+                runPreparationErrors[id] = refusal.description
+                conversationLengthRefusals[id] = refusal.description
             } else {
                 runPreparationErrors[id] = "\(error)"
             }
@@ -1886,6 +1919,9 @@ final class AppModel {
                 runPreparationErrors[id] =
                     "This prompt needs \(MRFormat.bytesDecimal(target)); this chat states "
                     + "\(MRFormat.bytesDecimal(prospective.settings.memoryBudgetBytes))."
+            } else if let refusal = error as? ConversationLengthRefusal {
+                runPreparationErrors[id] = refusal.description
+                conversationLengthRefusals[id] = refusal.description
             } else {
                 runPreparationErrors[id] = "\(error)"
             }
@@ -2005,7 +2041,9 @@ final class AppModel {
             let artifact = try installed.runnableArtifactReference(
                 for: entry.id, matching: runtime.accepts)
         else { return nil }
-        let preparedRuntime = try runtime.prepare(artifact: artifact, for: conversation)
+        let preparedRuntime = try runtime.prepare(
+            artifact: artifact, for: conversation,
+            sessionFile: conversationSessions.fileURL(for: conversation.id))
         capture(preparedRuntime, for: entry.id)
         let request = try makeResolvedRequest(
             for: conversation, entry: entry, artifact: artifact,
@@ -2013,6 +2051,13 @@ final class AppModel {
             artifactCensus: preparedRuntime.artifactCensus,
             workingSetReserveBytes: preparedRuntime.workingSetReserveBytes,
             supportsPinPlan: preparedRuntime.runner.capabilities.supportsPinPlan)
+        if let ceiling = preparedRuntime.promptTokenCeiling,
+            case .tokenIDs(let ids) = request.prompt, ids.count > ceiling
+        {
+            throw ConversationLengthRefusal(
+                modelName: entry.descriptor.displayName, promptTokens: ids.count,
+                ceiling: ceiling)
+        }
         if let refusal = budgetPlan(for: conversation)?.refusal {
             // A prompt can move the MLA floor after the static conversation
             // controls were drawn. Refuse during preparation, before the user
@@ -2159,6 +2204,9 @@ final class AppModel {
             runningConversationID = nil
             runningTurnStartedAt = nil
         }
+        // Deleted while its turn was stopping: the runner wrote its state at
+        // release, after the conversation and its file were removed.
+        if conversation(id) == nil { conversationSessions.delete(id) }
         let text = snapshot.generatedText
             ?? snapshot.tokens.map { $0.text ?? "‹\($0.tokenID)›" }.joined()
         var namedError: String?

@@ -249,7 +249,7 @@ final class RunController {
         case .accepted(let acceptance):
             snapshot.acceptance = acceptance
             snapshot.log.append(
-                "accepted · budget \(MRFormat.bytesDecimal(acceptance.declaredBudgetBytes))")
+                "accepted, budget \(MRFormat.bytesDecimal(acceptance.declaredBudgetBytes))")
 
         case .phase(let phase):
             snapshot.apply(phase)

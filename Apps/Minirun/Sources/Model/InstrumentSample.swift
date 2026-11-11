@@ -11,10 +11,10 @@ import MinirunKit
 // predates those product bindings and still publishes its synthetic
 // ladder/flow values through this second stream:
 //
-//   D · layer ladder      — per-layer status, stored/widened bytes, wall seconds
-//   E · byte-flow ribbon  — the deterministic/expert split at sample rate
-//   F · overlap meter     — the `Stalls` pair and the read-ahead wait/stage pair
-//   G · cache strip       — hits, misses, evictions, rejected admissions, pinned
+//   D, layer ladder      — per-layer status, stored/widened bytes, wall seconds
+//   E, byte-flow ribbon  — the deterministic/expert split at sample rate
+//   F, overlap meter     — the `Stalls` pair and the read-ahead wait/stage pair
+//   G, cache strip       — hits, misses, evictions, rejected admissions, pinned
 //
 // This is not execution authority and the live K3 product path does not depend
 // on it. Missing samples stay missing; the panel never turns an absent preview

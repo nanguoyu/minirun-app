@@ -63,6 +63,10 @@
             let png = try XCTUnwrap(
                 NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
             try png.write(to: directory.appendingPathComponent("\(name).png"))
+            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+            attachment.name = "\(name).png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
 
         /// K3's eight-term split and V4's sixteen-term one both have to fit the
@@ -153,19 +157,19 @@
 
         func testTheFootprintRowDrawsOnBothBases() throws {
             let card = VStack(alignment: .leading, spacing: MRSpace.s5) {
-                Text("V4.1 · budget bounds what the run adds").mrLabel(MRColor.secondary)
+                Text("V4.1, budget bounds what the run adds").mrLabel(MRColor.secondary)
                 BudgetGauge(
                     footprintBytes: 12_900_000_000,
                     peakBytes: 14_700_000_000,
                     declaredBudgetBytes: 14_900_000_000,
                     processBytes: 23_700_000_000,
                     entryFootprintBytes: 10_800_000_000)
-                Text("V4 · budget bounds the process").mrLabel(MRColor.secondary)
+                Text("V4, budget bounds the process").mrLabel(MRColor.secondary)
                 BudgetGauge(
                     footprintBytes: 7_150_000_000,
                     peakBytes: 7_150_000_000,
                     declaredBudgetBytes: 8_000_000_000)
-                Text("V4.1 · the promise did not hold").mrLabel(MRColor.secondary)
+                Text("V4.1, the promise did not hold").mrLabel(MRColor.secondary)
                 BudgetGauge(
                     footprintBytes: 15_200_000_000,
                     peakBytes: 15_200_000_000,
@@ -187,8 +191,8 @@
 
         /// The same row after the run, which is where it went wrong: the last
         /// sample is taken after teardown, so a released working set read as a
-        /// run that had added nothing — `0 MB of 14.9 GB · peak 14.7 GB` under
-        /// `Process 161 MB · 10.8 GB before this run`.
+        /// run that had added nothing — `0 MB of 14.9 GB` and `peak 14.7 GB` over
+        /// `Process 161 MB` and `10.8 GB before this run`.
         ///
         /// Drawn from the telemetry rather than from hand-passed fields, so the
         /// picture is of the mapping the panel uses and not of a second one.
@@ -212,7 +216,7 @@
             }
 
             let card = VStack(alignment: .leading, spacing: MRSpace.s5) {
-                Text("V4.1 · finished, budget bounded what the run added")
+                Text("V4.1, finished, budget bounded what the run added")
                     .mrLabel(MRColor.secondary)
                 BudgetGauge(
                     telemetry: sample(
@@ -221,7 +225,7 @@
                         declaredBudgetBytes: 14_900_000_000,
                         entryFootprintBytes: 10_800_000_000),
                     latchedBreach: false)
-                Text("V4 · finished, budget bounded the process").mrLabel(MRColor.secondary)
+                Text("V4, finished, budget bounded the process").mrLabel(MRColor.secondary)
                 BudgetGauge(
                     telemetry: sample(
                         footprintBytes: 161_000_000,
@@ -229,7 +233,7 @@
                         declaredBudgetBytes: 8_000_000_000,
                         entryFootprintBytes: nil),
                     latchedBreach: false)
-                Text("V4.1 · finished, the promise did not hold").mrLabel(MRColor.secondary)
+                Text("V4.1, finished, the promise did not hold").mrLabel(MRColor.secondary)
                 BudgetGauge(
                     telemetry: sample(
                         footprintBytes: 161_000_000,

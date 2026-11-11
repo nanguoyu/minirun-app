@@ -25,8 +25,14 @@ final class DeepSeekV41PlatformPolicyTests: XCTestCase {
         let policy = DeepSeekV41ProductMemoryBudget.macOSProductPolicy
         XCTAssertEqual(policy.transientExecutionBytes, 3_200_000_000)
         XCTAssertEqual(policy.minimumBudgetBytes, 3_400_000_000)
-        XCTAssertEqual(policy.maximumPromptTokens, 512)
-        XCTAssertEqual(policy.maximumNewTokens, 64)
+        // 768 and 256 since 2026-11-10 (they were 512 and 64): at most 1,023
+        // positions, inside the 717 the long-sequence record held to the
+        // reference and below the ratio-2 Top-K boundary at 1,025.
+        XCTAssertEqual(policy.maximumPromptTokens, 768)
+        XCTAssertEqual(policy.maximumNewTokens, 256)
+        XCTAssertLessThan(
+            policy.maximumPromptTokens + policy.maximumNewTokens - 1, 1_025,
+            "a Mac conversation may not reach the ratio-2 Top-K boundary no arm has crossed")
         XCTAssertEqual(policy.expertPoolSlots, 20)
         XCTAssertEqual(policy.expertReadAhead, 6)
         XCTAssertEqual(policy.headWindowRows, 4_096)
@@ -61,6 +67,9 @@ final class DeepSeekV41PlatformPolicyTests: XCTestCase {
         let policy = DeepSeekV41ProductMemoryBudget.iOSProductPolicy
         XCTAssertEqual(policy.transientExecutionBytes, 1_600_000_000)
         XCTAssertEqual(policy.minimumBudgetBytes, 1_900_000_000)
+        // Not moved with the Mac's: no phone arm has run past position 512.
+        XCTAssertEqual(policy.maximumPromptTokens, 512)
+        XCTAssertEqual(policy.maximumNewTokens, 64)
         XCTAssertTrue(policy.isExperimental)
         XCTAssertTrue(policy.boundsLiveOperands)
         XCTAssertEqual(policy.liveGatherOperandTokens, 1)
@@ -90,6 +99,104 @@ final class DeepSeekV41PlatformPolicyTests: XCTestCase {
         XCTAssertEqual(exact, 1_846_117_888)
         XCTAssertGreaterThanOrEqual(policy.minimumBudgetBytes, exact)
         XCTAssertEqual(policy.minimumBudgetBytes - exact, 53_882_112)
+    }
+
+    // MARK: - The plans at each platform's ceilings, from the published config
+
+    /// The published container's geometry, from the committed fixture
+    /// (`DeepSeekV41ArtifactTests` holds it equal to the container).
+    private static func publishedConfig() throws -> DeepSeekV41Config {
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("../Fixtures/deepseek-v41")
+            .standardizedFileURL
+        return try DeepSeekV41Config(
+            inferenceJSON: try Data(
+                contentsOf: directory.appendingPathComponent("inference-config.json")),
+            huggingFaceJSON: try Data(
+                contentsOf: directory.appendingPathComponent("config.json")))
+    }
+
+    private static func productPlan(
+        _ policy: DeepSeekV41ProductMemoryBudget.Policy
+    ) throws -> DeepSeekV41ProductMemoryPlan {
+        try DeepSeekV41ProductMemoryBudget.plan(
+            declaredBudgetBytes: policy.minimumBudgetBytes, config: publishedConfig(),
+            promptTokenCount: policy.maximumPromptTokens,
+            maximumNewTokens: policy.maximumNewTokens,
+            expertPoolBytes: UInt64(policy.expertPoolSlots) * halfTileBytes,
+            mlxCacheBytes: 0, expertTileStrideBytes: halfTileBytes, policy: policy)
+    }
+
+    /// **The Mac floor holds 1,023 positions.** At 768 + 256 the state is
+    /// 8,542,976 B and its one-block replacement 1,440,512 B, 2,007,040 B more
+    /// than at 512 + 64, so the padding inside 3.4 GB falls from 66,685,952 B
+    /// to 64,678,912 B and the floor does not move.
+    func testTheMacFloorHoldsTheStateAtItsCeilings() throws {
+        let policy = DeepSeekV41ProductMemoryBudget.macOSProductPolicy
+        let plan = try Self.productPlan(policy)
+        XCTAssertEqual(plan.retainedStateBytes, 8_542_976)
+        XCTAssertEqual(plan.replacementBlockStateBytes, 1_440_512)
+        XCTAssertEqual(plan.liveGatherOperandBytes, 0)
+        XCTAssertEqual(
+            policy.transientExecutionBytes + plan.retainedStateBytes
+                + plan.replacementBlockStateBytes + plan.expertPoolBytes,
+            3_335_321_088)
+        XCTAssertEqual(plan.requiredBudgetBytes, 3_400_000_000)
+        XCTAssertEqual(plan.productFloorPaddingBytes, 64_678_912)
+        XCTAssertTrue(plan.isAdmitted)
+        XCTAssertTrue(plan.accountsForDeclaredBudget)
+
+        // And it refuses one id past either ceiling, by name.
+        XCTAssertThrowsError(
+            try DeepSeekV41ProductMemoryBudget.plan(
+                declaredBudgetBytes: policy.minimumBudgetBytes, config: Self.publishedConfig(),
+                promptTokenCount: policy.maximumPromptTokens + 1,
+                maximumNewTokens: policy.maximumNewTokens, expertPoolBytes: plan.expertPoolBytes,
+                mlxCacheBytes: 0, policy: policy))
+        XCTAssertThrowsError(
+            try DeepSeekV41ProductMemoryBudget.plan(
+                declaredBudgetBytes: policy.minimumBudgetBytes, config: Self.publishedConfig(),
+                promptTokenCount: policy.maximumPromptTokens,
+                maximumNewTokens: policy.maximumNewTokens + 1,
+                expertPoolBytes: plan.expertPoolBytes, mlxCacheBytes: 0, policy: policy))
+    }
+
+    /// **The iPhone plan is byte for byte what it was.** The state and
+    /// replacement the hand arithmetic above states, now computed from the
+    /// config, and the same 1,846,117,888 B exact requirement.
+    func testTheIPhonePlanAtItsCeilingsIsUnchanged() throws {
+        let policy = DeepSeekV41ProductMemoryBudget.iOSProductPolicy
+        let plan = try Self.productPlan(policy)
+        XCTAssertEqual(plan.retainedStateBytes, 7_109_376)
+        XCTAssertEqual(plan.replacementBlockStateBytes, 867_072)
+        XCTAssertEqual(plan.liveGatherOperandBytes, 112_803_840)
+        XCTAssertEqual(plan.requiredBudgetBytes, 1_900_000_000)
+        XCTAssertEqual(plan.productFloorPaddingBytes, 53_882_112)
+        XCTAssertTrue(plan.accountsForDeclaredBudget)
+    }
+
+    /// The dial's floor is priced at the same ceilings, so the Mac's moves by
+    /// the 2,007,040 B of state above and the iPhone's does not move at all:
+    /// 6,140,627,456 B against 6,138,620,416 B before, and 6,138,620,416 B on
+    /// the phone.
+    func testTheDialFloorAtEachPlatformsCeilings() throws {
+        for (policy, expected): (DeepSeekV41ProductMemoryBudget.Policy, UInt64) in [
+            (DeepSeekV41ProductMemoryBudget.macOSProductPolicy, 6_140_627_456),
+            (DeepSeekV41ProductMemoryBudget.iOSProductPolicy, 6_138_620_416),
+        ] {
+            let priced = try DeepSeekV41ProductMemoryBudget.plan(
+                declaredBudgetBytes: .max, config: Self.publishedConfig(),
+                promptTokenCount: policy.maximumPromptTokens,
+                maximumNewTokens: policy.maximumNewTokens,
+                expertPoolBytes: UInt64(policy.expertPoolSlots) * Self.halfTileBytes,
+                mlxCacheBytes: DeepSeekV41EffectiveKnobs.maximumDefaultMLXCacheBytes,
+                expertTileStrideBytes: Self.halfTileBytes, policy: policy,
+                enforcesProductLimits: false)
+            let floor = try XCTUnwrap(
+                DeepSeekV41MemoryDialInputs.floor(pricing: priced, policy: policy))
+            XCTAssertEqual(floor.totalBytes, expected, policy.name)
+        }
     }
 
     /// The iPhone kill, arithmetically.

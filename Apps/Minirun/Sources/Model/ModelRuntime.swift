@@ -77,7 +77,7 @@ struct ModelRuntime {
     let trust: Trust
     private let artifactCompatibility: @Sendable (ArtifactIndexIdentity) -> Bool
     private let preparation: @MainActor (
-        ArtifactReference, Conversation
+        ArtifactReference, Conversation, URL?
     ) throws -> PreparedModelRuntime
 
     static func verified(
@@ -93,22 +93,50 @@ struct ModelRuntime {
         ) throws -> any VerifiedPromptTokenizing,
         makeRunner: @escaping @MainActor (Conversation) -> any ProductRunnerFacade
     ) -> ModelRuntime {
+        verified(
+            capabilities: capabilities, acceptsArtifact: acceptsArtifact,
+            inspectArtifact: inspectArtifact, makeTokenizer: makeTokenizer,
+            makeConversationRunner: { conversation, _ in makeRunner(conversation) })
+    }
+
+    /// A runtime whose runner depends on the conversation it answers: V4.1's
+    /// runner is built with that conversation's first-turn length and the file
+    /// its generation state lives in (ADR 0023).
+    static func verified(
+        capabilities: RunnerCapabilities,
+        acceptsArtifact: @escaping @Sendable (ArtifactIndexIdentity) -> Bool = { _ in true },
+        inspectArtifact: @escaping @MainActor (
+            ArtifactReference
+        ) throws -> PreparedArtifactRuntimeInspection = { _ in
+            PreparedArtifactRuntimeInspection(census: nil)
+        },
+        makeTokenizer: @escaping @MainActor (
+            ArtifactReference
+        ) throws -> any VerifiedPromptTokenizing,
+        makeConversationRunner: @escaping @MainActor (
+            Conversation, RunnerContext
+        ) throws -> any ProductRunnerFacade
+    ) -> ModelRuntime {
         return ModelRuntime(
             capabilities: capabilities,
             trust: .verified,
             artifactCompatibility: acceptsArtifact,
-            preparation: { artifact, conversation in
+            preparation: { artifact, conversation, sessionFile in
                 let tokenizer = try makeTokenizer(artifact)
                 precondition(
                     tokenizer.verifiedIdentity.model == capabilities.model,
                     "tokenizer and runner must name the same model")
                 let inspection = try inspectArtifact(artifact)
                 return PreparedModelRuntime(
-                    tokenizer: tokenizer, runner: makeRunner(conversation),
+                    tokenizer: tokenizer,
+                    runner: try makeConversationRunner(
+                        conversation,
+                        RunnerContext(tokenizer: tokenizer, sessionFile: sessionFile)),
                     artifactCensus: inspection.census,
                     deepSeekLadder: inspection.deepSeekLadder,
                     progressLayerCount: inspection.progressLayerCount,
-                    workingSetReserveBytes: inspection.workingSetReserveBytes)
+                    workingSetReserveBytes: inspection.workingSetReserveBytes,
+                    promptTokenCeiling: inspection.promptTokenCeiling)
             })
     }
 
@@ -130,23 +158,27 @@ struct ModelRuntime {
                 capabilities: capabilities,
                 trust: .preview,
                 artifactCompatibility: { _ in true },
-                preparation: { artifact, conversation in
+                preparation: { artifact, conversation, _ in
                     let inspection = try inspectArtifact(artifact)
                     return PreparedModelRuntime(
                         tokenizer: tokenizer, runner: makeRunner(conversation),
                         artifactCensus: inspection.census,
                         deepSeekLadder: inspection.deepSeekLadder,
                         progressLayerCount: inspection.progressLayerCount,
-                        workingSetReserveBytes: inspection.workingSetReserveBytes)
+                        workingSetReserveBytes: inspection.workingSetReserveBytes,
+                        promptTokenCeiling: inspection.promptTokenCeiling)
                 })
         }
     #endif
 
+    /// - Parameter sessionFile: where this conversation's generation state
+    ///   lives, for a runtime that carries one. Nil when the app keeps no
+    ///   files, or for a preparation that will not run (a prompt preview).
     @MainActor
     func prepare(
-        artifact: ArtifactReference, for conversation: Conversation
+        artifact: ArtifactReference, for conversation: Conversation, sessionFile: URL? = nil
     ) throws -> PreparedModelRuntime {
-        try preparation(artifact, conversation)
+        try preparation(artifact, conversation, sessionFile)
     }
 
     /// A cheap structural gate used before the product offers a model as
@@ -178,18 +210,34 @@ struct PreparedArtifactRuntimeInspection {
     let progressLayerCount: Int?
     let workingSetReserveBytes: (@Sendable (_ promptTokens: Int, _ maximumNewTokens: Int) throws
         -> UInt64)?
+    /// The most ids a turn's prompt may have, for a runtime whose prompt is
+    /// the whole conversation and whose verified boundary is a number. A turn
+    /// past it is refused in a sentence before the transcript changes. Nil
+    /// for runtimes with no such ceiling here.
+    let promptTokenCeiling: Int?
 
     init(
         census: ArtifactCensus?,
         deepSeekLadder: DeepSeekV4MemoryDialInputs.ArtifactProfile? = nil,
         progressLayerCount: Int? = nil,
-        workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil
+        workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)? = nil,
+        promptTokenCeiling: Int? = nil
     ) {
         self.census = census
         self.deepSeekLadder = deepSeekLadder
         self.progressLayerCount = progressLayerCount
         self.workingSetReserveBytes = workingSetReserveBytes
+        self.promptTokenCeiling = promptTokenCeiling
     }
+}
+
+/// What a conversation-dependent runner is built from, beside the
+/// conversation itself.
+struct RunnerContext {
+    let tokenizer: any PromptTokenizing
+    /// Where this conversation's generation state lives. Nil when the app
+    /// keeps no files.
+    let sessionFile: URL?
 }
 
 struct PreparedModelRuntime {
@@ -207,6 +255,8 @@ struct PreparedModelRuntime {
     /// configuration. Nil for runtimes whose state does not grow with prompt
     /// or generation length.
     let workingSetReserveBytes: (@Sendable (Int, Int) throws -> UInt64)?
+    /// See ``PreparedArtifactRuntimeInspection/promptTokenCeiling``.
+    let promptTokenCeiling: Int?
 }
 
 /// One independently reviewable product runtime contribution.

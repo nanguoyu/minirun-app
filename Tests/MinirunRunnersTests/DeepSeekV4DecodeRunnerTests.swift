@@ -1023,7 +1023,7 @@ final class DeepSeekV4DecodeRunnerTests: XCTestCase {
         let session = try makeRunner(state: state).start(request(scope: scope))
         let draining = Task { await DrainedRun.drain(session) }
 
-        XCTAssertTrue(state.waitUntilPrefillEntered(timeout: 2))
+        XCTAssertTrue(state.waitUntilPrefillEntered(timeout: 30))
         session.cancel()
         let run = await draining.value
 
@@ -1048,9 +1048,13 @@ final class DeepSeekV4DecodeRunnerTests: XCTestCase {
             } catch {}
         }
 
-        XCTAssertTrue(state.waitUntilPrefillEntered(timeout: 2))
+        // Both waits return the moment their condition holds, so the limit
+        // only decides how long a real failure takes to report. Two seconds
+        // was short enough to fail on a loaded machine: at a load average of
+        // 95 the decode thread had not been scheduled yet.
+        XCTAssertTrue(state.waitUntilPrefillEntered(timeout: 30))
         consumer.cancel()
-        let closedByConsumer = state.waitUntilShutdown(timeout: 2)
+        let closedByConsumer = state.waitUntilShutdown(timeout: 30)
         // Keep a failed regression from leaving its dedicated decode thread
         // behind after the test process moves on.
         session.cancel()

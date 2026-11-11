@@ -178,8 +178,9 @@ public enum DeepSeekV41MemoryDialInputs {
     /// manifest that disagrees with its header is refused there, when the run
     /// opens it, rather than smoothed over here.
     ///
-    /// The floor is priced at the **product ceilings** — 512 prompt tokens, 64
-    /// generated — and at the saturated MLX cache, for V4's reason: a ladder is
+    /// The floor is priced at the **policy's product ceilings** — 768 prompt
+    /// tokens and 256 generated on a Mac, 512 and 64 on an iPhone — and at the
+    /// saturated MLX cache, for V4's reason: a ladder is
     /// a statement about every budget rather than about one request, and pricing
     /// it at the largest state this product will ever hold is the conservative
     /// direction. A preset chosen off this ladder is never short of what the run

@@ -27,7 +27,7 @@ final class ModelPageStatusTests: XCTestCase {
             copyLocationName: nil)
 
         XCTAssertEqual(status.tone, .moving)
-        XCTAssertEqual(status.sentence, "Downloading to K3NVME · about 3.7 h left")
+        XCTAssertEqual(status.sentence, "Downloading to K3NVME, about 3.7 h left")
     }
 
     func testAPausedTransferIsAmberBecauseItIsWaitingForTheOperator() {
@@ -96,7 +96,7 @@ final class ModelPageStatusTests: XCTestCase {
 
         XCTAssertEqual(status.tone, .ready)
         XCTAssertEqual(
-            status.sentence, "Ready on K3NVME · every file matches its published digest.")
+            status.sentence, "Ready on K3NVME. Every file matches its published digest.")
     }
 
     func testACopyOnAnUnpluggedDriveAsksForTheDriveRatherThanADownload() {
@@ -153,7 +153,7 @@ final class ModelPageStatusTests: XCTestCase {
         XCTAssertEqual(status.tone, .attention)
         XCTAssertEqual(
             status.sentence,
-            "On K3NVME · verify all files before using this copy in a chat.")
+            "On K3NVME. Verify all files before using this copy in a chat.")
     }
 
     /// A finished transfer the scan has not caught up with yet still says so,
@@ -340,10 +340,10 @@ final class ModelPageCopyTests: XCTestCase {
     func testTheLineUnderTheNameIsPurposeFamilyAndLicenceAndInventsNoParameterCount() {
         XCTAssertEqual(
             ModelPurposePresentation.line(for: CatalogFixtures.deepseekV41Flash.descriptor),
-            "Text chat · Mixture of experts · MIT License")
+            "Text chat, mixture of experts, MIT License")
         XCTAssertEqual(
             ModelPurposePresentation.line(for: CatalogFixtures.minimaxH3.descriptor),
-            "Video generation · Diffusion transformer · MiniMax Model License")
+            "Video generation, diffusion transformer, MiniMax Model License")
     }
 
     /// The catalog's own licence tag for K3 is a whole sentence. A header line
@@ -362,10 +362,10 @@ final class ModelPageCopyTests: XCTestCase {
     func testPrecisionIsReadOffTheLayoutAndIsSilentWhereItCannotBe() {
         XCTAssertEqual(
             ArtifactPrecisionPresentation.sentence(for: .k3FlagshipLayerStreams),
-            "FP4 experts · BF16 dense layers")
+            "FP4 experts, BF16 dense layers")
         XCTAssertEqual(
             ArtifactPrecisionPresentation.sentence(for: .v41FlashUnitBundle),
-            "FP4 experts · FP8 matrices · FP8 memory tables")
+            "FP4 experts, FP8 matrices, FP8 memory tables")
         XCTAssertNil(ArtifactPrecisionPresentation.sentence(for: .h3UnitBundle))
         XCTAssertNil(ArtifactPrecisionPresentation.sentence(for: .unrecognized))
     }
@@ -373,7 +373,7 @@ final class ModelPageCopyTests: XCTestCase {
     func testThePaceLineCarriesRateFileAndEstimateWhileItMoves() {
         let line = TransferPacePresentation.line(
             ModelPageStatusTests.snapshot(verified: 47_600_000_000), isMoving: true)
-        XCTAssertEqual(line, "35 MB/s · file 491 of 624")
+        XCTAssertEqual(line, "35 MB/s, file 491 of 624")
     }
 
     /// A stopped transfer has no speed and no estimate. The same snapshot,
@@ -426,7 +426,7 @@ final class ModelListStatusTests: XCTestCase {
             locations: Self.k3nvme, hasStorageLocation: true)
 
         XCTAssertEqual(status.tone, .moving)
-        XCTAssertEqual(status.sentence, "Downloading · 47.6 GB of 517 GB")
+        XCTAssertEqual(status.sentence, "Downloading, 47.6 GB of 517 GB")
     }
 
     func testAnUnpluggedDriveSaysSoRatherThanReadingAsEmpty() {
@@ -466,7 +466,7 @@ final class ModelListStatusTests: XCTestCase {
             locations: Self.k3nvme, hasStorageLocation: true)
 
         XCTAssertEqual(status.tone, .attention)
-        XCTAssertEqual(status.sentence, "On K3NVME · a sample matched")
+        XCTAssertEqual(status.sentence, "On K3NVME, a sample matched")
     }
 
     func testAnIncompleteCopyNamesTheMissingFilesBeforeItsVerification() {
@@ -478,7 +478,7 @@ final class ModelListStatusTests: XCTestCase {
             locations: Self.k3nvme, hasStorageLocation: true)
 
         XCTAssertEqual(status.tone, .attention)
-        XCTAssertEqual(status.sentence, "On K3NVME · files are missing")
+        XCTAssertEqual(status.sentence, "On K3NVME, files are missing")
     }
 
     /// Two copies on two drives is a fact worth seeing. The row states the
@@ -504,7 +504,7 @@ final class ModelListStatusTests: XCTestCase {
             hasStorageLocation: true)
 
         XCTAssertEqual(status.tone, .ready)
-        XCTAssertEqual(status.sentence, "Ready on K3NVME · 2 copies")
+        XCTAssertEqual(status.sentence, "Ready on K3NVME, 2 copies")
     }
 
     /// A finished or cancelled transfer speaks only while the scan has found
@@ -523,7 +523,7 @@ final class ModelListStatusTests: XCTestCase {
                 installations: [ModelPageStatusTests.artifact(verification: .unverified)],
                 locations: Self.k3nvme, hasStorageLocation: true
             ).sentence,
-            "On K3NVME · not verified")
+            "On K3NVME, not verified")
     }
 }
 
@@ -539,7 +539,7 @@ final class DownloadsRowPresentationTests: XCTestCase {
             remains: .checking, destinationName: "K3NVME")
 
         XCTAssertEqual(status.tone, .moving)
-        XCTAssertEqual(status.sentence, "Downloading to K3NVME · about 3.7 h left")
+        XCTAssertEqual(status.sentence, "Downloading to K3NVME, about 3.7 h left")
     }
 
     /// A job with no destination yet is the one state a transfer record cannot
@@ -655,7 +655,7 @@ final class DownloadsRowPresentationTests: XCTestCase {
         /// the page it draws is the page one location draws.
         ///
         /// This is the drawing of the bug the owner saw: two identical rows
-        /// under *Copies on this device*, both *624 files · Not verified*,
+        /// under *Copies on this device*, both *624 files, not verified*,
         /// each with its own *Verify all files*.
         func testATreeCoveredByTwoLocationsDrawsOneCopy() throws {
             let one = try render(
@@ -722,6 +722,10 @@ final class DownloadsRowPresentationTests: XCTestCase {
             let png = try XCTUnwrap(
                 NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
             try png.write(to: directory.appendingPathComponent("\(name).png"))
+            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+            attachment.name = "\(name).png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
 
         // MARK: Fixtures
@@ -1055,6 +1059,10 @@ final class DownloadsRowPresentationTests: XCTestCase {
             let png = try XCTUnwrap(
                 NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
             try png.write(to: directory.appendingPathComponent("\(name).png"))
+            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+            attachment.name = "\(name).png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
     }
 
@@ -1219,7 +1227,7 @@ final class StoragePageCopyTests: XCTestCase {
             assessedAt: now.addingTimeInterval(-3 * 86400), now: now)
 
         XCTAssertEqual(status.tone, .ready)
-        XCTAssertEqual(status.sentence, "Mounted · assessed 3 days ago")
+        XCTAssertEqual(status.sentence, "Mounted, assessed 3 days ago")
     }
 
     /// A drive that is plugged in is usable whether or not anybody has timed
@@ -1231,7 +1239,7 @@ final class StoragePageCopyTests: XCTestCase {
             isMounted: true, hasRecordedPath: true, assessedAt: nil, now: now)
 
         XCTAssertEqual(status.tone, .ready)
-        XCTAssertEqual(status.sentence, "Mounted · read rate not measured")
+        XCTAssertEqual(status.sentence, "Mounted, read rate not measured")
         XCTAssertFalse(status.sentence.contains("assessed"))
     }
 
@@ -1281,7 +1289,7 @@ final class StoragePageCopyTests: XCTestCase {
 
     /// A quantity is split at its unit so a column of rates lines up; a
     /// sentence is not a quantity and is printed whole. "free space unknown"
-    /// reaches the same slot and must not become "free space" · "unknown".
+    /// reaches the same slot and must not become "free space" and "unknown".
     func testAQuantityIsSplitAtItsUnitAndASentenceIsNot() {
         let rate = MRUnitValue.split("1.85 GB/s")
         XCTAssertEqual(rate?.number, "1.85")
@@ -1450,6 +1458,10 @@ final class StoragePageCopyTests: XCTestCase {
             let png = try XCTUnwrap(
                 NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
             try png.write(to: directory.appendingPathComponent("\(name).png"))
+            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+            attachment.name = "\(name).png"
+            attachment.lifetime = .keepAlways
+            add(attachment)
         }
 
         // MARK: Fixtures
@@ -1655,7 +1667,7 @@ final class ResumedTransferPresentationTests: XCTestCase {
         XCTAssertEqual(snapshot.bytesOnDisk, 3_300)
         XCTAssertEqual(
             TransferPacePresentation.line(snapshot, isMoving: true),
-            "0 MB/s · file 4 of 4")
+            "0 MB/s, file 4 of 4")
     }
 }
 
@@ -1667,7 +1679,7 @@ final class VerificationPhasePresentationTests: XCTestCase {
             bytesTotal: 516_000_000_000)
         XCTAssertEqual(
             phase.sentence,
-            "Checking every file against the published digests · 311 of 624")
+            "Checked 311 of 624 files against the published digests")
         XCTAssertEqual(phase.filesLine, "file 312 of 624")
         XCTAssertEqual(phase.bytesChecked, 258_000_000_000)
         XCTAssertEqual(phase.fraction.map { ($0 * 100).rounded() }, 50)

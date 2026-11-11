@@ -517,7 +517,7 @@ final class ArtifactDiscoveryTests: XCTestCase {
     /// This is the shape the owner's Mac was in after a 517 GB download: the
     /// drive was registered, the finished transfer registered its own artifact
     /// folder as well, and the model page then listed the same copy twice —
-    /// both rows *624 files · Not verified*, and one press of *Verify all
+    /// both rows *624 files, not verified*, and one press of *Verify all
     /// files* started two passes over the same drive.
     func testTwoNestedLocationsOverOneDirectoryAreOneCopy() throws {
         try makeArtifact(named: "k3-artifact", index: Self.k3Index)

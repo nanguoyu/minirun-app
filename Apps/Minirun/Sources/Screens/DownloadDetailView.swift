@@ -230,7 +230,7 @@ struct DownloadDetailPage: View {
                 }
                 MRFact(label: "Delta") {
                     Text(
-                        "\(record.fileCountDelta) files · "
+                        "\(record.fileCountDelta) files, "
                             + MRFormat.bytesDecimal(record.byteDelta)
                     )
                     .font(MRType.figure)

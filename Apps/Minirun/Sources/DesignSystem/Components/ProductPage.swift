@@ -399,7 +399,7 @@ struct MRTransferBlock<Links: View>: View {
     var headline: String?
     /// "of 517 GB" — the quieter half.
     var headlineDetail: String?
-    /// "35 MB/s · file 491 of 624 · about 3.7 hours left"
+    /// "35 MB/s, file 491 of 624"
     var meta: String?
     /// Nil draws no bar at all: an empty track is a claim too.
     var fraction: Double?

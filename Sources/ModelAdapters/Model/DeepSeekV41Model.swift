@@ -129,7 +129,7 @@ public protocol DeepSeekV41EngramIndexSource: AnyObject {
 /// the multipliers were drawn from would rehash the whole table, and that is a
 /// refusal here rather than 384 million rows of plausible noise.
 public final class DeepSeekV41PublishedEngramIndexSource: DeepSeekV41EngramIndexSource {
-    private var hasher: DeepSeekV41EngramHasher
+    var hasher: DeepSeekV41EngramHasher
 
     public init(map: DeepSeekV41EngramTokenMap.Map, config: DeepSeekV41Config) throws {
         guard config.engramCompressedVocabularySize
@@ -171,32 +171,45 @@ public final class DeepSeekV41PublishedEngramIndexSource: DeepSeekV41EngramIndex
 /// `SharedAttentionRuntime` is a **module-level global** in the reference —
 /// `shared_attn = SharedAttentionRuntime()` beside the class, with the comment
 /// "nothing needs resetting between forwards" — so what a block published in
-/// one pass is what a block that publishes nothing reads in the next. That is
-/// not a detail: a ratio-2 encoder source publishes `index_k` only when its
-/// group completes, so on every other decode step blocks 2 through 9 score
-/// against whichever owner published last, which is block 20's, from the
-/// previous token. Rebuilding the runtime per pass gives those steps no index
-/// keys at all, and the reference transcription refuses rather than pretending
-/// (`docs/experiments/2026-09-11-v41-phase1-dense.md` §1).
+/// one pass is what a block that publishes nothing reads in the next. At the
+/// inference revision before ``DeepSeekV41UpstreamInference/revision`` that was
+/// load-bearing: a ratio-2 encoder source published `index_k` only when its
+/// group completed, so on every other decode step blocks 2 through 19 scored
+/// against block 20's keys from the previous token. Upstream `8b3cec70` made
+/// every owner publish its own keys on every step, so no published block reads
+/// another pass's keys any more; the runtime is still carried, because that is
+/// the reference's structure and a per-pass rebuild would be a second model of
+/// it (`docs/experiments/2026-11-10-v41-upstream-october.md`).
 public struct DeepSeekV41GenerationState {
-    fileprivate var caches: [DeepSeekV41AttentionCaches]
-    fileprivate let shared: DeepSeekV41SharedAttentionRuntime
-    fileprivate let engramIndices: (any DeepSeekV41EngramIndexSource)?
-    fileprivate var nextPosition: Int
-    fileprivate let positionLimit: Int
+    var caches: [DeepSeekV41AttentionCaches]
+    let shared: DeepSeekV41SharedAttentionRuntime
+    let engramIndices: (any DeepSeekV41EngramIndexSource)?
+    var nextPosition: Int
+    var positionLimit: Int
+    /// Every token id a pass has consumed, in position order. A session
+    /// snapshot is bound to exactly these ids (``DeepSeekV41SessionState``).
+    var consumedTokenIDs: [Int]
+    /// How many of those ids the position-0 prefill took as one block. Every
+    /// later id went one pass each, so this number and the ids are the whole
+    /// shape of the computation (ADR 0023), and a snapshot records it.
+    var firstBlockTokenCount: Int
 
-    fileprivate init(
+    init(
         caches: [DeepSeekV41AttentionCaches],
         shared: DeepSeekV41SharedAttentionRuntime,
         engramIndices: (any DeepSeekV41EngramIndexSource)?,
         nextPosition: Int,
-        positionLimit: Int
+        positionLimit: Int,
+        consumedTokenIDs: [Int] = [],
+        firstBlockTokenCount: Int = 0
     ) {
         self.caches = caches
         self.shared = shared
         self.engramIndices = engramIndices
         self.nextPosition = nextPosition
         self.positionLimit = positionLimit
+        self.consumedTokenIDs = consumedTokenIDs
+        self.firstBlockTokenCount = firstBlockTokenCount
     }
 
     /// Absolute position the next decode step consumes.
@@ -204,10 +217,16 @@ public struct DeepSeekV41GenerationState {
     /// The run-scoped ceiling chosen before prefill.
     public var decodePositionLimit: Int { positionLimit }
     public var blockCount: Int { caches.count }
+    /// The ids the passes so far consumed, position by position.
+    public var tokenIDs: [Int] { consumedTokenIDs }
+    /// The length of the block the position-0 prefill took; zero before it.
+    public var firstBlockTokens: Int { firstBlockTokenCount }
 
     /// Drop every retained cache. A released state is terminal.
     public mutating func release() {
         caches.removeAll(keepingCapacity: false)
+        consumedTokenIDs.removeAll(keepingCapacity: false)
+        firstBlockTokenCount = 0
         nextPosition = 0
     }
 }
@@ -231,11 +250,54 @@ public protocol DeepSeekV41ForwardTrace: AnyObject {
     func recordAttention(block: Int, output: MLXArray)
     /// The MoE branch's own output for the pass's last token, `[hidden]`.
     func recordFeedForward(block: Int, output: MLXArray)
+
+    // The whole-pass instruments. Every token of the pass rather than the last
+    // one, because a prefill disagreement can start at any of its positions and
+    // the reference's hooks see every one of them
+    // (`Tools/v41_flash/streaming_reference.py --trace-dir`). The default for
+    // each is to do nothing, so a trace that wants only the last token's
+    // streams is unchanged.
+
+    /// A pass begins: `tokenIDs` at absolute positions `startPosition...`.
+    func beginPass(startPosition: Int, tokenIDs: [Int])
+    /// `stream` is `[tokens, multiplicity, hidden]` and `preMix`
+    /// `[tokens, multiplicity]`, as they stand *before* `block` runs and before
+    /// any Engram on that block: what block `block - 1` returned. `block ==
+    /// blockCount` is the state the final collapse reads.
+    func recordStreamState(block: Int, stream: MLXArray, preMix: MLXArray)
+    /// The attention branch's output, `[tokens, hidden]`, before `hc_post`.
+    func recordAttentionBranch(block: Int, output: MLXArray)
+    /// The MoE branch's output, `[tokens, hidden]`, before `hc_post`.
+    func recordFeedForwardBranch(block: Int, output: MLXArray)
+    /// Every token's routing decision at `block`, as the router made it.
+    func recordRouting(block: Int, selection: DeepSeekV41Router.Selection)
+    /// The compressed positions a block that *selects* chose, per token: the
+    /// Top-K list exactly as handed to sparse attention (offset applied,
+    /// unreachable entries `-1`), and the candidate mask where this block is
+    /// the candidate source.
+    func recordIndexSelection(
+        block: Int, indices: [[Int]], offset: Int, candidateMask: [[Bool]]?)
+    /// Engram at `block`: the table rows each token addressed, and the
+    /// expanded stream it returned, `[tokens, multiplicity, hidden]`.
+    func recordEngram(block: Int, rows: [[Int]], output: MLXArray)
+    /// The pass has produced its logits.
+    func endPass(greedyTokenID: Int)
 }
 
 extension DeepSeekV41ForwardTrace {
+    public func recordStream(block: Int, stream: MLXArray) {}
     public func recordAttention(block: Int, output: MLXArray) {}
     public func recordFeedForward(block: Int, output: MLXArray) {}
+    public func beginPass(startPosition: Int, tokenIDs: [Int]) {}
+    public func recordStreamState(block: Int, stream: MLXArray, preMix: MLXArray) {}
+    public func recordAttentionBranch(block: Int, output: MLXArray) {}
+    public func recordFeedForwardBranch(block: Int, output: MLXArray) {}
+    public func recordRouting(block: Int, selection: DeepSeekV41Router.Selection) {}
+    public func recordIndexSelection(
+        block: Int, indices: [[Int]], offset: Int, candidateMask: [[Bool]]?
+    ) {}
+    public func recordEngram(block: Int, rows: [[Int]], output: MLXArray) {}
+    public func endPass(greedyTokenID: Int) {}
 }
 
 /// One pass's logits and the token greedy decoding picked.
@@ -293,7 +355,7 @@ public final class DeepSeekV41Model {
     /// Which of the four CSA2 jobs each block has, derived once.
     public let modes: [DeepSeekV41AttentionMode]
     private let source: any DeepSeekV41WeightSource
-    private let geometries: [DeepSeekV41AttentionGeometry]
+    let geometries: [DeepSeekV41AttentionGeometry]
     private let tables: [DeepSeekV41RotaryTable]
     private let hyperGeometry: DeepSeekV41DenseBlock.HyperGeometry
     private let expertActivation: DeepSeekV41ExpertActivation
@@ -302,7 +364,7 @@ public final class DeepSeekV41Model {
     private let boundsLiveOperands: Bool
     private let diagnostics: DeepSeekV4Diagnostics
     private let phaseAccounting: DeepSeekV4PhaseAccounting?
-    private let makeEngramIndices: (() throws -> any DeepSeekV41EngramIndexSource)?
+    let makeEngramIndices: (() throws -> any DeepSeekV41EngramIndexSource)?
     /// Nil in every run. See ``DeepSeekV41ForwardTrace``.
     public var trace: (any DeepSeekV41ForwardTrace)?
     /// Backbone blocks only. The three DSpark blocks are published and named,
@@ -310,16 +372,19 @@ public final class DeepSeekV41Model {
     /// not pay at this arm length; V4.1's is deferred for the same reason).
     public var blockCount: Int { config.numberOfLayers }
 
-    /// The positions this model's rotary tables were built for.
+    /// The positions this model answers for: a prefill, a restored session
+    /// and every decode step must stay inside `0..<positionCount`.
     ///
-    /// A run states this; it is **not** the checkpoint's declared ceiling. See
-    /// ``rotaryTableBudgetBytes``.
+    /// It costs nothing to state the checkpoint's own ceiling here. The rotary
+    /// rows are computed for the positions a pass touches
+    /// (``DeepSeekV41RotaryTable/isOnDemand``), so no table is built for the
+    /// positions a session has not reached; what remains refused is a count past
+    /// `max_position_embeddings`.
     public let positionCount: Int
 
-    /// What the per-block rotary tables cost, at a geometry and a position
-    /// count. Stated as arithmetic because the tables are built eagerly and a
-    /// caller that asks for too many positions has to be refused *before* they
-    /// are allocated rather than killed while they are.
+    /// What *held* per-block rotary tables would cost, at a geometry and a
+    /// position count. The model no longer builds them; this is the arithmetic
+    /// behind ``rotaryTableBudgetBytes`` and the record it cites.
     ///
     /// One table per backbone block holds `positionCount x ropeHeadDimension/2`
     /// float32 cosines and the same again in sines.
@@ -336,7 +401,9 @@ public final class DeepSeekV41Model {
             .partialValue
     }
 
-    /// The envelope the eager rotary tables may occupy, stated once.
+    /// The envelope the eager rotary tables were allowed, kept as the record
+    /// of why they went. Nothing is refused against it any more: the model
+    /// computes rotary rows per pass (see ``positionCount``).
     ///
     /// ## Why there is a ceiling at all
     ///
@@ -355,7 +422,8 @@ public final class DeepSeekV41Model {
     /// loop — before the flight recorder could write one sample.
     ///
     /// 256 MiB is 26,214 positions at the published geometry: forty-five times
-    /// the product's 512-token prompt plus 64-token reply, well above any
+    /// the iPhone product's 512-token prompt plus 64-token reply and
+    /// twenty-five times the Mac's 768 plus 256, well above any
     /// stated harness arm, and forty times below the allocation that killed the
     /// phone. A caller that needs more says so by needing more positions, and
     /// gets a refusal it can read instead of a `SIGKILL` it cannot.
@@ -378,17 +446,6 @@ public final class DeepSeekV41Model {
         guard positionCount > 0, positionCount <= config.maximumPositionCount else {
             throw DeepSeekV41Error.configuration(
                 "position count \(positionCount) is outside 1...\(config.maximumPositionCount)")
-        }
-        // Before the loop below allocates them, and not after. See
-        // ``rotaryTableBudgetBytes``.
-        let tableBytes = Self.rotaryTableBytes(positionCount: positionCount, config: config)
-        guard tableBytes <= Self.rotaryTableBudgetBytes else {
-            throw DeepSeekV41Error.configuration(
-                "rotary tables for \(positionCount) positions over "
-                    + "\(config.numberOfLayers) blocks are \(tableBytes) B, above the "
-                    + "\(Self.rotaryTableBudgetBytes) B a model may build eagerly; a run "
-                    + "states the positions it will reach rather than the checkpoint's "
-                    + "\(config.maximumPositionCount)-position ceiling")
         }
         if !config.engramLayerIDs.isEmpty, engramIndices == nil {
             throw DeepSeekV41Error.engram(
@@ -414,7 +471,7 @@ public final class DeepSeekV41Model {
             modes.append(geometry.mode)
             tables.append(
                 try DeepSeekV41RotaryTable.forBlock(
-                    block, config: config, positionCount: positionCount))
+                    block, config: config, positionCount: positionCount, onDemand: true))
         }
         self.geometries = geometries
         self.tables = tables
@@ -434,8 +491,7 @@ public final class DeepSeekV41Model {
         guard !tokenIDs.isEmpty else {
             throw DeepSeekV41Error.configuration("prefill requires at least one token")
         }
-        // Against `positionCount` and not the checkpoint's ceiling: the rotary
-        // tables cover exactly the positions this model was built for, and a
+        // Against `positionCount`, the positions this model answers for: a
         // limit past them is a run that would refuse at a rotation somewhere in
         // the middle of a pass rather than here.
         guard decodePositionLimit >= tokenIDs.count,
@@ -461,6 +517,7 @@ public final class DeepSeekV41Model {
         let step = try forward(
             tokens: tokenIDs, state: &state,
             cancellationCheck: cancellationCheck, onBlockCompleted: onBlockCompleted)
+        state.firstBlockTokenCount = tokenIDs.count
         return (step, state)
     }
 
@@ -537,10 +594,12 @@ public final class DeepSeekV41Model {
         var preMix = try DeepSeekV41HyperConnections.identityPreMix(
             tokens: tokens.count, multiplicity: config.hyperConnectionMultiplicity)
         let shared = state.shared
+        trace?.beginPass(startPosition: startPosition, tokenIDs: tokens)
 
         for block in 0..<config.numberOfLayers {
             try cancellationCheck()
             trace?.recordStream(block: block, stream: stream[tokens.count - 1])
+            trace?.recordStreamState(block: block, stream: stream, preMix: preMix)
             let engramOrdinal = config.engramLayerIDs.firstIndex(of: block)
             let caches = state.caches[block]
             let result = try autoreleasepool {
@@ -560,6 +619,7 @@ public final class DeepSeekV41Model {
 
         try cancellationCheck()
         trace?.recordStream(block: config.numberOfLayers, stream: stream[tokens.count - 1])
+        trace?.recordStreamState(block: config.numberOfLayers, stream: stream, preMix: preMix)
         let normalized = try DeepSeekV41Head.normalized(
             stream: stream, preMix: preMix,
             finalNormWeight: try source.finalNormWeight(),
@@ -582,9 +642,12 @@ public final class DeepSeekV41Model {
         }
         let values = logits.asType(.float32).asArray(Float.self)
         state.nextPosition = startPosition + tokens.count
+        state.consumedTokenIDs.append(contentsOf: tokens)
+        let greedy = try Self.greedyToken(in: values)
+        trace?.endPass(greedyTokenID: greedy)
         return DeepSeekV41Step(
             logits: values,
-            greedyTokenID: try Self.greedyToken(in: values),
+            greedyTokenID: greedy,
             completedBlocks: config.numberOfLayers)
     }
 
@@ -606,9 +669,10 @@ public final class DeepSeekV41Model {
                     + "and Engram weights \(engramWeights == nil ? "absent" : "present")")
         }
         let engram: ((MLXArray) throws -> MLXArray)?
+        let trace = self.trace
         if let engramRows, let engramWeights {
             engram = { [config, diagnostics, phaseAccounting] hidden in
-                try DeepSeekV41Engram.apply(
+                let output = try DeepSeekV41Engram.apply(
                     hidden,
                     rowIndices: engramRows,
                     rowProvider: engramWeights.rowProvider,
@@ -623,6 +687,8 @@ public final class DeepSeekV41Model {
                     headDimension: config.engramHeadDimension,
                     phaseAccounting: phaseAccounting,
                     diagnostics: diagnostics)
+                trace?.recordEngram(block: block, rows: engramRows, output: output)
+                return output
             }
         } else {
             engram = nil
@@ -630,7 +696,10 @@ public final class DeepSeekV41Model {
 
         let expertsPerToken = try config.expertsPerToken(block: block)
         let routedExpertCount = try config.routedExpertCount(block: block)
-        let trace = self.trace
+        // Only a block that runs its own indexer selects; a Reuse block reads
+        // what its source published and is not a second observation of it.
+        let selects = modes[block] == .full || modes[block] == .reindex
+        let isCandidateSource = geometries[block].isCandidateSource
         return try DeepSeekV41DenseBlock.forward(
             stream: stream,
             preMix: preMix,
@@ -642,8 +711,22 @@ public final class DeepSeekV41Model {
             shared: shared,
             table: tables[block],
             startPosition: startPosition,
-            observeAttention: trace.map { trace in
-                { output in trace.recordAttention(block: block, output: output) }
+            observeAttention: trace.map { [geometries] trace in
+                { output in
+                    let tokens = output.shape[0]
+                    trace.recordAttention(block: block, output: output[tokens - 1])
+                    trace.recordAttentionBranch(block: block, output: output)
+                    if selects, let indices = shared.topKIndices {
+                        // The window entries come first in the list sparse
+                        // attention reads: the whole chunk at prefill, the ring
+                        // at decode.
+                        let offset =
+                            startPosition == 0 ? tokens : geometries[block].windowSize
+                        trace.recordIndexSelection(
+                            block: block, indices: indices, offset: offset,
+                            candidateMask: isCandidateSource ? shared.candidateMask : nil)
+                    }
+                }
             },
             moe: {
                 [config, expertActivation, boundsLiveOperands, diagnostics, phaseAccounting]
@@ -687,6 +770,7 @@ public final class DeepSeekV41Model {
                         routingScale: config.routingScale,
                         phaseAccounting: phaseAccounting)
                 }
+                trace?.recordRouting(block: block, selection: selection)
                 try weights.experts.prefetch(
                     Array(Set(selection.ids.flatMap { $0 })).sorted())
                 let combined = try DeepSeekV41MoE.evaluate(
@@ -704,6 +788,7 @@ public final class DeepSeekV41Model {
                 ).combined
                 trace?.recordFeedForward(
                     block: block, output: combined[combined.shape[0] - 1])
+                trace?.recordFeedForwardBranch(block: block, output: combined)
                 return combined
                 }
             },
